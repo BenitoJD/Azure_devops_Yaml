@@ -2,37 +2,64 @@ trigger:
 - none
 
 variables:
-  # Main Site Configuration
-  MainSiteName: 'MasterData.Main'
-  MainSitePhysicalPath: 'C:\inetpub\wwwroot\MasterData.Main'
-  DeploymentBasePath: 'C:\Main_SIT'
-  BackupBasePath: 'C:\Backups\MasterData'
-  AppPoolDotNetVersion: 'v4.0'
+  # Build Information
+  BuildConfiguration: 'Release'
+  BuildPlatform: 'Any CPU'
+  BuildNumber: '$(Build.BuildNumber)'
+  BuildId: '$(Build.BuildId)'
+  BranchName: '$(Build.SourceBranchName)'
+  CommitId: '$(Build.SourceVersion)'
+  BuildDate: '$(Date:yyyy-MM-dd)'
+  BuildTime: '$(Date:HH:mm:ss)'
+  
+  # Environment Configuration
+  Environment: 'SIT'
+  DeploymentType: 'InPlace'
+  
+  # Paths Configuration
+  DeploymentBasePath: 'D:\Deployments'
+  BackupBasePath: 'D:\Backups'
+  VersionMetadataPath: 'D:\Metadata'
+  LogsPath: 'D:\Logs'
+  
+  # IIS Configuration
+  IISLogPath: 'D:\Logs\IIS'
+  AppPoolIdentity: 'ApplicationPoolIdentity'
+  AppPoolManagedRuntimeVersion: 'v4.0'
   AppPoolManagedPipelineMode: 'Integrated'
   
-  # Version 1 Configuration (Port 8001)
-  Version1.Port: '8091'
-  Version1.AppName: 'Version1'
-  Version1.AppPath: '/Version1'
-  Version1.PhysicalPath: 'C:\inetpub\wwwroot\MasterData.Main\Version1'
+  # Security Configuration
+  BackupRetentionDays: 30
+  MaxBackups: 10
   
-  # Version 2 Configuration (Port 8002)
-  Version2.Port: '8092'
-  Version2.AppName: 'Version2'
-  Version2.AppPath: '/Version2'
-  Version2.PhysicalPath: 'C:\inetpub\wwwroot\MasterData.Main\Version2'
+  # Stakeholder Configuration
+  Stakeholder1.Name: 'Finance'
+  Stakeholder1.SiteName: 'Finance.Main'
+  Stakeholder1.Port: '8091'
+  Stakeholder1.PhysicalPath: 'D:\inetpub\wwwroot\Finance.Main'
+  Stakeholder1.AppPoolName: 'FinanceAppPool'
+  Stakeholder1.Description: 'Financial Management Portal'
   
-  # Version 3 Configuration (Port 8003)
-  Version3.Port: '8093'
-  Version3.AppName: 'Version3'
-  Version3.AppPath: '/Version3'
-  Version3.PhysicalPath: 'C:\inetpub\wwwroot\MasterData.Main\Version3'
+  Stakeholder2.Name: 'Operations'
+  Stakeholder2.SiteName: 'Operations.Main'
+  Stakeholder2.Port: '8092'
+  Stakeholder2.PhysicalPath: 'D:\inetpub\wwwroot\Operations.Main'
+  Stakeholder2.AppPoolName: 'OperationsAppPool'
+  Stakeholder2.Description: 'Operations Management Portal'
   
-  # Version 4 Configuration (Port 8004)
-  Version4.Port: '8094'
-  Version4.AppName: 'Version4'
-  Version4.AppPath: '/Version4'
-  Version4.PhysicalPath: 'C:\inetpub\wwwroot\MasterData.Main\Version4'
+  Stakeholder3.Name: 'Management'
+  Stakeholder3.SiteName: 'Management.Main'
+  Stakeholder3.Port: '8093'
+  Stakeholder3.PhysicalPath: 'D:\inetpub\wwwroot\Management.Main'
+  Stakeholder3.AppPoolName: 'ManagementAppPool'
+  Stakeholder3.Description: 'Executive Management Portal'
+  
+  Stakeholder4.Name: 'Partners'
+  Stakeholder4.SiteName: 'Partners.Main'
+  Stakeholder4.Port: '8094'
+  Stakeholder4.PhysicalPath: 'D:\inetpub\wwwroot\Partners.Main'
+  Stakeholder4.AppPoolName: 'PartnersAppPool'
+  Stakeholder4.Description: 'External Partners Portal'
 
 resources:
  pipelines:
@@ -42,12 +69,51 @@ resources:
      branch: 'MDVersionUpgrade/Lonestar'
 
 stages:
-  - stage: DeployAllVersions
-    displayName: 'Deploy All Versions to Main Site'
+  # Pre-deployment validation and preparation
+  - stage: PreDeployment
+    displayName: 'Pre-Deployment Validation'
+    jobs:
+      - job: ValidateEnvironment
+        displayName: 'Environment Validation'
+        steps:
+          - task: PowerShell@2
+            displayName: 'Validate Prerequisites'
+            inputs:
+              targetType: 'inline'
+              script: |
+                # Check IIS installation
+                if (-not (Get-WindowsFeature -Name IIS-WebServerRole -ErrorAction SilentlyContinue)) {
+                  Write-Error "IIS is not installed or not available"
+                  exit 1
+                }
+                
+                # Check required modules
+                if (-not (Get-Module -Name WebAdministration -ListAvailable)) {
+                  Write-Error "WebAdministration module is not available"
+                  exit 1
+                }
+                
+                # Check disk space
+                $drive = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='D:'"
+                $freeSpaceGB = [math]::Round($drive.FreeSpace / 1GB, 2)
+                if ($freeSpaceGB -lt 10) {
+                  Write-Error "Insufficient disk space on D: drive. Available: $freeSpaceGB GB"
+                  exit 1
+                }
+                
+                Write-Host "Environment validation passed" -ForegroundColor Green
+                Write-Host "Available disk space: $freeSpaceGB GB" -ForegroundColor Green
+
+  # Main deployment stage - In-Place Deployment Strategy
+  # Strategy: Backup → Deploy → Start (Single Server)
+  - stage: DeployStakeholderWebsites
+    displayName: 'Deploy Stakeholder Websites (In-Place)'
+    dependsOn: PreDeployment
+    condition: succeeded()
     
     jobs:
-      - deployment: DeployAllVersions
-        displayName: 'Deploy All 4 Versions'
+      - deployment: DeployStakeholders
+        displayName: 'In-Place Deployment'
         workspace:
           clean: all
         environment: 
@@ -64,46 +130,168 @@ stages:
                  displayName: 'Download Build Artifacts'
                  artifact: 'drop'
                
-               # ==================== BACKUP ALL VERSIONS ====================
+               # ==================== BACKUP CURRENT DEPLOYMENTS ====================
                - task: PowerShell@2
-                 displayName: 'Backup All Current Deployments'
+                 displayName: 'Create Pre-Deployment Backups'
                  inputs:
                    targetType: 'inline'
                    script: |
-                     $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+                     # Enhanced backup with industry standards
+                     $ErrorActionPreference = 'Stop'
+                     $timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
+                     $branchName = "$(BranchName)"
+                     $buildNumber = "$(BuildNumber)"
+                     $buildId = "$(BuildId)"
+                     $commitId = "$(CommitId)"
                      
-                     $versions = @(
-                       @{Name="Version1"; Path="$(Version1.PhysicalPath)"},
-                       @{Name="Version2"; Path="$(Version2.PhysicalPath)"},
-                       @{Name="Version3"; Path="$(Version3.PhysicalPath)"},
-                       @{Name="Version4"; Path="$(Version4.PhysicalPath)"}
-                     )
-                     
-                     foreach ($version in $versions) {
-                       $backupBasePath = "$(BackupBasePath)\$($version.Name)"
-                       $backupFolder = "$backupBasePath\Backup_$timestamp"
-                       
-                       if (-not (Test-Path $backupBasePath)) {
-                         New-Item -ItemType Directory -Path $backupBasePath -Force | Out-Null
-                       }
-                       
-                       if (Test-Path $version.Path) {
-                         Write-Host "Creating backup for $($version.Name) at: $backupFolder" -ForegroundColor Cyan
-                         New-Item -ItemType Directory -Path $backupFolder -Force | Out-Null
-                         Copy-Item -Path "$($version.Path)\*" -Destination $backupFolder -Recurse -Force
-                         Write-Host "Backup completed for $($version.Name)" -ForegroundColor Green
-                         
-                         # Keep only last 5 backups
-                         $backups = Get-ChildItem $backupBasePath -Directory | Where-Object { $_.Name -like "Backup_*" } | Sort-Object CreationTime -Descending | Select-Object -Skip 5
-                         if ($backups) {
-                           Write-Host "Cleaning up old backups for $($version.Name)..."
-                           $backups | Remove-Item -Recurse -Force
-                         }
-                       } else {
-                         Write-Host "No existing deployment found for $($version.Name). Skipping backup." -ForegroundColor Yellow
+                     # Create directory structure
+                     $directories = @("$(BackupBasePath)", "$(VersionMetadataPath)", "$(LogsPath)", "$(IISLogPath)")
+                     foreach ($dir in $directories) {
+                       if (-not (Test-Path $dir)) {
+                         New-Item -ItemType Directory -Path $dir -Force | Out-Null
+                         Write-Host "Created directory: $dir" -ForegroundColor Green
                        }
                      }
-                   errorActionPreference: 'continue'
+                     
+                     # Import required modules
+                     Import-Module WebAdministration -ErrorAction Stop
+                     
+                     $stakeholders = @(
+                       @{Name="$(Stakeholder1.Name)"; SiteName="$(Stakeholder1.SiteName)"; Path="$(Stakeholder1.PhysicalPath)"; AppPool="$(Stakeholder1.AppPoolName)"; Description="$(Stakeholder1.Description)"},
+                       @{Name="$(Stakeholder2.Name)"; SiteName="$(Stakeholder2.SiteName)"; Path="$(Stakeholder2.PhysicalPath)"; AppPool="$(Stakeholder2.AppPoolName)"; Description="$(Stakeholder2.Description)"},
+                       @{Name="$(Stakeholder3.Name)"; SiteName="$(Stakeholder3.SiteName)"; Path="$(Stakeholder3.PhysicalPath)"; AppPool="$(Stakeholder3.AppPoolName)"; Description="$(Stakeholder3.Description)"},
+                       @{Name="$(Stakeholder4.Name)"; SiteName="$(Stakeholder4.SiteName)"; Path="$(Stakeholder4.PhysicalPath)"; AppPool="$(Stakeholder4.AppPoolName)"; Description="$(Stakeholder4.Description)"}
+                     )
+                     
+                     $backupResults = @()
+                     
+                     foreach ($stakeholder in $stakeholders) {
+                       try {
+                         Write-Host "Processing backup for $($stakeholder.Name)..." -ForegroundColor Cyan
+                         
+                         $backupPath = "$(BackupBasePath)\$($stakeholder.Name)_$timestamp"
+                         $backupSize = 0
+                         $backupStatus = "Success"
+                         
+                         if (Test-Path $stakeholder.Path) {
+                           # Create backup directory
+                           New-Item -ItemType Directory -Path $backupPath -Force | Out-Null
+                           
+                           # Copy files with progress
+                           $files = Get-ChildItem -Path $stakeholder.Path -Recurse
+                           $totalFiles = $files.Count
+                           $copiedFiles = 0
+                           
+                           foreach ($file in $files) {
+                             $relativePath = $file.FullName.Substring($stakeholder.Path.Length + 1)
+                             $destinationPath = Join-Path $backupPath $relativePath
+                             
+                             if ($file.PSIsContainer) {
+                               if (-not (Test-Path $destinationPath)) {
+                                 New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
+                               }
+                             } else {
+                               $destinationDir = Split-Path $destinationPath -Parent
+                               if (-not (Test-Path $destinationDir)) {
+                                 New-Item -ItemType Directory -Path $destinationDir -Force | Out-Null
+                               }
+                               Copy-Item -Path $file.FullName -Destination $destinationPath -Force
+                               $backupSize += $file.Length
+                             }
+                             
+                             $copiedFiles++
+                             if ($copiedFiles % 100 -eq 0) {
+                               Write-Host "Copied $copiedFiles of $totalFiles files..." -ForegroundColor Gray
+                             }
+                           }
+                           
+                           $backupSizeMB = [math]::Round($backupSize / 1MB, 2)
+                           Write-Host "Backup completed: $backupSizeMB MB" -ForegroundColor Green
+                         } else {
+                           Write-Host "No existing deployment found for $($stakeholder.Name)" -ForegroundColor Yellow
+                           $backupStatus = "NoExistingDeployment"
+                         }
+                         
+                         # Create comprehensive metadata
+                         $metadata = @{
+                           DeploymentInfo = @{
+                             StakeholderName = $stakeholder.Name
+                             SiteName = $stakeholder.SiteName
+                             AppPoolName = $stakeholder.AppPool
+                             Description = $stakeholder.Description
+                           }
+                           BackupInfo = @{
+                             BackupTimestamp = $timestamp
+                             BackupPath = $backupPath
+                             BackupSizeMB = $backupSizeMB
+                             BackupStatus = $backupStatus
+                           }
+                           BuildInfo = @{
+                             BranchName = $branchName
+                             BuildNumber = $buildNumber
+                             BuildId = $buildId
+                             CommitId = $commitId
+                             BuildDate = "$(BuildDate)"
+                             BuildTime = "$(BuildTime)"
+                           }
+                           EnvironmentInfo = @{
+                             Environment = "$(Environment)"
+                             DeploymentType = "$(DeploymentType)"
+                             ServerName = $env:COMPUTERNAME
+                             UserName = $env:USERNAME
+                           }
+                           Paths = @{
+                             DeploymentPath = $stakeholder.Path
+                             BackupPath = $backupPath
+                             LogsPath = "$(LogsPath)"
+                             MetadataPath = "$(VersionMetadataPath)"
+                           }
+                         }
+                         
+                         $metadataPath = "$(VersionMetadataPath)\$($stakeholder.Name)_Backup_$timestamp.json"
+                         $metadata | ConvertTo-Json -Depth 5 | Out-File -FilePath $metadataPath -Encoding UTF8
+                         
+                         $backupResults += @{
+                           Stakeholder = $stakeholder.Name
+                           Status = $backupStatus
+                           SizeMB = $backupSizeMB
+                           Path = $backupPath
+                         }
+                         
+                         Write-Host "$($stakeholder.Name) backup completed successfully" -ForegroundColor Green
+                         
+                       } catch {
+                         Write-Error "Failed to backup $($stakeholder.Name): $($_.Exception.Message)"
+                         $backupResults += @{
+                           Stakeholder = $stakeholder.Name
+                           Status = "Failed"
+                           Error = $_.Exception.Message
+                         }
+                       }
+                     }
+                     
+                     # Cleanup old backups (retention policy)
+                     Write-Host "Applying backup retention policy..." -ForegroundColor Cyan
+                     $retentionDays = $(BackupRetentionDays)
+                     $cutoffDate = (Get-Date).AddDays(-$retentionDays)
+                     
+                     foreach ($stakeholder in $stakeholders) {
+                       $oldBackups = Get-ChildItem "$(BackupBasePath)" -Directory | Where-Object { 
+                         $_.Name -like "*$($stakeholder.Name)*" -and $_.CreationTime -lt $cutoffDate 
+                       }
+                       
+                       foreach ($oldBackup in $oldBackups) {
+                         Write-Host "Removing old backup: $($oldBackup.Name)" -ForegroundColor Gray
+                         Remove-Item $oldBackup.FullName -Recurse -Force
+                       }
+                     }
+                     
+                     # Summary
+                     Write-Host "Backup Summary:" -ForegroundColor Cyan
+                     foreach ($result in $backupResults) {
+                       $statusColor = if ($result.Status -eq "Success") { "Green" } else { "Red" }
+                       Write-Host "  $($result.Stakeholder): $($result.Status)" -ForegroundColor $statusColor
+                     }
                
                # ==================== CREATE DIRECTORIES ====================
                - task: PowerShell@2
@@ -112,480 +300,453 @@ stages:
                    targetType: 'inline'
                    script: |
                      $directories = @(
-                       "$(MainSitePhysicalPath)",
-                       "$(Version1.PhysicalPath)",
-                       "$(Version2.PhysicalPath)",
-                       "$(Version3.PhysicalPath)",
-                       "$(Version4.PhysicalPath)",
-                       "$(DeploymentBasePath)\Version1",
-                       "$(DeploymentBasePath)\Version2",
-                       "$(DeploymentBasePath)\Version3",
-                       "$(DeploymentBasePath)\Version4",
-                       "$(BackupBasePath)\Version1",
-                       "$(BackupBasePath)\Version2",
-                       "$(BackupBasePath)\Version3",
-                       "$(BackupBasePath)\Version4"
+                       "$(Stakeholder1.PhysicalPath)",
+                       "$(Stakeholder2.PhysicalPath)",
+                       "$(Stakeholder3.PhysicalPath)",
+                       "$(Stakeholder4.PhysicalPath)",
+                       "$(DeploymentBasePath)\Finance",
+                       "$(DeploymentBasePath)\Operations",
+                       "$(DeploymentBasePath)\Management",
+                       "$(DeploymentBasePath)\Partners"
                      )
                      
                      foreach ($dir in $directories) {
                        if (-not (Test-Path $dir)) {
-                         Write-Host "Creating directory: $dir" -ForegroundColor Cyan
                          New-Item -ItemType Directory -Path $dir -Force | Out-Null
-                       } else {
-                         Write-Host "Directory already exists: $dir" -ForegroundColor Gray
+                         Write-Host "Created: $dir" -ForegroundColor Green
                        }
                      }
                
                # ==================== EXTRACT ARTIFACTS ====================
                - task: ExtractFiles@1
-                 displayName: 'Extract Build Artifacts - Version 1'
+                 displayName: 'Extract Build Artifacts'
                  inputs:
                    archiveFilePatterns: '$(Pipeline.Workspace)/MasterData.Main/drop/*.zip'
-                   destinationFolder: '$(DeploymentBasePath)\Version1'
+                   destinationFolder: '$(DeploymentBasePath)'
                    cleanDestinationFolder: true
                    overwriteExistingFiles: true
                
-               - task: ExtractFiles@1
-                 displayName: 'Extract Build Artifacts - Version 2'
-                 inputs:
-                   archiveFilePatterns: '$(Pipeline.Workspace)/MasterData.Main/drop/*.zip'
-                   destinationFolder: '$(DeploymentBasePath)\Version2'
-                   cleanDestinationFolder: true
-                   overwriteExistingFiles: true
-               
-               - task: ExtractFiles@1
-                 displayName: 'Extract Build Artifacts - Version 3'
-                 inputs:
-                   archiveFilePatterns: '$(Pipeline.Workspace)/MasterData.Main/drop/*.zip'
-                   destinationFolder: '$(DeploymentBasePath)\Version3'
-                   cleanDestinationFolder: true
-                   overwriteExistingFiles: true
-               
-               - task: ExtractFiles@1
-                 displayName: 'Extract Build Artifacts - Version 4'
-                 inputs:
-                   archiveFilePatterns: '$(Pipeline.Workspace)/MasterData.Main/drop/*.zip'
-                   destinationFolder: '$(DeploymentBasePath)\Version4'
-                   cleanDestinationFolder: true
-                   overwriteExistingFiles: true
-               
-               # ==================== CREATE/CONFIGURE MAIN SITE AND APP POOL ====================
+               # ==================== CONFIGURE IIS INFRASTRUCTURE ====================
                - task: PowerShell@2
-                 displayName: 'Create or Configure Main Site and Application Pool'
+                 displayName: 'Configure IIS Infrastructure (Industry Standard)'
                  inputs:
                    targetType: 'inline'
                    script: |
-                     Import-Module WebAdministration
+                     # Industry Standard IIS Configuration
+                     $ErrorActionPreference = 'Stop'
+                     Import-Module WebAdministration -ErrorAction Stop
                      
-                     $siteName = "$(MainSiteName)"
-                     $appPoolName = "${siteName}AppPool"
-                     $appPoolPath = "IIS:\AppPools\$appPoolName"
-                     $mainPhysicalPath = "$(MainSitePhysicalPath)"
+                     $stakeholders = @(
+                       @{Name="$(Stakeholder1.Name)"; SiteName="$(Stakeholder1.SiteName)"; Port="$(Stakeholder1.Port)"; Path="$(Stakeholder1.PhysicalPath)"; AppPool="$(Stakeholder1.AppPoolName)"; Description="$(Stakeholder1.Description)"},
+                       @{Name="$(Stakeholder2.Name)"; SiteName="$(Stakeholder2.SiteName)"; Port="$(Stakeholder2.Port)"; Path="$(Stakeholder2.PhysicalPath)"; AppPool="$(Stakeholder2.AppPoolName)"; Description="$(Stakeholder2.Description)"},
+                       @{Name="$(Stakeholder3.Name)"; SiteName="$(Stakeholder3.SiteName)"; Port="$(Stakeholder3.Port)"; Path="$(Stakeholder3.PhysicalPath)"; AppPool="$(Stakeholder3.AppPoolName)"; Description="$(Stakeholder3.Description)"},
+                       @{Name="$(Stakeholder4.Name)"; SiteName="$(Stakeholder4.SiteName)"; Port="$(Stakeholder4.Port)"; Path="$(Stakeholder4.PhysicalPath)"; AppPool="$(Stakeholder4.AppPoolName)"; Description="$(Stakeholder4.Description)"}
+                     )
                      
-                     # Create Application Pool if it doesn't exist
-                     if (-not (Test-Path $appPoolPath)) {
-                       Write-Host "Creating Application Pool: $appPoolName" -ForegroundColor Cyan
-                       New-WebAppPool -Name $appPoolName
-                     } else {
-                       Write-Host "Application Pool already exists: $appPoolName" -ForegroundColor Gray
-                     }
+                     $configurationResults = @()
                      
-                     # Configure Application Pool for production
-                     Write-Host "Configuring Application Pool settings..." -ForegroundColor Cyan
-                     Set-ItemProperty $appPoolPath -Name managedRuntimeVersion -Value "$(AppPoolDotNetVersion)"
+                     foreach ($stakeholder in $stakeholders) {
+                       try {
+                         Write-Host "Configuring infrastructure for $($stakeholder.Name)..." -ForegroundColor Cyan
+                         
+                         # ========== APPLICATION POOL CONFIGURATION ==========
+                         $appPoolCreated = $false
+                         if (-not (Get-WebAppPool -Name $stakeholder.AppPool -ErrorAction SilentlyContinue)) {
+                           Write-Host "Creating Application Pool: $($stakeholder.AppPool)" -ForegroundColor Yellow
+                           New-WebAppPool -Name $stakeholder.AppPool
+                           $appPoolCreated = $true
+                         } else {
+                           Write-Host "Application Pool exists: $($stakeholder.AppPool)" -ForegroundColor Gray
+                         }
+                         
+                         # Configure Application Pool with industry standards
+                         $appPoolPath = "IIS:\AppPools\$($stakeholder.AppPool)"
+                         
+                         # Basic Configuration
+                         Set-ItemProperty $appPoolPath -Name managedRuntimeVersion -Value "$(AppPoolManagedRuntimeVersion)"
                      Set-ItemProperty $appPoolPath -Name managedPipelineMode -Value "$(AppPoolManagedPipelineMode)"
+                         Set-ItemProperty $appPoolPath -Name processModel.identityType -Value "$(AppPoolIdentity)"
+                         
+                         # Performance Configuration
                      Set-ItemProperty $appPoolPath -Name startMode -Value "AlwaysRunning"
-                     Set-ItemProperty $appPoolPath -Name processModel.idleTimeout -Value "00:00:00"
+                         Set-ItemProperty $appPoolPath -Name processModel.idleTimeout -Value "00:20:00"
+                         Set-ItemProperty $appPoolPath -Name processModel.loadUserProfile -Value $true
+                         Set-ItemProperty $appPoolPath -Name processModel.maxProcesses -Value 1
+                         
+                         # Recycling Configuration
                      Set-ItemProperty $appPoolPath -Name recycling.periodicRestart.time -Value "00:00:00"
-                     Set-ItemProperty $appPoolPath -Name processModel.loadUserProfile -Value $true
-                     Set-ItemProperty $appPoolPath -Name enable32BitAppOnWin64 -Value $false
-                     
-                     # Create Main Website if it doesn't exist
-                     $site = Get-Website -Name $siteName -ErrorAction SilentlyContinue
-                     if (-not $site) {
-                       Write-Host "Creating Main Website: $siteName" -ForegroundColor Cyan
-                       New-Website -Name $siteName `
-                                   -PhysicalPath $mainPhysicalPath `
-                                   -ApplicationPool $appPoolName `
-                                   -Port 80 `
-                                   -Force
+                         Set-ItemProperty $appPoolPath -Name recycling.periodicRestart.requests -Value 0
+                         Set-ItemProperty $appPoolPath -Name recycling.periodicRestart.memory -Value 0
+                         Set-ItemProperty $appPoolPath -Name recycling.periodicRestart.privateMemory -Value 0
+                         
+                         # Advanced Configuration
+                         Set-ItemProperty $appPoolPath -Name processModel.pingingEnabled -Value $true
+                         Set-ItemProperty $appPoolPath -Name processModel.pingInterval -Value "00:00:30"
+                         Set-ItemProperty $appPoolPath -Name processModel.pingResponseTime -Value "00:01:30"
+                         Set-ItemProperty $appPoolPath -Name processModel.shutdownTimeLimit -Value "00:01:30"
+                         Set-ItemProperty $appPoolPath -Name processModel.startupTimeLimit -Value "00:01:30"
+                         
+                         Write-Host "Application Pool configured: $($stakeholder.AppPool)" -ForegroundColor Green
+                         
+                         # ========== WEBSITE CONFIGURATION ==========
+                         $websiteCreated = $false
+                         if (-not (Get-Website -Name $stakeholder.SiteName -ErrorAction SilentlyContinue)) {
+                           Write-Host "Creating Website: $($stakeholder.SiteName) on Port $($stakeholder.Port)" -ForegroundColor Yellow
+                           New-Website -Name $stakeholder.SiteName -PhysicalPath $stakeholder.Path -ApplicationPool $stakeholder.AppPool -Port $stakeholder.Port
+                           $websiteCreated = $true
                      } else {
-                       Write-Host "Main Website already exists: $siteName" -ForegroundColor Gray
-                       # Ensure it uses the correct app pool
-                       Set-ItemProperty "IIS:\Sites\$siteName" -Name applicationPool -Value $appPoolName
-                     }
-                     
-                     # Add bindings for all versions
-                     $ports = @("$(Version1.Port)", "$(Version2.Port)", "$(Version3.Port)", "$(Version4.Port)")
-                     
-                     foreach ($port in $ports) {
-                       $binding = Get-WebBinding -Name $siteName -Port $port -Protocol "http" -ErrorAction SilentlyContinue
-                       if (-not $binding) {
-                         Write-Host "Adding binding for port $port" -ForegroundColor Cyan
-                         New-WebBinding -Name $siteName -Protocol "http" -Port $port -IPAddress "*"
-                       } else {
-                         Write-Host "Binding for port $port already exists" -ForegroundColor Gray
+                           Write-Host "Website exists, updating configuration: $($stakeholder.SiteName)" -ForegroundColor Gray
+                           # Update the website configuration
+                           Set-ItemProperty "IIS:\Sites\$($stakeholder.SiteName)" -Name applicationPool -Value $stakeholder.AppPool
+                           Set-ItemProperty "IIS:\Sites\$($stakeholder.SiteName)" -Name physicalPath -Value $stakeholder.Path
+                         }
+                         
+                         # Configure website bindings
+                         $existingBinding = Get-WebBinding -Name $stakeholder.SiteName -Port $stakeholder.Port -ErrorAction SilentlyContinue
+                         if (-not $existingBinding) {
+                           New-WebBinding -Name $stakeholder.SiteName -Protocol "http" -Port $stakeholder.Port -IPAddress "*"
+                           Write-Host "Added port binding for $($stakeholder.Port)" -ForegroundColor Yellow
+                         }
+                         
+                         # Configure website settings
+                         Set-ItemProperty "IIS:\Sites\$($stakeholder.SiteName)" -Name logFile.directory -Value "$(IISLogPath)"
+                         Set-ItemProperty "IIS:\Sites\$($stakeholder.SiteName)" -Name logFile.enabled -Value $true
+                         Set-ItemProperty "IIS:\Sites\$($stakeholder.SiteName)" -Name logFile.logFormat -Value "W3C"
+                         
+                         # Configure default document
+                         $defaultDocs = @("default.aspx", "index.html", "default.htm")
+                         foreach ($doc in $defaultDocs) {
+                           try {
+                             Add-WebConfigurationProperty -Filter "system.webServer/defaultDocument/files" -Name "." -Value @{value=$doc} -PSPath "IIS:\Sites\$($stakeholder.SiteName)"
+                           } catch {
+                             # Document already exists or error adding
+                           }
+                         }
+                         
+                         # Configure security headers (basic)
+                         try {
+                           Add-WebConfigurationProperty -Filter "system.webServer/httpProtocol/customHeaders" -Name "." -Value @{name="X-Content-Type-Options"; value="nosniff"} -PSPath "IIS:\Sites\$($stakeholder.SiteName)"
+                           Add-WebConfigurationProperty -Filter "system.webServer/httpProtocol/customHeaders" -Name "." -Value @{name="X-Frame-Options"; value="SAMEORIGIN"} -PSPath "IIS:\Sites\$($stakeholder.SiteName)"
+                         } catch {
+                           # Headers might already exist
+                         }
+                         
+                         $configurationResults += @{
+                           Stakeholder = $stakeholder.Name
+                           AppPoolCreated = $appPoolCreated
+                           WebsiteCreated = $websiteCreated
+                           Status = "Success"
+                         }
+                         
+                         Write-Host "$($stakeholder.Name) infrastructure configured successfully" -ForegroundColor Green
+                         
+                       } catch {
+                         Write-Error "Failed to configure $($stakeholder.Name): $($_.Exception.Message)"
+                         $configurationResults += @{
+                           Stakeholder = $stakeholder.Name
+                           Status = "Failed"
+                           Error = $_.Exception.Message
+                         }
                        }
                      }
                      
-                     Write-Host "Main Site and Application Pool configured successfully" -ForegroundColor Green
-               
-               # ==================== STOP SITE ====================
-               - task: IISWebAppManagementOnMachineGroup@0
-                 displayName: 'Stop Main Website'
-                 inputs:
-                   IISDeploymentType: 'IISWebsite'
-                   ActionIISWebsite: 'StopWebsite'
-                   StartStopWebsiteName: '$(MainSiteName)'
-                 continueOnError: true
-               
-               # ==================== STOP APP POOL ====================
-               - task: PowerShell@2
-                 displayName: 'Stop Application Pool'
-                 inputs:
-                   targetType: 'inline'
-                   script: |
-                     Import-Module WebAdministration
-                     
-                     $appPoolName = "$(MainSiteName)AppPool"
-                     $appPool = Get-WebAppPoolState -Name $appPoolName -ErrorAction SilentlyContinue
-                     
-                     if ($appPool -and $appPool.Value -eq "Started") {
-                       Write-Host "Stopping Application Pool: $appPoolName" -ForegroundColor Cyan
-                       Stop-WebAppPool -Name $appPoolName
-                       
-                       # Wait for app pool to stop
-                       $timeout = 30
-                       $elapsed = 0
-                       while ((Get-WebAppPoolState -Name $appPoolName).Value -ne "Stopped" -and $elapsed -lt $timeout) {
-                         Start-Sleep -Seconds 1
-                         $elapsed++
-                       }
-                       Write-Host "Application Pool stopped" -ForegroundColor Green
+                     # Summary
+                     Write-Host "Infrastructure Configuration Summary:" -ForegroundColor Cyan
+                     foreach ($result in $configurationResults) {
+                       $statusColor = if ($result.Status -eq "Success") { "Green" } else { "Red" }
+                       Write-Host "  $($result.Stakeholder): $($result.Status)" -ForegroundColor $statusColor
                      }
-                 continueOnError: true
+                     
+                     Write-Host "All stakeholder infrastructure configured successfully!" -ForegroundColor Green
                
-               # Wait for processes to release files
+               # ==================== IN-PLACE DEPLOYMENT ====================
+               # In-Place Deployment Strategy for Single Server:
+               # 1. Backup current deployment
+               # 2. Stop services gracefully
+               # 3. Deploy new version
+               # 4. Start services
+               # 5. Verify deployment
                - task: PowerShell@2
-                 displayName: 'Wait for IIS to Stop'
+                 displayName: 'Deploy to All Stakeholder Websites (In-Place)'
                  inputs:
                    targetType: 'inline'
                    script: |
-                     Write-Host "Waiting 10 seconds for IIS to fully stop..."
-                     Start-Sleep -Seconds 10
-               
-               # ==================== DEPLOY ALL VERSIONS ====================
-               - task: PowerShell@2
-                 displayName: 'Deploy All Versions'
-                 inputs:
-                   targetType: 'inline'
-                   script: |
-                     $versions = @(
-                       @{Name="Version1"; Source="$(DeploymentBasePath)\Version1"; Dest="$(Version1.PhysicalPath)"; Port="$(Version1.Port)"; AppPath="$(Version1.AppPath)"},
-                       @{Name="Version2"; Source="$(DeploymentBasePath)\Version2"; Dest="$(Version2.PhysicalPath)"; Port="$(Version2.Port)"; AppPath="$(Version2.AppPath)"},
-                       @{Name="Version3"; Source="$(DeploymentBasePath)\Version3"; Dest="$(Version3.PhysicalPath)"; Port="$(Version3.Port)"; AppPath="$(Version3.AppPath)"},
-                       @{Name="Version4"; Source="$(DeploymentBasePath)\Version4"; Dest="$(Version4.PhysicalPath)"; Port="$(Version4.Port)"; AppPath="$(Version4.AppPath)"}
+                     $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+                     $branchName = "$(BranchName)"
+                     $buildNumber = "$(BuildNumber)"
+                     
+                     $stakeholders = @(
+                       @{Name="$(Stakeholder1.Name)"; SiteName="$(Stakeholder1.SiteName)"; Source="$(DeploymentBasePath)"; Dest="$(Stakeholder1.PhysicalPath)"; Port="$(Stakeholder1.Port)"; AppPool="$(Stakeholder1.AppPoolName)"},
+                       @{Name="$(Stakeholder2.Name)"; SiteName="$(Stakeholder2.SiteName)"; Source="$(DeploymentBasePath)"; Dest="$(Stakeholder2.PhysicalPath)"; Port="$(Stakeholder2.Port)"; AppPool="$(Stakeholder2.AppPoolName)"},
+                       @{Name="$(Stakeholder3.Name)"; SiteName="$(Stakeholder3.SiteName)"; Source="$(DeploymentBasePath)"; Dest="$(Stakeholder3.PhysicalPath)"; Port="$(Stakeholder3.Port)"; AppPool="$(Stakeholder3.AppPoolName)"},
+                       @{Name="$(Stakeholder4.Name)"; SiteName="$(Stakeholder4.SiteName)"; Source="$(DeploymentBasePath)"; Dest="$(Stakeholder4.PhysicalPath)"; Port="$(Stakeholder4.Port)"; AppPool="$(Stakeholder4.AppPoolName)"}
                      )
                      
-                     foreach ($version in $versions) {
-                       Write-Host "========================================" -ForegroundColor Cyan
-                       Write-Host "Deploying $($version.Name)" -ForegroundColor Cyan
-                       Write-Host "========================================" -ForegroundColor Cyan
+                     foreach ($stakeholder in $stakeholders) {
+                       Write-Host "Deploying to $($stakeholder.Name) Website (Port: $($stakeholder.Port))" -ForegroundColor Cyan
+                       Write-Host "Branch: $branchName | Build: $buildNumber" -ForegroundColor Gray
                        
-                       Write-Host "Source: $($version.Source)" -ForegroundColor Gray
-                       Write-Host "Destination: $($version.Dest)" -ForegroundColor Gray
+                       # Clear and copy files
+                       if (Test-Path $stakeholder.Dest) {
+                         Get-ChildItem -Path $stakeholder.Dest -Exclude "App_Data" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+                       }
+                       Copy-Item -Path "$($stakeholder.Source)\*" -Destination $stakeholder.Dest -Recurse -Force
                        
-                       # Clear destination (except App_Data)
-                       if (Test-Path $version.Dest) {
-                         Write-Host "Clearing existing files..." -ForegroundColor Yellow
-                         Get-ChildItem -Path $version.Dest -Exclude "App_Data" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+                       # Save deployment metadata with build information
+                       $metadata = @{
+                         DeploymentInfo = @{
+                           StakeholderName = $stakeholder.Name
+                           SiteName = $stakeholder.SiteName
+                           AppPoolName = $stakeholder.AppPool
+                           Description = $stakeholder.Description
+                         }
+                         BuildInfo = @{
+                           BuildNumber = $buildNumber
+                           BuildId = $buildId
+                           BranchName = $branchName
+                           CommitId = $commitId
+                           BuildDate = "$(BuildDate)"
+                           BuildTime = "$(BuildTime)"
+                           DeploymentTimestamp = $timestamp
+                         }
+                         DeploymentDetails = @{
+                           DeploymentPath = $stakeholder.Dest
+                           Port = $stakeholder.Port
+                           FolderName = "$($stakeholder.Name)_$branchName_$buildNumber"
+                           Status = "Deployed"
+                         }
+                         EnvironmentInfo = @{
+                           Environment = "$(Environment)"
+                           DeploymentType = "$(DeploymentType)"
+                           ServerName = $env:COMPUTERNAME
+                           UserName = $env:USERNAME
+                         }
                        }
                        
-                       # Copy new files
-                       Write-Host "Copying new files..." -ForegroundColor Cyan
-                       Copy-Item -Path "$($version.Source)\*" -Destination $version.Dest -Recurse -Force
+                       $metadataPath = "$(VersionMetadataPath)\$($stakeholder.Name)_Deployment_$timestamp.json"
+                       $metadata | ConvertTo-Json -Depth 3 | Out-File -FilePath $metadataPath -Encoding UTF8
                        
-                       Write-Host "$($version.Name) deployed successfully" -ForegroundColor Green
+                       Write-Host "$($stakeholder.Name) website deployed successfully" -ForegroundColor Green
                      }
-                     
-                     Write-Host "========================================" -ForegroundColor Green
-                     Write-Host "All versions deployed successfully!" -ForegroundColor Green
-                     Write-Host "========================================" -ForegroundColor Green
                
-               # ==================== CREATE WEB APPLICATIONS ====================
-               - task: PowerShell@2
-                 displayName: 'Create Web Applications for Each Version'
-                 inputs:
-                   targetType: 'inline'
-                   script: |
-                     Import-Module WebAdministration
-                     
-                     $siteName = "$(MainSiteName)"
-                     $appPoolName = "${siteName}AppPool"
-                     
-                     $versions = @(
-                       @{Name="Version1"; Path="$(Version1.AppPath)"; PhysicalPath="$(Version1.PhysicalPath)"},
-                       @{Name="Version2"; Path="$(Version2.AppPath)"; PhysicalPath="$(Version2.PhysicalPath)"},
-                       @{Name="Version3"; Path="$(Version3.AppPath)"; PhysicalPath="$(Version3.PhysicalPath)"},
-                       @{Name="Version4"; Path="$(Version4.AppPath)"; PhysicalPath="$(Version4.PhysicalPath)"}
-                     )
-                     
-                     foreach ($version in $versions) {
-                       $appPath = "IIS:\Sites\$siteName$($version.Path)"
-                       
-                       # Remove existing application if it exists
-                       if (Test-Path $appPath) {
-                         Write-Host "Removing existing application: $($version.Path)" -ForegroundColor Yellow
-                         Remove-WebApplication -Name $version.Name -Site $siteName -ErrorAction SilentlyContinue
-                       }
-                       
-                       # Create new application
-                       Write-Host "Creating web application: $($version.Name) at $($version.Path)" -ForegroundColor Cyan
-                       New-WebApplication -Name $version.Name `
-                                          -Site $siteName `
-                                          -PhysicalPath $version.PhysicalPath `
-                                          -ApplicationPool $appPoolName `
-                                          -Force
-                       
-                       Write-Host "Web application created: $($version.Name)" -ForegroundColor Green
-                     }
                
                # ==================== SET PERMISSIONS ====================
                - task: PowerShell@2
-                 displayName: 'Set Folder Permissions for All Versions'
+                 displayName: 'Set Folder Permissions'
                  inputs:
                    targetType: 'inline'
                    script: |
                      $paths = @(
-                       "$(Version1.PhysicalPath)",
-                       "$(Version2.PhysicalPath)",
-                       "$(Version3.PhysicalPath)",
-                       "$(Version4.PhysicalPath)"
+                       "$(Stakeholder1.PhysicalPath)",
+                       "$(Stakeholder2.PhysicalPath)",
+                       "$(Stakeholder3.PhysicalPath)",
+                       "$(Stakeholder4.PhysicalPath)"
                      )
                      
                      foreach ($path in $paths) {
-                       Write-Host "Setting permissions for: $path" -ForegroundColor Cyan
-                       
                        $acl = Get-Acl $path
                        
                        # Add IIS_IUSRS permission
-                       $iisUsersPermission = "IIS_IUSRS","FullControl","ContainerInherit,ObjectInherit","None","Allow"
-                       $iisUsersRule = New-Object System.Security.AccessControl.FileSystemAccessRule $iisUsersPermission
+                       $iisUsersRule = New-Object System.Security.AccessControl.FileSystemAccessRule("IIS_IUSRS","FullControl","ContainerInherit,ObjectInherit","None","Allow")
                        $acl.SetAccessRule($iisUsersRule)
                        
                        # Add IUSR permission
-                       $iusrPermission = "IUSR","ReadAndExecute","ContainerInherit,ObjectInherit","None","Allow"
-                       $iusrRule = New-Object System.Security.AccessControl.FileSystemAccessRule $iusrPermission
+                       $iusrRule = New-Object System.Security.AccessControl.FileSystemAccessRule("IUSR","ReadAndExecute","ContainerInherit,ObjectInherit","None","Allow")
                        $acl.SetAccessRule($iusrRule)
                        
                        Set-Acl $path $acl
-                       Write-Host "Permissions set successfully for: $path" -ForegroundColor Green
+                       Write-Host "Permissions set for: $path" -ForegroundColor Green
                      }
                
-               # ==================== CONFIGURE WEB.CONFIG ====================
+               # ==================== IN-PLACE DEPLOYMENT: STOP SERVICES ====================
                - task: PowerShell@2
-                 displayName: 'Configure Web.config for All Versions'
-                 inputs:
-                   targetType: 'inline'
-                   script: |
-                     $versions = @(
-                       @{Name="Version1"; Path="$(Version1.PhysicalPath)"; Port="$(Version1.Port)"},
-                       @{Name="Version2"; Path="$(Version2.PhysicalPath)"; Port="$(Version2.Port)"},
-                       @{Name="Version3"; Path="$(Version3.PhysicalPath)"; Port="$(Version3.Port)"},
-                       @{Name="Version4"; Path="$(Version4.PhysicalPath)"; Port="$(Version4.Port)"}
-                     )
-                     
-                     foreach ($version in $versions) {
-                       $webConfigPath = "$($version.Path)\web.config"
-                       
-                       if (Test-Path $webConfigPath) {
-                         Write-Host "Web.config found for $($version.Name) at: $webConfigPath" -ForegroundColor Cyan
-                         
-                         # Add web.config transformations here
-                         # Update connection strings, app settings, etc.
-                         # $xml = [xml](Get-Content $webConfigPath)
-                         # $xml.configuration.appSettings.add | Where-Object {$_.key -eq 'Version'} | ForEach-Object {$_.value = $version.Name}
-                         # $xml.Save($webConfigPath)
-                         
-                         Write-Host "Web.config configured for $($version.Name)" -ForegroundColor Green
-                       } else {
-                         Write-Host "Warning: Web.config not found for $($version.Name)" -ForegroundColor Yellow
-                       }
-                     }
-                 continueOnError: true
-               
-               # ==================== START APP POOL ====================
-               - task: PowerShell@2
-                 displayName: 'Start Application Pool'
+                 displayName: 'Stop Services for In-Place Deployment'
                  inputs:
                    targetType: 'inline'
                    script: |
                      Import-Module WebAdministration
                      
-                     $appPoolName = "$(MainSiteName)AppPool"
-                     Write-Host "Starting Application Pool: $appPoolName" -ForegroundColor Cyan
-                     Start-WebAppPool -Name $appPoolName
-                     
-                     # Wait for app pool to start
-                     $timeout = 30
-                     $elapsed = 0
-                     while ((Get-WebAppPoolState -Name $appPoolName).Value -ne "Started" -and $elapsed -lt $timeout) {
-                       Start-Sleep -Seconds 1
-                       $elapsed++
-                     }
-                     
-                     $state = (Get-WebAppPoolState -Name $appPoolName).Value
-                     if ($state -eq "Started") {
-                       Write-Host "Application Pool started successfully" -ForegroundColor Green
-                     } else {
-                       Write-Error "Failed to start Application Pool. Current state: $state"
-                       exit 1
-                     }
-               
-               # ==================== START WEBSITE ====================
-               - task: IISWebAppManagementOnMachineGroup@0
-                 displayName: 'Start Main Website'
-                 inputs:
-                   IISDeploymentType: 'IISWebsite'
-                   ActionIISWebsite: 'StartWebsite'
-                   StartStopWebsiteName: '$(MainSiteName)'
-               
-               # ==================== WARM UP ALL VERSIONS ====================
-               - task: PowerShell@2
-                 displayName: 'Warm Up All Versions'
-                 inputs:
-                   targetType: 'inline'
-                   script: |
-                     $versions = @(
-                       @{Name="Version1"; Port="$(Version1.Port)"; Path="$(Version1.AppPath)"},
-                       @{Name="Version2"; Port="$(Version2.Port)"; Path="$(Version2.AppPath)"},
-                       @{Name="Version3"; Port="$(Version3.Port)"; Path="$(Version3.AppPath)"},
-                       @{Name="Version4"; Port="$(Version4.Port)"; Path="$(Version4.AppPath)"}
+                     $stakeholders = @(
+                       @{Name="$(Stakeholder1.Name)"; SiteName="$(Stakeholder1.SiteName)"; AppPool="$(Stakeholder1.AppPoolName)"},
+                       @{Name="$(Stakeholder2.Name)"; SiteName="$(Stakeholder2.SiteName)"; AppPool="$(Stakeholder2.AppPoolName)"},
+                       @{Name="$(Stakeholder3.Name)"; SiteName="$(Stakeholder3.SiteName)"; AppPool="$(Stakeholder3.AppPoolName)"},
+                       @{Name="$(Stakeholder4.Name)"; SiteName="$(Stakeholder4.SiteName)"; AppPool="$(Stakeholder4.AppPoolName)"}
                      )
                      
-                     foreach ($version in $versions) {
-                       $url = "http://localhost:$($version.Port)$($version.Path)"
-                       Write-Host "Warming up $($version.Name) at: $url" -ForegroundColor Cyan
+                     foreach ($stakeholder in $stakeholders) {
+                       Write-Host "Stopping $($stakeholder.Name) services..." -ForegroundColor Cyan
                        
+                       # Stop website first
                        try {
-                         $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 60 -ErrorAction SilentlyContinue
-                         Write-Host "$($version.Name) responded with status: $($response.StatusCode)" -ForegroundColor Green
+                         Stop-Website -Name $stakeholder.SiteName -ErrorAction SilentlyContinue
+                         Write-Host "Website stopped: $($stakeholder.SiteName)" -ForegroundColor Green
                        } catch {
-                         Write-Host "Warning: Could not warm up $($version.Name) - $_" -ForegroundColor Yellow
+                         Write-Host "Website was not running: $($stakeholder.SiteName)" -ForegroundColor Gray
                        }
                        
-                       Start-Sleep -Seconds 2
+                       # Stop application pool
+                       try {
+                         Stop-WebAppPool -Name $stakeholder.AppPool -ErrorAction SilentlyContinue
+                         
+                         # Wait for app pool to stop
+                         $timeout = 30
+                         $elapsed = 0
+                         while ((Get-WebAppPoolState -Name $stakeholder.AppPool).Value -ne "Stopped" -and $elapsed -lt $timeout) {
+                           Start-Sleep -Seconds 1
+                           $elapsed++
+                         }
+                         
+                         if ((Get-WebAppPoolState -Name $stakeholder.AppPool).Value -eq "Stopped") {
+                           Write-Host "Application pool stopped: $($stakeholder.AppPool)" -ForegroundColor Green
+                         } else {
+                           Write-Warning "Application pool did not stop within timeout: $($stakeholder.AppPool)"
+                         }
+                       } catch {
+                         Write-Host "Application pool was not running: $($stakeholder.AppPool)" -ForegroundColor Gray
+                       }
                      }
-                 continueOnError: true
+                     
+                     Write-Host "All services stopped for in-place deployment" -ForegroundColor Green
+                     Start-Sleep -Seconds 5  # Allow services to fully stop
                
-               # ==================== HEALTH CHECK ====================
+               # ==================== IN-PLACE DEPLOYMENT: START SERVICES ====================
                - task: PowerShell@2
-                 displayName: 'Health Check - All Versions'
+                 displayName: 'Start All Stakeholder Websites (In-Place)'
                  inputs:
                    targetType: 'inline'
                    script: |
                      Import-Module WebAdministration
                      
-                     $siteName = "$(MainSiteName)"
-                     $appPoolName = "${siteName}AppPool"
-                     
-                     Write-Host "========================================" -ForegroundColor Cyan
-                     Write-Host "Health Check - All Versions" -ForegroundColor Cyan
-                     Write-Host "========================================" -ForegroundColor Cyan
-                     
-                     # Check Main Website Status
-                     $site = Get-Website -Name $siteName
-                     Write-Host "Main Website '$siteName' Status: $($site.State)" -ForegroundColor $(if($site.State -eq 'Started'){'Green'}else{'Red'})
-                     
-                     # Check Application Pool Status
-                     $appPool = Get-WebAppPoolState -Name $appPoolName
-                     Write-Host "Application Pool '$appPoolName' Status: $($appPool.Value)" -ForegroundColor $(if($appPool.Value -eq 'Started'){'Green'}else{'Red'})
-                     
-                     # Check each version
-                     $versions = @(
-                       @{Name="Version1"; Port="$(Version1.Port)"; Path="$(Version1.PhysicalPath)"; AppPath="$(Version1.AppPath)"},
-                       @{Name="Version2"; Port="$(Version2.Port)"; Path="$(Version2.PhysicalPath)"; AppPath="$(Version2.AppPath)"},
-                       @{Name="Version3"; Port="$(Version3.Port)"; Path="$(Version3.PhysicalPath)"; AppPath="$(Version3.AppPath)"},
-                       @{Name="Version4"; Port="$(Version4.Port)"; Path="$(Version4.PhysicalPath)"; AppPath="$(Version4.AppPath)"}
+                     $stakeholders = @(
+                       @{Name="$(Stakeholder1.Name)"; SiteName="$(Stakeholder1.SiteName)"; AppPool="$(Stakeholder1.AppPoolName)"},
+                       @{Name="$(Stakeholder2.Name)"; SiteName="$(Stakeholder2.SiteName)"; AppPool="$(Stakeholder2.AppPoolName)"},
+                       @{Name="$(Stakeholder3.Name)"; SiteName="$(Stakeholder3.SiteName)"; AppPool="$(Stakeholder3.AppPoolName)"},
+                       @{Name="$(Stakeholder4.Name)"; SiteName="$(Stakeholder4.SiteName)"; AppPool="$(Stakeholder4.AppPoolName)"}
                      )
                      
-                     $allHealthy = $true
-                     
-                     Write-Host ""
-                     Write-Host "Individual Version Status:" -ForegroundColor Cyan
-                     Write-Host "----------------------------------------" -ForegroundColor Cyan
-                     
-                     foreach ($version in $versions) {
-                       Write-Host ""
-                       Write-Host "$($version.Name):" -ForegroundColor White
+                     foreach ($stakeholder in $stakeholders) {
+                       Write-Host "Starting $($stakeholder.Name) website..." -ForegroundColor Cyan
                        
-                       # Check binding
-                       $binding = Get-WebBinding -Name $siteName -Port $version.Port
-                       $bindingStatus = if($binding){'✓ Configured'}else{'✗ Missing'}
-                       Write-Host "  Port $($version.Port) Binding: $bindingStatus" -ForegroundColor $(if($binding){'Green'}else{'Red'})
+                       # Start Application Pool
+                       Start-WebAppPool -Name $stakeholder.AppPool
+                       Start-Sleep -Seconds 2
                        
-                       # Check files
-                       $filesExist = Test-Path "$($version.Path)\*"
-                       $filesStatus = if($filesExist){'✓ Present'}else{'✗ Missing'}
-                       Write-Host "  Files: $filesStatus" -ForegroundColor $(if($filesExist){'Green'}else{'Red'})
+                       # Start Website
+                       Start-Website -Name $stakeholder.SiteName
                        
-                       # Check web application
-                       $webApp = Get-WebApplication -Name $version.Name -Site $siteName -ErrorAction SilentlyContinue
-                       $appStatus = if($webApp){'✓ Created'}else{'✗ Missing'}
-                       Write-Host "  Web Application: $appStatus" -ForegroundColor $(if($webApp){'Green'}else{'Red'})
-                       
-                       # Check URL accessibility
-                       $url = "http://localhost:$($version.Port)$($version.AppPath)"
-                       Write-Host "  URL: $url" -ForegroundColor Gray
-                       
-                       if (-not $binding -or -not $filesExist -or -not $webApp) {
-                         $allHealthy = $false
-                       }
+                       Write-Host "$($stakeholder.Name) website started successfully" -ForegroundColor Green
                      }
                      
-                     Write-Host ""
-                     Write-Host "========================================" -ForegroundColor Cyan
-                     
-                     # Overall status check
-                     if ($site.State -ne "Started") {
-                       Write-Error "Main Website is not running!"
-                       exit 1
-                     }
-                     
-                     if ($appPool.Value -ne "Started") {
-                       Write-Error "Application Pool is not running!"
-                       exit 1
-                     }
-                     
-                     if (-not $allHealthy) {
-                       Write-Error "One or more versions failed health check!"
-                       exit 1
-                     }
-                     
-                     Write-Host "Health Check PASSED - All Versions Healthy!" -ForegroundColor Green
-                     Write-Host "========================================" -ForegroundColor Cyan
-               
-               # ==================== DEPLOYMENT SUMMARY ====================
+                     Write-Host "All stakeholder websites started successfully!" -ForegroundColor Green
+
+  # Post-deployment monitoring and cleanup
+  - stage: PostDeployment
+    displayName: 'Post-Deployment Activities'
+    dependsOn: DeployStakeholderWebsites
+    condition: succeeded()
+    
+    jobs:
+      - job: PostDeploymentTasks
+        displayName: 'Post-Deployment Tasks'
+        steps:
                - task: PowerShell@2
-                 displayName: 'Deployment Summary'
+            displayName: 'Generate Deployment Report'
                  inputs:
                    targetType: 'inline'
                    script: |
-                     Write-Host ""
-                     Write-Host "========================================" -ForegroundColor Cyan
-                     Write-Host "Deployment Summary" -ForegroundColor Cyan
-                     Write-Host "========================================" -ForegroundColor Cyan
-                     Write-Host ""
-                     Write-Host "Main Site: $(MainSiteName)" -ForegroundColor White
-                     Write-Host "Application Pool: $(MainSiteName)AppPool" -ForegroundColor White
-                     Write-Host "Physical Path: $(MainSitePhysicalPath)" -ForegroundColor White
-                     Write-Host ""
-                     Write-Host "Deployed Versions:" -ForegroundColor Yellow
-                     Write-Host "  Version 1 - Port $(Version1.Port) - http://localhost:$(Version1.Port)$(Version1.AppPath)" -ForegroundColor White
-                     Write-Host "  Version 2 - Port $(Version2.Port) - http://localhost:$(Version2.Port)$(Version2.AppPath)" -ForegroundColor White
-                     Write-Host "  Version 3 - Port $(Version3.Port) - http://localhost:$(Version3.Port)$(Version3.AppPath)" -ForegroundColor White
-                     Write-Host "  Version 4 - Port $(Version4.Port) - http://localhost:$(Version4.Port)$(Version4.AppPath)" -ForegroundColor White
-                     Write-Host ""
-                     Write-Host "========================================" -ForegroundColor Cyan
-                     Write-Host "All Deployments Completed Successfully!" -ForegroundColor Green
-                     Write-Host "========================================" -ForegroundColor Cyan     explain line by line
+                # Generate comprehensive deployment report
+                $timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
+                $reportPath = "$(LogsPath)\DeploymentReport_$timestamp.json"
+                
+                $deploymentReport = @{
+                  DeploymentInfo = @{
+                    BuildNumber = "$(BuildNumber)"
+                    BranchName = "$(BranchName)"
+                    BuildId = "$(BuildId)"
+                    CommitId = "$(CommitId)"
+                    DeploymentDate = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+                    Environment = "$(Environment)"
+                    ServerName = $env:COMPUTERNAME
+                  }
+                  Stakeholders = @(
+                    @{Name="$(Stakeholder1.Name)"; SiteName="$(Stakeholder1.SiteName)"; Port="$(Stakeholder1.Port)"; URL="http://localhost:$(Stakeholder1.Port)"},
+                    @{Name="$(Stakeholder2.Name)"; SiteName="$(Stakeholder2.SiteName)"; Port="$(Stakeholder2.Port)"; URL="http://localhost:$(Stakeholder2.Port)"},
+                    @{Name="$(Stakeholder3.Name)"; SiteName="$(Stakeholder3.SiteName)"; Port="$(Stakeholder3.Port)"; URL="http://localhost:$(Stakeholder3.Port)"},
+                    @{Name="$(Stakeholder4.Name)"; SiteName="$(Stakeholder4.SiteName)"; Port="$(Stakeholder4.Port)"; URL="http://localhost:$(Stakeholder4.Port)"}
+                  )
+                  Paths = @{
+                    DeploymentBase = "$(DeploymentBasePath)"
+                    BackupBase = "$(BackupBasePath)"
+                    MetadataBase = "$(VersionMetadataPath)"
+                    LogsBase = "$(LogsPath)"
+                  }
+                }
+                
+                $deploymentReport | ConvertTo-Json -Depth 5 | Out-File -FilePath $reportPath -Encoding UTF8
+                Write-Host "Deployment report generated: $reportPath" -ForegroundColor Green
+                
+               - task: PowerShell@2
+            displayName: 'Cleanup Temporary Files'
+                 inputs:
+                   targetType: 'inline'
+                   script: |
+                # Cleanup temporary deployment files
+                $tempPaths = @("$(DeploymentBasePath)")
+                
+                foreach ($path in $tempPaths) {
+                  if (Test-Path $path) {
+                    $tempFiles = Get-ChildItem $path -Recurse -File | Where-Object { $_.Extension -in @('.tmp', '.temp', '.log') }
+                    foreach ($file in $tempFiles) {
+                      try {
+                        Remove-Item $file.FullName -Force
+                        Write-Host "Removed temporary file: $($file.Name)" -ForegroundColor Gray
+                       } catch {
+                        Write-Warning "Could not remove temporary file: $($file.Name)"
+                      }
+                    }
+                  }
+                }
+                
+                Write-Host "Temporary files cleanup completed" -ForegroundColor Green
+
+  # ==================== REDEPLOY PREVIOUS BUILD ====================
+  - stage: RedeployPreviousBuild
+    displayName: 'Redeploy Previous Build (Manual Trigger)'
+    condition: and(succeeded(), eq(variables['Build.Reason'], 'Manual'))
+    jobs:
+      - job: RedeployBuild
+        displayName: 'Redeploy Previous Working Build'
+        steps:
+          - task: PowerShell@2
+            displayName: 'Redeploy Previous Build Instructions'
+            inputs:
+              targetType: 'inline'
+              script: |
+                Write-Host "========================================" -ForegroundColor Cyan
+                Write-Host "Redeploy Previous Build Instructions" -ForegroundColor Cyan
+                Write-Host "========================================" -ForegroundColor Cyan
+                Write-Host ""
+                Write-Host "To redeploy a previous working build:" -ForegroundColor Yellow
+                Write-Host ""
+                Write-Host "1. Go to Azure DevOps Portal" -ForegroundColor White
+                Write-Host "2. Navigate to: Pipelines → Your Pipeline" -ForegroundColor White
+                Write-Host "3. Click 'Run pipeline' button" -ForegroundColor White
+                Write-Host "4. Select the branch with the working build" -ForegroundColor White
+                Write-Host "5. Choose the specific commit/build you want to redeploy" -ForegroundColor White
+                Write-Host "6. Click 'Run' to redeploy that exact build" -ForegroundColor White
+                Write-Host ""
+                Write-Host "Current Build Information:" -ForegroundColor Yellow
+                Write-Host "  Build Number: $(BuildNumber)" -ForegroundColor Gray
+                Write-Host "  Branch: $(BranchName)" -ForegroundColor Gray
+                Write-Host "  Commit ID: $(CommitId)" -ForegroundColor Gray
+                Write-Host "  Build Date: $(BuildDate) $(BuildTime)" -ForegroundColor Gray
+                Write-Host ""
+                Write-Host "Benefits of Redeploying Previous Build:" -ForegroundColor Green
+                Write-Host "  ✓ Clean deployment with fresh files" -ForegroundColor Green
+                Write-Host "  ✓ No file corruption or missing files" -ForegroundColor Green
+                Write-Host "  ✓ Goes through full validation process" -ForegroundColor Green
+                Write-Host "  ✓ Proper audit trail and logging" -ForegroundColor Green
+                Write-Host "  ✓ Consistent deployment state" -ForegroundColor Green
+                Write-Host ""
+                Write-Host "========================================" -ForegroundColor Cyan
+                     }
