@@ -129,7 +129,8 @@ stages:
                  inputs:
                    targetType: 'inline'
                    script: |
-                     Import-Module WebAdministration
+                     # Import WebAdministration module
+                     Import-Module WebAdministration -ErrorAction Stop
                      
                      $stakeholders = @(
                        @{Name="$(Stakeholder1.Name)"; Port="$(Stakeholder1.Port)"; Path="$(Stakeholder1.PhysicalPath)"; AppPool="$(Stakeholder1.AppPoolName)"},
@@ -211,7 +212,8 @@ stages:
                  inputs:
                    targetType: 'inline'
                    script: |
-                     Import-Module WebAdministration
+                     # Import WebAdministration module
+                     Import-Module WebAdministration -ErrorAction Stop
                      
                      $stakeholders = @(
                        @{Name="$(Stakeholder1.Name)"; AppPool="$(Stakeholder1.AppPoolName)"},
