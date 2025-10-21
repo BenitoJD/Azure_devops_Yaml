@@ -649,11 +649,11 @@ stages:
       - job: PostDeploymentTasks
         displayName: 'Post-Deployment Tasks'
         steps:
-               - task: PowerShell@2
+          - task: PowerShell@2
             displayName: 'Generate Deployment Report'
-                 inputs:
-                   targetType: 'inline'
-                   script: |
+            inputs:
+              targetType: 'inline'
+              script: |
                 # Generate comprehensive deployment report
                 $timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
                 $reportPath = "$(LogsPath)\DeploymentReport_$timestamp.json"
@@ -685,11 +685,11 @@ stages:
                 $deploymentReport | ConvertTo-Json -Depth 5 | Out-File -FilePath $reportPath -Encoding UTF8
                 Write-Host "Deployment report generated: $reportPath" -ForegroundColor Green
                 
-               - task: PowerShell@2
+          - task: PowerShell@2
             displayName: 'Cleanup Temporary Files'
-                 inputs:
-                   targetType: 'inline'
-                   script: |
+            inputs:
+              targetType: 'inline'
+              script: |
                 # Cleanup temporary deployment files
                 $tempPaths = @("$(DeploymentBasePath)")
                 
