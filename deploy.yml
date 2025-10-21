@@ -129,8 +129,15 @@ stages:
                  inputs:
                    targetType: 'inline'
                    script: |
-                     # Import WebAdministration module
-                     Import-Module WebAdministration -ErrorAction Stop
+                     # Try to import WebAdministration module
+                     try {
+                       Import-Module WebAdministration -ErrorAction Stop
+                       Write-Host "WebAdministration module loaded successfully" -ForegroundColor Green
+                     } catch {
+                       Write-Host "WebAdministration module not available, using alternative method" -ForegroundColor Yellow
+                       # Use appcmd.exe instead
+                       $useAppCmd = $true
+                     }
                      
                      $stakeholders = @(
                        @{Name="$(Stakeholder1.Name)"; Port="$(Stakeholder1.Port)"; Path="$(Stakeholder1.PhysicalPath)"; AppPool="$(Stakeholder1.AppPoolName)"},
@@ -142,19 +149,43 @@ stages:
                      foreach ($stakeholder in $stakeholders) {
                        Write-Host "Configuring $($stakeholder.Name)..." -ForegroundColor Cyan
                        
-                       # Create Application Pool
-                       if (-not (Get-WebAppPool -Name $stakeholder.AppPool -ErrorAction SilentlyContinue)) {
-                         New-WebAppPool -Name $stakeholder.AppPool
-                         Set-ItemProperty "IIS:\AppPools\$($stakeholder.AppPool)" -Name managedRuntimeVersion -Value "v4.0"
-                         Set-ItemProperty "IIS:\AppPools\$($stakeholder.AppPool)" -Name managedPipelineMode -Value "Integrated"
-                       }
-                       
-                       # Create Website
-                       if (-not (Get-Website -Name $stakeholder.Name -ErrorAction SilentlyContinue)) {
-                         New-Website -Name $stakeholder.Name -PhysicalPath $stakeholder.Path -ApplicationPool $stakeholder.AppPool -Port $stakeholder.Port
+                       if ($useAppCmd) {
+                         # Use appcmd.exe for IIS management
+                         try {
+                           # Create Application Pool
+                           & "C:\Windows\System32\inetsrv\appcmd.exe" add apppool /name:$($stakeholder.AppPool) /managedRuntimeVersion:v4.0 /managedPipelineMode:Integrated
+                           Write-Host "Created App Pool: $($stakeholder.AppPool)" -ForegroundColor Green
+                         } catch {
+                           Write-Host "App Pool may already exist: $($stakeholder.AppPool)" -ForegroundColor Yellow
+                         }
+                         
+                         try {
+                           # Create Website
+                           & "C:\Windows\System32\inetsrv\appcmd.exe" add site /name:$($stakeholder.Name) /physicalPath:$($stakeholder.Path) /bindings:http/*:$($stakeholder.Port):
+                           & "C:\Windows\System32\inetsrv\appcmd.exe" set app "$($stakeholder.Name)/" /applicationPool:$($stakeholder.AppPool)
+                           Write-Host "Created Website: $($stakeholder.Name)" -ForegroundColor Green
+                         } catch {
+                           Write-Host "Website may already exist: $($stakeholder.Name)" -ForegroundColor Yellow
+                         }
                        } else {
-                         Set-ItemProperty "IIS:\Sites\$($stakeholder.Name)" -Name applicationPool -Value $stakeholder.AppPool
-                         Set-ItemProperty "IIS:\Sites\$($stakeholder.Name)" -Name physicalPath -Value $stakeholder.Path
+                         # Use PowerShell cmdlets
+                         try {
+                           # Create Application Pool
+                           New-WebAppPool -Name $stakeholder.AppPool -ErrorAction SilentlyContinue
+                           Set-ItemProperty "IIS:\AppPools\$($stakeholder.AppPool)" -Name managedRuntimeVersion -Value "v4.0"
+                           Set-ItemProperty "IIS:\AppPools\$($stakeholder.AppPool)" -Name managedPipelineMode -Value "Integrated"
+                           Write-Host "Created App Pool: $($stakeholder.AppPool)" -ForegroundColor Green
+                         } catch {
+                           Write-Host "App Pool may already exist: $($stakeholder.AppPool)" -ForegroundColor Yellow
+                         }
+                         
+                         try {
+                           # Create Website
+                           New-Website -Name $stakeholder.Name -PhysicalPath $stakeholder.Path -ApplicationPool $stakeholder.AppPool -Port $stakeholder.Port -ErrorAction SilentlyContinue
+                           Write-Host "Created Website: $($stakeholder.Name)" -ForegroundColor Green
+                         } catch {
+                           Write-Host "Website may already exist: $($stakeholder.Name)" -ForegroundColor Yellow
+                         }
                        }
                        
                        Write-Host "$($stakeholder.Name) configured" -ForegroundColor Green
@@ -212,8 +243,15 @@ stages:
                  inputs:
                    targetType: 'inline'
                    script: |
-                     # Import WebAdministration module
-                     Import-Module WebAdministration -ErrorAction Stop
+                     # Try to import WebAdministration module
+                     try {
+                       Import-Module WebAdministration -ErrorAction Stop
+                       Write-Host "WebAdministration module loaded successfully" -ForegroundColor Green
+                       $usePowerShell = $true
+                     } catch {
+                       Write-Host "WebAdministration module not available, using appcmd.exe" -ForegroundColor Yellow
+                       $usePowerShell = $false
+                     }
                      
                      $stakeholders = @(
                        @{Name="$(Stakeholder1.Name)"; AppPool="$(Stakeholder1.AppPoolName)"},
@@ -223,8 +261,15 @@ stages:
                      )
                      
                      foreach ($stakeholder in $stakeholders) {
-                       Start-WebAppPool -Name $stakeholder.AppPool
-                       Start-Website -Name $stakeholder.Name
+                       if ($usePowerShell) {
+                         # Use PowerShell cmdlets
+                         Start-WebAppPool -Name $stakeholder.AppPool
+                         Start-Website -Name $stakeholder.Name
+                       } else {
+                         # Use appcmd.exe
+                         & "C:\Windows\System32\inetsrv\appcmd.exe" start apppool /apppool.name:$($stakeholder.AppPool)
+                         & "C:\Windows\System32\inetsrv\appcmd.exe" start site /site.name:$($stakeholder.Name)
+                       }
                        Write-Host "$($stakeholder.Name) started" -ForegroundColor Green
                      }
                      
