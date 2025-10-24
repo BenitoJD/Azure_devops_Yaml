@@ -1,3 +1,5 @@
+pool:
+  name: ccoe-nprod-windows-mdp-01
 trigger:
 - none
 
@@ -507,7 +509,7 @@ stages:
                               
                               Write-Host "  📋 Found $($existingAppSettings.Count) AppSettings and $($existingConnectionStrings.Count) ConnectionStrings in web.config" -ForegroundColor Cyan
                               
-                            # Enhanced matching: Only match variables that have corresponding keys in web.config
+                            # Enhanced matching with case-insensitive mapping and key transformation
                             foreach ($variable in $allVariables.GetEnumerator()) {
                                 $varName = $variable.Key
                                 $varValue = $variable.Value
@@ -520,33 +522,98 @@ stages:
                                     continue
                                 }
                                 
-                                # Try exact match first with AppSettings
-                                if ($existingAppSettings.ContainsKey($varName)) {
-                                    $existingSetting = $webConfig.configuration.appSettings.SelectSingleNode("add[@key='$varName']")
-                                    if ($existingSetting) {
-                                        $oldValue = $existingSetting.value
-                                        $existingSetting.value = $varValue
-                                        Write-Host "    ✅ Updated AppSetting: $varName = $varValue" -ForegroundColor Green
-                                        if ($oldValue -ne $varValue) {
-                                            Write-Host "      📝 Previous value: $oldValue" -ForegroundColor DarkGray
+                                # Create mapping from variable names to web.config keys
+                                $keyMapping = @{
+                                    'MDSERVICEURL' = 'MDServiceUrl'
+                                    'OBDCONTEXT' = 'OBDContext'
+                                    'REPORTSERVERFOLDERNAME' = 'ReportServerFolderName'
+                                    'REPORTSERVERURL' = 'ReportServerUrl'
+                                    'REPORTSERVERWEBSERVICEURL' = 'ReportServerWebServiceUrl'
+                                    'SERVER_REPORTSERVICE_URI' = 'Server_ReportService_URI'
+                                    'SITEEDITORTOOL_LOCATION' = 'SiteEditorTool_Location'
+                                }
+                                
+                                # Special handling for connection strings
+                                $connectionStringKeys = @('OBDCONTEXT')
+                                
+                                # Get the mapped key name (case-sensitive match)
+                                $mappedKey = if ($keyMapping.ContainsKey($varName)) { $keyMapping[$varName] } else { $varName }
+                                
+                                # Check if this is a connection string variable
+                                $isConnectionString = $connectionStringKeys -contains $varName
+                                
+                                # Try ConnectionStrings first if this is a known connection string variable
+                                if ($isConnectionString) {
+                                    $connectionKey = $null
+                                    foreach ($key in $existingConnectionStrings.Keys) {
+                                        if ($key -eq $mappedKey -or $key -ieq $varName) {
+                                            $connectionKey = $key
+                                            break
                                         }
-                                        $updatedCount++
-                                        $matched = $true
+                                    }
+                                    
+                                    if ($connectionKey) {
+                                        $existingConnection = $webConfig.configuration.connectionStrings.SelectSingleNode("add[@name='$connectionKey']")
+                                        if ($existingConnection) {
+                                            $oldValue = $existingConnection.connectionString
+                                            $existingConnection.connectionString = $varValue
+                                            Write-Host "    ✅ Updated ConnectionString: $connectionKey = $varValue" -ForegroundColor Green
+                                            if ($oldValue -ne $varValue) {
+                                                Write-Host "      📝 Previous value: $oldValue" -ForegroundColor DarkGray
+                                            }
+                                            $updatedCount++
+                                            $matched = $true
+                                        }
                                     }
                                 }
                                 
-                                # Try exact match with ConnectionStrings
-                                if (-not $matched -and $existingConnectionStrings.ContainsKey($varName)) {
-                                    $existingConnection = $webConfig.configuration.connectionStrings.SelectSingleNode("add[@name='$varName']")
-                                    if ($existingConnection) {
-                                        $oldValue = $existingConnection.connectionString
-                                        $existingConnection.connectionString = $varValue
-                                        Write-Host "    ✅ Updated ConnectionString: $varName = $varValue" -ForegroundColor Green
-                                        if ($oldValue -ne $varValue) {
-                                            Write-Host "      📝 Previous value: $oldValue" -ForegroundColor DarkGray
+                                # Try AppSettings if not matched and not a connection string
+                                if (-not $matched -and -not $isConnectionString) {
+                                    $appSettingKey = $null
+                                    foreach ($key in $existingAppSettings.Keys) {
+                                        if ($key -eq $mappedKey -or $key -ieq $varName) {
+                                            $appSettingKey = $key
+                                            break
                                         }
-                                        $updatedCount++
-                                        $matched = $true
+                                    }
+                                    
+                                    if ($appSettingKey) {
+                                        $existingSetting = $webConfig.configuration.appSettings.SelectSingleNode("add[@key='$appSettingKey']")
+                                        if ($existingSetting) {
+                                            $oldValue = $existingSetting.value
+                                            $existingSetting.value = $varValue
+                                            Write-Host "    ✅ Updated AppSetting: $appSettingKey = $varValue" -ForegroundColor Green
+                                            if ($oldValue -ne $varValue) {
+                                                Write-Host "      📝 Previous value: $oldValue" -ForegroundColor DarkGray
+                                            }
+                                            $updatedCount++
+                                            $matched = $true
+                                        }
+                                    }
+                                }
+                                
+                                # Try ConnectionStrings as fallback if not matched yet
+                                if (-not $matched) {
+                                    $connectionKey = $null
+                                    foreach ($key in $existingConnectionStrings.Keys) {
+                                        if ($key -eq $mappedKey -or $key -ieq $varName) {
+                                            $connectionKey = $key
+                                            break
+                                        }
+                                    }
+                                    
+                                    if ($connectionKey) {
+                                        $existingConnection = $webConfig.configuration.connectionStrings.SelectSingleNode("add[@name='$connectionKey']")
+                                        if ($existingConnection) {
+                                            $oldValue = $existingConnection.connectionString
+                                            $existingConnection.connectionString = $varValue
+                                            Write-Host "    ✅ Updated ConnectionString: $connectionKey = $varValue" -ForegroundColor Green
+                                            if ($oldValue -ne $varValue) {
+                                                Write-Host "      📝 Previous value: $oldValue" -ForegroundColor DarkGray
+                                            }
+                                            $updatedCount++
+                                            $matched = $true
+                                        }
                                     }
                                 }
                                 
