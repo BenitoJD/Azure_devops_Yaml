@@ -28,13 +28,14 @@ parameters:
     type: boolean
     default: true
 
+# Variable Groups for SIT environment configuration per site
 variables:
-  # Variable Groups for SIT environment configuration per site
   - group: SIT_FT1
   - group: SIT_FT2
   - group: SIT_FT3
   - group: SIT_R1
-  
+
+variables:
   # Build Information
   BuildNumber: '$(Build.BuildNumber)'
   BranchName: '$(Build.SourceBranchName)'
