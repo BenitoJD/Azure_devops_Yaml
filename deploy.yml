@@ -368,56 +368,28 @@ stages:
                      $totalSkipped = 0
                      $processedSites = 0
                      
-                     # Enhanced variable detection with comprehensive patterns
-                     function Get-SITVariables {
-                         $appSettingsVars = @{}
-                         $connectionStringVars = @{}
-                         
-                         # Comprehensive appSettings patterns
-                         $appSettingsPattern = '^(SiteEditorTool|Server_ReportService|ReportServer|OBD|MD|Database|Connection|Service|Url|Uri|Location|Context|Folder|Name|Path|Host|Port|User|Password|Key|Secret|Token|Endpoint|Api|Web|App|Config|Setting|EFTimeOut|TransactionTimeout|NumberOfItemsToDisplay|PreferenceUploadBatchSize|AllowPurgeDPP|MDServiceTimeout|SQlCommandTimeout|webSocket_barcodeScanner_URL|PaginationItemCount|SiteEnvironment|ReportServerFolderName|aspnet:MaxJsonDeserializerMembers|InitiateRegionUpdate|webpages|PreserveLoginUrl|ClientValidationEnabled|UnobtrusiveJavaScriptEnabled|ReportServerWebServiceEndpoint)'
-                         
-                         # Comprehensive connection string patterns
-                         $connectionStringPattern = '^(ConnectionString|OBDContext|MasterDataEntities|DefaultConnection|.*ConnectionString.*|.*Context.*)'
-                         
-                        # Variable name mapping from Azure DevOps Variable Groups to web.config keys
-                        $variableMappings = @{
-                            'SERVER_REPORTSERVICE_URI' = 'Server_ReportService_Uri'
-                            'REPORTSERVERWEBSERVICEURL' = 'ReportServerWebServiceUrl'
-                            'REPORTSERVERURL' = 'ReportServerUrl'
-                            'REPORTSERVERFOLDERNAME' = 'ReportServerFolderName'
-                            'SITEEDITORTOOL_LOCATION' = 'SiteEditorTool_Location'
-                            'OBDCONTEXT' = 'OBDContext'
-                            'MDSERVICEURL' = 'MDServiceUrl'
-                        }
+                    # Dynamic variable detection - fetch ALL variables from Azure DevOps Variable Groups
+                    function Get-SITVariables {
+                        $allVariables = @{}
                         
+                        # Get ALL environment variables from Azure DevOps Variable Groups
                         Get-ChildItem Env: | ForEach-Object {
                             $varName = $_.Name
                             $varValue = $_.Value
                             
-                            if ($varValue -and $varValue.Trim() -ne "") {
-                                # Check if this variable has a mapping
-                                if ($variableMappings.ContainsKey($varName)) {
-                                    $mappedKey = $variableMappings[$varName]
-                                    
-                                    # Determine if it's an AppSetting or ConnectionString
-                                    if ($mappedKey -eq 'OBDContext') {
-                                        $connectionStringVars[$mappedKey] = $varValue
-                                    } else {
-                                        $appSettingsVars[$mappedKey] = $varValue
-                                    }
-                                }
+                            # Skip system variables and Azure DevOps built-in variables
+                            if ($varValue -and $varValue.Trim() -ne "" -and 
+                                $varName -notmatch '^(PATH|USERNAME|USERPROFILE|PATHEXT|APPDATA|USERDOMAIN|SystemRoot|ProgramFiles|TEMP|TMP|windir|COMPUTERNAME|LOGONSERVER|SESSIONNAME|ALLUSERSPROFILE|CommonProgramFiles|CommonProgramFiles\(x86\)|CommonProgramW6432|ProgramData|ProgramFiles\(x86\)|ProgramW6432|PUBLIC|HOMEDRIVE|HOMEPATH|LOCALAPPDATA|OneDrive|OS|PROCESSOR_ARCHITECTURE|PROCESSOR_IDENTIFIER|PROCESSOR_LEVEL|PROCESSOR_REVISION|NUMBER_OF_PROCESSORS|Build|Agent|Pipeline|System)') {
+                                $allVariables[$varName] = $varValue
                             }
                         }
-                         
-                         return @{
-                             AppSettings = $appSettingsVars
-                             ConnectionStrings = $connectionStringVars
-                         }
-                     }
+                        
+                        return $allVariables
+                    }
                      
                      # Enhanced web.config processing with better error handling
-                     function Process-WebConfig {
-                         param($stakeholder, $sitVars)
+                    function Process-WebConfig {
+                        param($stakeholder, $allVariables)
                          
                          $webConfigPath = Join-Path $stakeholder.Path "web.config"
                          
@@ -438,63 +410,85 @@ stages:
                              $updatedCount = 0
                              $skippedCount = 0
                              
-                             # Process AppSettings
-                             if ($sitVars.AppSettings.Count -gt 0) {
-                                 Write-Host "  📋 Processing $($sitVars.AppSettings.Count) AppSettings variables..." -ForegroundColor Cyan
-                                 
-                                 $appSettings = $webConfig.configuration.appSettings
-                                 if ($appSettings) {
-                                     $existingKeys = $appSettings.add | ForEach-Object { $_.key }
-                                     
-                                     foreach ($variable in $sitVars.AppSettings.GetEnumerator()) {
-                                         if ($existingKeys -contains $variable.Key) {
-                                             $existingSetting = $appSettings.SelectSingleNode("add[@key='$($variable.Key)']")
-                                             if ($existingSetting) {
-                                                 $oldValue = $existingSetting.value
-                                                 $existingSetting.value = $variable.Value
-                                                 Write-Host "    ✅ Updated: $($variable.Key) = $($variable.Value)" -ForegroundColor Green
-                                                 if ($oldValue -ne $variable.Value) {
-                                                     Write-Host "      📝 Previous value: $oldValue" -ForegroundColor DarkGray
-                                                 }
-                                                 $updatedCount++
-                                             }
-                                         } else {
-                                             Write-Host "    ⏭️  Skipped: $($variable.Key) (not found in web.config)" -ForegroundColor Gray
-                                             $skippedCount++
-                                         }
-                                     }
-                                 } else {
-                                     Write-Host "    ⚠️  No appSettings section found in web.config" -ForegroundColor Yellow
-                                 }
-                             }
-                             
-                             # Process ConnectionStrings
-                             if ($sitVars.ConnectionStrings.Count -gt 0) {
-                                 Write-Host "  🔗 Processing $($sitVars.ConnectionStrings.Count) ConnectionString variables..." -ForegroundColor Cyan
-                                 
-                                 $connectionStrings = $webConfig.configuration.connectionStrings
-                                 if ($connectionStrings) {
-                                     $existingNames = $connectionStrings.add | ForEach-Object { $_.name }
-                                     
-                                     foreach ($variable in $sitVars.ConnectionStrings.GetEnumerator()) {
-                                         if ($existingNames -contains $variable.Key) {
-                                             $existingConnection = $connectionStrings.SelectSingleNode("add[@name='$($variable.Key)']")
-                                             if ($existingConnection) {
-                                                 $oldValue = $existingConnection.connectionString
-                                                 $existingConnection.connectionString = $variable.Value
-                                                 Write-Host "    ✅ Updated: $($variable.Key)" -ForegroundColor Green
-                                                 Write-Host "      📝 Connection string updated" -ForegroundColor DarkGray
-                                                 $updatedCount++
-                                             }
-                                         } else {
-                                             Write-Host "    ⏭️  Skipped: $($variable.Key) (not found in web.config)" -ForegroundColor Gray
-                                             $skippedCount++
-                                         }
-                                     }
-                                 } else {
-                                     Write-Host "    ⚠️  No connectionStrings section found in web.config" -ForegroundColor Yellow
-                                 }
-                             }
+                            # Get ALL existing keys from web.config
+                            $existingAppSettings = @{}
+                            $existingConnectionStrings = @{}
+                            
+                            # Extract AppSettings keys
+                            if ($webConfig.configuration.appSettings) {
+                                $webConfig.configuration.appSettings.add | ForEach-Object {
+                                    $existingAppSettings[$_.key] = $_.value
+                                }
+                            }
+                            
+                            # Extract ConnectionString names
+                            if ($webConfig.configuration.connectionStrings) {
+                                $webConfig.configuration.connectionStrings.add | ForEach-Object {
+                                    $existingConnectionStrings[$_.name] = $_.connectionString
+                                }
+                            }
+                            
+                            Write-Host "  📋 Found $($existingAppSettings.Count) AppSettings and $($existingConnectionStrings.Count) ConnectionStrings in web.config" -ForegroundColor Cyan
+                            
+                            # Dynamic matching: Try to match each variable with web.config keys
+                            foreach ($variable in $allVariables.GetEnumerator()) {
+                                $varName = $variable.Key
+                                $varValue = $variable.Value
+                                $matched = $false
+                                
+                                # Try to match with AppSettings keys (case-insensitive and partial matching)
+                                $matchedAppKey = $existingAppSettings.Keys | Where-Object { 
+                                    $_ -eq $varName -or 
+                                    $_ -like "*$varName*" -or 
+                                    $varName -like "*$_*" -or
+                                    $_ -replace '[^a-zA-Z0-9]', '' -eq $varName -replace '[^a-zA-Z0-9]', '' -or
+                                    $varName -replace '[^a-zA-Z0-9]', '' -eq $_ -replace '[^a-zA-Z0-9]', ''
+                                }
+                                
+                                if ($matchedAppKey) {
+                                    $existingSetting = $webConfig.configuration.appSettings.SelectSingleNode("add[@key='$matchedAppKey']")
+                                    if ($existingSetting) {
+                                        $oldValue = $existingSetting.value
+                                        $existingSetting.value = $varValue
+                                        Write-Host "    ✅ Updated AppSetting: $matchedAppKey = $varValue" -ForegroundColor Green
+                                        if ($oldValue -ne $varValue) {
+                                            Write-Host "      📝 Previous value: $oldValue" -ForegroundColor DarkGray
+                                        }
+                                        $updatedCount++
+                                        $matched = $true
+                                    }
+                                }
+                                
+                                # Try to match with ConnectionString names (case-insensitive and partial matching)
+                                if (-not $matched) {
+                                    $matchedConnKey = $existingConnectionStrings.Keys | Where-Object { 
+                                        $_ -eq $varName -or 
+                                        $_ -like "*$varName*" -or 
+                                        $varName -like "*$_*" -or
+                                        $_ -replace '[^a-zA-Z0-9]', '' -eq $varName -replace '[^a-zA-Z0-9]', '' -or
+                                        $varName -replace '[^a-zA-Z0-9]', '' -eq $_ -replace '[^a-zA-Z0-9]', ''
+                                    }
+                                    
+                                    if ($matchedConnKey) {
+                                        $existingConnection = $webConfig.configuration.connectionStrings.SelectSingleNode("add[@name='$matchedConnKey']")
+                                        if ($existingConnection) {
+                                            $oldValue = $existingConnection.connectionString
+                                            $existingConnection.connectionString = $varValue
+                                            Write-Host "    ✅ Updated ConnectionString: $matchedConnKey = $varValue" -ForegroundColor Green
+                                            if ($oldValue -ne $varValue) {
+                                                Write-Host "      📝 Previous value: $oldValue" -ForegroundColor DarkGray
+                                            }
+                                            $updatedCount++
+                                            $matched = $true
+                                        }
+                                    }
+                                }
+                                
+                                if (-not $matched) {
+                                    Write-Host "    ⏭️  Skipped: $varName (no matching key found in web.config)" -ForegroundColor Yellow
+                                    $skippedCount++
+                                }
+                            }
                              
                              # Save with backup
                              $backupPath = "$webConfigPath.backup.$(Get-Date -Format 'yyyyMMdd_HHmmss')"
@@ -519,18 +513,18 @@ stages:
                              Write-Host "🌐 Processing $($stakeholder.Name) (Port: $($stakeholder.Port)) using $($stakeholder.VarGroup)..." -ForegroundColor Cyan
                              Write-Host "📁 Path: $($stakeholder.Path)" -ForegroundColor DarkCyan
                              
-                             # Get variables for this site
-                             $sitVars = Get-SITVariables
-                             
-                             if ($sitVars.AppSettings.Count -eq 0 -and $sitVars.ConnectionStrings.Count -eq 0) {
-                                 Write-Host "  ⚠️  No variables found in $($stakeholder.VarGroup) variable group" -ForegroundColor Yellow
-                                 continue
-                             }
-                             
-                             Write-Host "  📊 Found $($sitVars.AppSettings.Count) AppSettings and $($sitVars.ConnectionStrings.Count) ConnectionString variables" -ForegroundColor Cyan
-                             
-                             # Process web.config
-                             $result = Process-WebConfig $stakeholder $sitVars
+                            # Get ALL variables for this site from Azure DevOps Variable Group
+                            $allVariables = Get-SITVariables
+                            
+                            if ($allVariables.Count -eq 0) {
+                                Write-Host "  ⚠️  No variables found in $($stakeholder.VarGroup) variable group" -ForegroundColor Yellow
+                                continue
+                            }
+                            
+                            Write-Host "  📊 Found $($allVariables.Count) variables from $($stakeholder.VarGroup) variable group" -ForegroundColor Cyan
+                            
+                            # Process web.config with dynamic matching
+                            $result = Process-WebConfig $stakeholder $allVariables
                              
                              $totalUpdated += $result.Updated
                              $totalSkipped += $result.Skipped
