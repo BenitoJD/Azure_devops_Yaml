@@ -368,6 +368,43 @@ stages:
                       $totalSkipped = 0
                       $processedSites = 0
                       
+                      # 🔍 DIAGNOSTIC: Show all available variable groups and their variables
+                      Write-Host "================================================" -ForegroundColor Magenta
+                      Write-Host "🔍 VARIABLE GROUP DIAGNOSTICS" -ForegroundColor Magenta
+                      Write-Host "================================================" -ForegroundColor Magenta
+                      
+                      $allVarGroups = @("SIT_FT1", "SIT_FT2", "SIT_FT3", "SIT_R1")
+                      
+                      foreach ($varGroup in $allVarGroups) {
+                          Write-Host "`n📦 Variable Group: $varGroup" -ForegroundColor Yellow
+                          Write-Host "   Looking for variables with prefix: $varGroup." -ForegroundColor Gray
+                          
+                          $groupVariables = @{}
+                          $varGroupPrefix = "$varGroup."
+                          
+                          # Get all environment variables that start with this variable group name
+                          Get-ChildItem Env: | Where-Object { 
+                              $_.Name -like "$varGroupPrefix*" -and 
+                              $_.Value -and 
+                              $_.Value.Trim() -ne "" 
+                          } | ForEach-Object {
+                              $varName = $_.Name.Substring($varGroupPrefix.Length)
+                              $varValue = $_.Value
+                              $groupVariables[$varName] = $varValue
+                              Write-Host "   ✅ Found: $varName = $varValue" -ForegroundColor Green
+                          }
+                          
+                          if ($groupVariables.Count -eq 0) {
+                              Write-Host "   ⚠️  No variables found for $varGroup" -ForegroundColor Red
+                          } else {
+                              Write-Host "   📊 Total variables found: $($groupVariables.Count)" -ForegroundColor Cyan
+                          }
+                      }
+                      
+                      Write-Host "`n================================================" -ForegroundColor Magenta
+                      Write-Host "🔧 STARTING CONFIGURATION INJECTION" -ForegroundColor Magenta
+                      Write-Host "================================================" -ForegroundColor Magenta
+                      
                       # Get only variables from the specific variable group for this site
                       function Get-SITVariables {
                           param($varGroupName)
