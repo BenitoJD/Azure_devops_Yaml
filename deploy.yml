@@ -398,21 +398,36 @@ stages:
                       
                       foreach ($varGroup in $allVarGroups) {
                           Write-Host "`n📦 Variable Group: $varGroup" -ForegroundColor Yellow
-                          Write-Host "   Looking for variables with prefix: $varGroup." -ForegroundColor Gray
+                          Write-Host "   Looking for variables with prefix: $varGroup" -ForegroundColor Gray
                           
                           $groupVariables = @{}
-                          $varGroupPrefix = "$varGroup."
                           
-                          # Get all environment variables that start with this variable group name
+                          # Try both dot notation and underscore notation
+                          $dotPrefix = "$varGroup."
+                          $underscorePrefix = "$varGroup" + "_"
+                          
+                          # Get all environment variables that start with this variable group name (dot notation)
                           Get-ChildItem Env: | Where-Object { 
-                              $_.Name -like "$varGroupPrefix*" -and 
+                              $_.Name -like "$dotPrefix*" -and 
                               $_.Value -and 
                               $_.Value.Trim() -ne "" 
                           } | ForEach-Object {
-                              $varName = $_.Name.Substring($varGroupPrefix.Length)
+                              $varName = $_.Name.Substring($dotPrefix.Length)
                               $varValue = $_.Value
                               $groupVariables[$varName] = $varValue
-                              Write-Host "   ✅ Found: $varName = $varValue" -ForegroundColor Green
+                              Write-Host "   ✅ Found (dot): $varName = $varValue" -ForegroundColor Green
+                          }
+                          
+                          # Get all environment variables that start with this variable group name (underscore notation)
+                          Get-ChildItem Env: | Where-Object { 
+                              $_.Name -like "$underscorePrefix*" -and 
+                              $_.Value -and 
+                              $_.Value.Trim() -ne "" 
+                          } | ForEach-Object {
+                              $varName = $_.Name.Substring($underscorePrefix.Length)
+                              $varValue = $_.Value
+                              $groupVariables[$varName] = $varValue
+                              Write-Host "   ✅ Found (underscore): $varName = $varValue" -ForegroundColor Green
                           }
                           
                           if ($groupVariables.Count -eq 0) {
