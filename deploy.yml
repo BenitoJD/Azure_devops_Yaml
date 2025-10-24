@@ -28,13 +28,6 @@ parameters:
     type: boolean
     default: true
 
-# Variable Groups for SIT environment configuration per site
-variables:
-  - group: SIT_FT1
-  - group: SIT_FT2
-  - group: SIT_FT3
-  - group: SIT_R1
-
 variables:
   # Build Information
   BuildNumber: '$(Build.BuildNumber)'
@@ -85,6 +78,11 @@ resources:
 stages:
   - stage: DeployWebsites
     displayName: 'Deploy Selected Websites - Branch: $(BranchName) - Build: $(BuildNumber)'
+    variables:
+      - group: SIT_FT1
+      - group: SIT_FT2
+      - group: SIT_FT3
+      - group: SIT_R1
     
     jobs:
       - deployment: DeployStakeholders
