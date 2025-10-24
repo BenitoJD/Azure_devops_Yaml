@@ -368,24 +368,62 @@ stages:
                       $totalSkipped = 0
                       $processedSites = 0
                      
-                      # Dynamic variable detection - fetch ALL variables from Azure DevOps Variable Groups
-                      function Get-SITVariables {
-                           $allVariables = @{}
-                           
-                           # Get ALL environment variables from Azure DevOps Variable Groups
-                           Get-ChildItem Env: | ForEach-Object {
-                               $varName = $_.Name
-                               $varValue = $_.Value
-                               
-                               # Skip system variables and Azure DevOps built-in variables
-                               if ($varValue -and $varValue.Trim() -ne "" -and 
-                                   $varName -notmatch '^(PATH|USERNAME|USERPROFILE|PATHEXT|APPDATA|USERDOMAIN|SystemRoot|ProgramFiles|TEMP|TMP|windir|COMPUTERNAME|LOGONSERVER|SESSIONNAME|ALLUSERSPROFILE|CommonProgramFiles|CommonProgramFiles\(x86\)|CommonProgramW6432|ProgramData|ProgramFiles\(x86\)|ProgramW6432|PUBLIC|HOMEDRIVE|HOMEPATH|LOCALAPPDATA|OneDrive|OS|PROCESSOR_ARCHITECTURE|PROCESSOR_IDENTIFIER|PROCESSOR_LEVEL|PROCESSOR_REVISION|NUMBER_OF_PROCESSORS|Build|Agent|Pipeline|System)') {
-                                   $allVariables[$varName] = $varValue
-                               }
-                           }
-                          
-                           return $allVariables
-                      }
+                    # Get only variables from the specific variable group for this site
+                    function Get-SITVariables {
+                        param($varGroupName)
+                        $siteVariables = @{}
+                        
+                        # Get all environment variables
+                        $allEnvVars = Get-ChildItem Env:
+                        
+                        # Define patterns for system/Azure DevOps variables to exclude
+                        $excludePatterns = @(
+                            '^PATH$', '^USERNAME$', '^USERPROFILE$', '^PATHEXT$', '^APPDATA$', '^USERDOMAIN$',
+                            '^SystemRoot$', '^ProgramFiles', '^TEMP$', '^TMP$', '^windir$', '^COMPUTERNAME$',
+                            '^LOGONSERVER$', '^SESSIONNAME$', '^ALLUSERSPROFILE$', '^CommonProgramFiles',
+                            '^PUBLIC$', '^HOMEDRIVE$', '^HOMEPATH$', '^LOCALAPPDATA$', '^OneDrive$', '^OS$',
+                            '^PROCESSOR_', '^NUMBER_OF_PROCESSORS$', '^Build\.', '^Agent\.', '^Pipeline\.',
+                            '^System\.', '^TF_', '^AZURE_', '^VSTS_', '^Deploy\.', '^Stakeholder',
+                            '^SelectedSites$', '^DeploymentBasePath$', '^BackupBasePath$'
+                        )
+                        
+                        # Filter out system variables and keep only configuration variables
+                        foreach ($envVar in $allEnvVars) {
+                            $varName = $envVar.Name
+                            $varValue = $envVar.Value
+                            
+                            # Skip if empty or matches exclusion patterns
+                            if (-not $varValue -or $varValue.Trim() -eq "") { continue }
+                            
+                            $shouldExclude = $false
+                            foreach ($pattern in $excludePatterns) {
+                                if ($varName -match $pattern) {
+                                    $shouldExclude = $true
+                                    break
+                                }
+                            }
+                            
+                            if (-not $shouldExclude) {
+                                # Additional filters for technical/system values
+                                if ($varValue -notmatch '^[0-9]+$' -and  # Skip pure numbers
+                                    $varValue -notmatch '^[a-f0-9\-]{8,}$' -and  # Skip GUIDs
+                                    $varValue -notmatch '^C:\\' -and  # Skip C: paths
+                                    $varValue -notmatch '^D:\\' -and  # Skip D: paths  
+                                    $varValue -notmatch '^http://10\.' -and  # Skip internal URLs
+                                    $varValue -notmatch '^vstfs://' -and  # Skip Azure DevOps URLs
+                                    $varValue -notmatch '^VSTS_' -and  # Skip VSTS variables
+                                    $varValue.Length -gt 1 -and  # Skip single characters
+                                    $varValue.Length -lt 200) {  # Skip very long strings
+                                    
+                                    $siteVariables[$varName] = $varValue
+                                    Write-Host "  📋 Found config variable: $varName" -ForegroundColor DarkCyan
+                                }
+                            }
+                        }
+                        
+                        Write-Host "  🔍 Found $($siteVariables.Count) configuration variables from $varGroupName" -ForegroundColor Cyan
+                        return $siteVariables
+                    }
                       
                       # Enhanced web.config processing with better error handling
                       function Process-WebConfig {
@@ -430,65 +468,54 @@ stages:
                               
                               Write-Host "  📋 Found $($existingAppSettings.Count) AppSettings and $($existingConnectionStrings.Count) ConnectionStrings in web.config" -ForegroundColor Cyan
                               
-                              # Dynamic matching: Try to match each variable with web.config keys
-                              foreach ($variable in $allVariables.GetEnumerator()) {
-                                  $varName = $variable.Key
-                                  $varValue = $variable.Value
-                                  $matched = $false
-                                  
-                                  # Try to match with AppSettings keys (case-insensitive and partial matching)
-                                  $matchedAppKey = $existingAppSettings.Keys | Where-Object { 
-                                      $_ -eq $varName -or 
-                                      $_ -like "*$varName*" -or 
-                                      $varName -like "*$_*" -or
-                                      $_ -replace '[^a-zA-Z0-9]', '' -eq $varName -replace '[^a-zA-Z0-9]', '' -or
-                                      $varName -replace '[^a-zA-Z0-9]', '' -eq $_ -replace '[^a-zA-Z0-9]', ''
-                                  }
-                                  
-                                  if ($matchedAppKey) {
-                                      $existingSetting = $webConfig.configuration.appSettings.SelectSingleNode("add[@key='$matchedAppKey']")
-                                      if ($existingSetting) {
-                                          $oldValue = $existingSetting.value
-                                          $existingSetting.value = $varValue
-                                          Write-Host "    ✅ Updated AppSetting: $matchedAppKey = $varValue" -ForegroundColor Green
-                                          if ($oldValue -ne $varValue) {
-                                              Write-Host "      📝 Previous value: $oldValue" -ForegroundColor DarkGray
-                                          }
-                                          $updatedCount++
-                                          $matched = $true
-                                      }
-                                  }
-                                  
-                                  # Try to match with ConnectionString names (case-insensitive and partial matching)
-                                  if (-not $matched) {
-                                      $matchedConnKey = $existingConnectionStrings.Keys | Where-Object { 
-                                          $_ -eq $varName -or 
-                                          $_ -like "*$varName*" -or 
-                                          $varName -like "*$_*" -or
-                                          $_ -replace '[^a-zA-Z0-9]', '' -eq $varName -replace '[^a-zA-Z0-9]', '' -or
-                                          $varName -replace '[^a-zA-Z0-9]', '' -eq $_ -replace '[^a-zA-Z0-9]', ''
-                                      }
-                                      
-                                      if ($matchedConnKey) {
-                                          $existingConnection = $webConfig.configuration.connectionStrings.SelectSingleNode("add[@name='$matchedConnKey']")
-                                          if ($existingConnection) {
-                                              $oldValue = $existingConnection.connectionString
-                                              $existingConnection.connectionString = $varValue
-                                              Write-Host "    ✅ Updated ConnectionString: $matchedConnKey = $varValue" -ForegroundColor Green
-                                              if ($oldValue -ne $varValue) {
-                                                  Write-Host "      📝 Previous value: $oldValue" -ForegroundColor DarkGray
-                                              }
-                                              $updatedCount++
-                                              $matched = $true
-                                          }
-                                      }
-                                  }
-                                  
-                                  if (-not $matched) {
-                                      Write-Host "    ⏭️  Skipped: $varName (no matching key found in web.config)" -ForegroundColor Yellow
-                                      $skippedCount++
-                                  }
-                              }
+                            # Enhanced matching: Only match variables that have corresponding keys in web.config
+                            foreach ($variable in $allVariables.GetEnumerator()) {
+                                $varName = $variable.Key
+                                $varValue = $variable.Value
+                                $matched = $false
+                                
+                                # Skip system and Azure DevOps variables that shouldn't be injected
+                                if ($varName -match '^(Build|Agent|Pipeline|System|TF_|AZURE_|VSTS_)') {
+                                    Write-Host "    ⏭️  Skipped: $varName (system variable)" -ForegroundColor Gray
+                                    $skippedCount++
+                                    continue
+                                }
+                                
+                                # Try exact match first with AppSettings
+                                if ($existingAppSettings.ContainsKey($varName)) {
+                                    $existingSetting = $webConfig.configuration.appSettings.SelectSingleNode("add[@key='$varName']")
+                                    if ($existingSetting) {
+                                        $oldValue = $existingSetting.value
+                                        $existingSetting.value = $varValue
+                                        Write-Host "    ✅ Updated AppSetting: $varName = $varValue" -ForegroundColor Green
+                                        if ($oldValue -ne $varValue) {
+                                            Write-Host "      📝 Previous value: $oldValue" -ForegroundColor DarkGray
+                                        }
+                                        $updatedCount++
+                                        $matched = $true
+                                    }
+                                }
+                                
+                                # Try exact match with ConnectionStrings
+                                if (-not $matched -and $existingConnectionStrings.ContainsKey($varName)) {
+                                    $existingConnection = $webConfig.configuration.connectionStrings.SelectSingleNode("add[@name='$varName']")
+                                    if ($existingConnection) {
+                                        $oldValue = $existingConnection.connectionString
+                                        $existingConnection.connectionString = $varValue
+                                        Write-Host "    ✅ Updated ConnectionString: $varName = $varValue" -ForegroundColor Green
+                                        if ($oldValue -ne $varValue) {
+                                            Write-Host "      📝 Previous value: $oldValue" -ForegroundColor DarkGray
+                                        }
+                                        $updatedCount++
+                                        $matched = $true
+                                    }
+                                }
+                                
+                                if (-not $matched) {
+                                    Write-Host "    ⏭️  Skipped: $varName (no matching key found in web.config)" -ForegroundColor Yellow
+                                    $skippedCount++
+                                }
+                            }
                                
                                # Save with backup
                                $backupPath = "$webConfigPath.backup.$(Get-Date -Format 'yyyyMMdd_HHmmss')"
@@ -513,8 +540,8 @@ stages:
                                Write-Host "🌐 Processing $($stakeholder.Name) (Port: $($stakeholder.Port)) using $($stakeholder.VarGroup)..." -ForegroundColor Cyan
                                Write-Host "📁 Path: $($stakeholder.Path)" -ForegroundColor DarkCyan
                                
-                              # Get ALL variables for this site from Azure DevOps Variable Group
-                              $allVariables = Get-SITVariables
+                            # Get variables for this site from Azure DevOps Variable Group
+                            $allVariables = Get-SITVariables $stakeholder.VarGroup
                               
                               if ($allVariables.Count -eq 0) {
                                   Write-Host "  ⚠️  No variables found in $($stakeholder.VarGroup) variable group" -ForegroundColor Yellow
