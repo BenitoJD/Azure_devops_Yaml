@@ -104,24 +104,24 @@ stages:
                  inputs:
                    targetType: 'inline'
                    script: |
-                     Write-Host "================================================" -ForegroundColor Cyan
-                     Write-Host "DEPLOYMENT INFORMATION" -ForegroundColor Cyan
-                     Write-Host "================================================" -ForegroundColor Cyan
-                     Write-Host "Branch Name    : $(BranchName)" -ForegroundColor Yellow
-                     Write-Host "Build Number   : $(BuildNumber)" -ForegroundColor Yellow
-                     Write-Host "Build Version  : $(BuildVersion)" -ForegroundColor Yellow
-                     Write-Host "Build ID       : $(Build.BuildId)" -ForegroundColor Yellow
-                     Write-Host "Source Version : $(Build.SourceVersion)" -ForegroundColor Yellow
-                     Write-Host "Started By     : $(Build.RequestedFor)" -ForegroundColor Yellow
-                     Write-Host "Started At     : $(System.TeamProject)" -ForegroundColor Yellow
-                     Write-Host "================================================" -ForegroundColor Cyan
-                     Write-Host "DEPLOYMENT TARGETS" -ForegroundColor Cyan
-                     Write-Host "================================================" -ForegroundColor Cyan
-                     Write-Host "FT1          : $(Deploy.FT1)" -ForegroundColor $(if ("$(Deploy.FT1)" -eq "true") { "Green" } else { "Red" })
-                     Write-Host "FT2          : $(Deploy.FT2)" -ForegroundColor $(if ("$(Deploy.FT2)" -eq "true") { "Green" } else { "Red" })
-                     Write-Host "FT3          : $(Deploy.FT3)" -ForegroundColor $(if ("$(Deploy.FT3)" -eq "true") { "Green" } else { "Red" })
-                     Write-Host "R1           : $(Deploy.R1)" -ForegroundColor $(if ("$(Deploy.R1)" -eq "true") { "Green" } else { "Red" })
-                     Write-Host "================================================" -ForegroundColor Cyan
+                      Write-Host "================================================" -ForegroundColor Cyan
+                      Write-Host "DEPLOYMENT INFORMATION" -ForegroundColor Cyan
+                      Write-Host "================================================" -ForegroundColor Cyan
+                      Write-Host "Branch Name    : $(BranchName)" -ForegroundColor Yellow
+                      Write-Host "Build Number   : $(BuildNumber)" -ForegroundColor Yellow
+                      Write-Host "Build Version  : $(BuildVersion)" -ForegroundColor Yellow
+                      Write-Host "Build ID       : $(Build.BuildId)" -ForegroundColor Yellow
+                      Write-Host "Source Version : $(Build.SourceVersion)" -ForegroundColor Yellow
+                      Write-Host "Started By     : $(Build.RequestedFor)" -ForegroundColor Yellow
+                      Write-Host "Started At     : $(System.TeamProject)" -ForegroundColor Yellow
+                      Write-Host "================================================" -ForegroundColor Cyan
+                      Write-Host "DEPLOYMENT TARGETS" -ForegroundColor Cyan
+                      Write-Host "================================================" -ForegroundColor Cyan
+                      Write-Host "FT1          : $(Deploy.FT1)" -ForegroundColor $(if ("$(Deploy.FT1)" -eq "true") { "Green" } else { "Red" })
+                      Write-Host "FT2          : $(Deploy.FT2)" -ForegroundColor $(if ("$(Deploy.FT2)" -eq "true") { "Green" } else { "Red" })
+                      Write-Host "FT3          : $(Deploy.FT3)" -ForegroundColor $(if ("$(Deploy.FT3)" -eq "true") { "Green" } else { "Red" })
+                      Write-Host "R1           : $(Deploy.R1)" -ForegroundColor $(if ("$(Deploy.R1)" -eq "true") { "Green" } else { "Red" })
+                      Write-Host "================================================" -ForegroundColor Cyan
                
                # Display Selected Deployment Sites
                - task: PowerShell@2
@@ -129,44 +129,44 @@ stages:
                  inputs:
                    targetType: 'inline'
                    script: |
-                     Write-Host "================================================" -ForegroundColor Cyan
-                     Write-Host "SELECTED DEPLOYMENT SITES" -ForegroundColor Cyan
-                     Write-Host "================================================" -ForegroundColor Cyan
-                     
-                     $selectedSites = @()
-                     $deploymentSummary = @()
-                     
-                     if ("$(Deploy.FT1)" -eq "true") { 
-                       $selectedSites += "FT1"
-                       $deploymentSummary += "✅ FT1 (Port 8091)"
-                     }
-                     if ("$(Deploy.FT2)" -eq "true") { 
-                       $selectedSites += "FT2"
-                       $deploymentSummary += "✅ FT2 (Port 8092)"
-                     }
-                     if ("$(Deploy.FT3)" -eq "true") { 
-                       $selectedSites += "FT3"
-                       $deploymentSummary += "✅ FT3 (Port 8093)"
-                     }
-                     if ("$(Deploy.R1)" -eq "true") { 
-                       $selectedSites += "R1"
-                       $deploymentSummary += "✅ R1 (Port 8094)"
-                     }
-                     
-                     if ($selectedSites.Count -eq 0) {
-                       Write-Host "⚠️  NO SITES SELECTED FOR DEPLOYMENT" -ForegroundColor Red
-                       Write-Host "All deployment flags are set to false" -ForegroundColor Yellow
-                     } else {
-                       Write-Host "Sites selected for deployment: $($selectedSites -join ', ')" -ForegroundColor Green
-                       Write-Host ""
-                       foreach ($site in $deploymentSummary) {
-                         Write-Host $site -ForegroundColor White
-                       }
-                       Write-Host ""
-                       Write-Host "Total sites to deploy: $($selectedSites.Count)" -ForegroundColor Cyan
-                     }
-                     
-                     Write-Host "================================================" -ForegroundColor Cyan
+                      Write-Host "================================================" -ForegroundColor Cyan
+                      Write-Host "SELECTED DEPLOYMENT SITES" -ForegroundColor Cyan
+                      Write-Host "================================================" -ForegroundColor Cyan
+                      
+                      $selectedSites = @()
+                      $deploymentSummary = @()
+                      
+                      if ("$(Deploy.FT1)" -eq "true") { 
+                        $selectedSites += "FT1"
+                        $deploymentSummary += "✅ FT1 (Port 8091)"
+                      }
+                      if ("$(Deploy.FT2)" -eq "true") { 
+                        $selectedSites += "FT2"
+                        $deploymentSummary += "✅ FT2 (Port 8092)"
+                      }
+                      if ("$(Deploy.FT3)" -eq "true") { 
+                        $selectedSites += "FT3"
+                        $deploymentSummary += "✅ FT3 (Port 8093)"
+                      }
+                      if ("$(Deploy.R1)" -eq "true") { 
+                        $selectedSites += "R1"
+                        $deploymentSummary += "✅ R1 (Port 8094)"
+                      }
+                      
+                      if ($selectedSites.Count -eq 0) {
+                        Write-Host "⚠️  NO SITES SELECTED FOR DEPLOYMENT" -ForegroundColor Red
+                        Write-Host "All deployment flags are set to false" -ForegroundColor Yellow
+                      } else {
+                        Write-Host "Sites selected for deployment: $($selectedSites -join ', ')" -ForegroundColor Green
+                        Write-Host ""
+                        foreach ($site in $deploymentSummary) {
+                           Write-Host $site -ForegroundColor White
+                        }
+                        Write-Host ""
+                        Write-Host "Total sites to deploy: $($selectedSites.Count)" -ForegroundColor Cyan
+                      }
+                      
+                      Write-Host "================================================" -ForegroundColor Cyan
                
                # Download Build Artifacts
                - download: 'MasterData.Main'
@@ -179,38 +179,38 @@ stages:
                  inputs:
                    targetType: 'inline'
                    script: |
-                     $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-                     $branchName = "$(BranchName)"
-                     $buildNumber = "$(BuildNumber)"
-                     
-                     # Create backup directory
-                     if (-not (Test-Path "$(BackupBasePath)")) {
-                       New-Item -ItemType Directory -Path "$(BackupBasePath)" -Force | Out-Null
-                     }
-                     
-                     Write-Host "Creating backup for Branch: $branchName, Build: $buildNumber" -ForegroundColor Cyan
-                     
-                     $stakeholders = @(
-                       @{Name="$(Stakeholder1.Name)"; Path="$(Stakeholder1.PhysicalPath)"; Deploy="$(Deploy.FT1)"},
-                       @{Name="$(Stakeholder2.Name)"; Path="$(Stakeholder2.PhysicalPath)"; Deploy="$(Deploy.FT2)"},
-                       @{Name="$(Stakeholder3.Name)"; Path="$(Stakeholder3.PhysicalPath)"; Deploy="$(Deploy.FT3)"},
-                       @{Name="$(Stakeholder4.Name)"; Path="$(Stakeholder4.PhysicalPath)"; Deploy="$(Deploy.R1)"}
-                     )
-                     
-                     foreach ($stakeholder in $stakeholders) {
-                       if ($stakeholder.Deploy -eq "true") {
-                         $backupPath = "$(BackupBasePath)\$($stakeholder.Name)_${branchName}_${buildNumber}_$timestamp"
-                         
-                         if (Test-Path $stakeholder.Path) {
-                           Write-Host "Backing up $($stakeholder.Name)..." -ForegroundColor Cyan
-                           New-Item -ItemType Directory -Path $backupPath -Force | Out-Null
-                           Copy-Item -Path "$($stakeholder.Path)\*" -Destination $backupPath -Recurse -Force
-                           Write-Host "Backup completed: $backupPath" -ForegroundColor Green
-                         }
-                       } else {
-                         Write-Host "Skipping backup for $($stakeholder.Name) (Deploy flag is false)" -ForegroundColor Yellow
-                       }
-                     }
+                      $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+                      $branchName = "$(BranchName)"
+                      $buildNumber = "$(BuildNumber)"
+                      
+                      # Create backup directory
+                      if (-not (Test-Path "$(BackupBasePath)")) {
+                        New-Item -ItemType Directory -Path "$(BackupBasePath)" -Force | Out-Null
+                      }
+                      
+                      Write-Host "Creating backup for Branch: $branchName, Build: $buildNumber" -ForegroundColor Cyan
+                      
+                      $stakeholders = @(
+                        @{Name="$(Stakeholder1.Name)"; Path="$(Stakeholder1.PhysicalPath)"; Deploy="$(Deploy.FT1)"},
+                        @{Name="$(Stakeholder2.Name)"; Path="$(Stakeholder2.PhysicalPath)"; Deploy="$(Deploy.FT2)"},
+                        @{Name="$(Stakeholder3.Name)"; Path="$(Stakeholder3.PhysicalPath)"; Deploy="$(Deploy.FT3)"},
+                        @{Name="$(Stakeholder4.Name)"; Path="$(Stakeholder4.PhysicalPath)"; Deploy="$(Deploy.R1)"}
+                      )
+                      
+                      foreach ($stakeholder in $stakeholders) {
+                        if ($stakeholder.Deploy -eq "true") {
+                           $backupPath = "$(BackupBasePath)\$($stakeholder.Name)_${branchName}_${buildNumber}_$timestamp"
+                           
+                           if (Test-Path $stakeholder.Path) {
+                             Write-Host "Backing up $($stakeholder.Name)..." -ForegroundColor Cyan
+                             New-Item -ItemType Directory -Path $backupPath -Force | Out-Null
+                             Copy-Item -Path "$($stakeholder.Path)\*" -Destination $backupPath -Recurse -Force
+                             Write-Host "Backup completed: $backupPath" -ForegroundColor Green
+                           }
+                        } else {
+                           Write-Host "Skipping backup for $($stakeholder.Name) (Deploy flag is false)" -ForegroundColor Yellow
+                        }
+                      }
                    errorActionPreference: 'continue'
                
                # Create Directories
@@ -219,20 +219,20 @@ stages:
                  inputs:
                    targetType: 'inline'
                    script: |
-                     $directories = @()
-                     
-                     if ("$(Deploy.FT1)" -eq "true") { $directories += "$(Stakeholder1.PhysicalPath)" }
-                     if ("$(Deploy.FT2)" -eq "true") { $directories += "$(Stakeholder2.PhysicalPath)" }
-                     if ("$(Deploy.FT3)" -eq "true") { $directories += "$(Stakeholder3.PhysicalPath)" }
-                     if ("$(Deploy.R1)" -eq "true") { $directories += "$(Stakeholder4.PhysicalPath)" }
-                     $directories += "$(DeploymentBasePath)"
-                     
-                     foreach ($dir in $directories) {
-                       if (-not (Test-Path $dir)) {
-                         New-Item -ItemType Directory -Path $dir -Force | Out-Null
-                         Write-Host "Created: $dir" -ForegroundColor Green
-                       }
-                     }
+                      $directories = @()
+                      
+                      if ("$(Deploy.FT1)" -eq "true") { $directories += "$(Stakeholder1.PhysicalPath)" }
+                      if ("$(Deploy.FT2)" -eq "true") { $directories += "$(Stakeholder2.PhysicalPath)" }
+                      if ("$(Deploy.FT3)" -eq "true") { $directories += "$(Stakeholder3.PhysicalPath)" }
+                      if ("$(Deploy.R1)" -eq "true") { $directories += "$(Stakeholder4.PhysicalPath)" }
+                      $directories += "$(DeploymentBasePath)"
+                      
+                      foreach ($dir in $directories) {
+                        if (-not (Test-Path $dir)) {
+                           New-Item -ItemType Directory -Path $dir -Force | Out-Null
+                           Write-Host "Created: $dir" -ForegroundColor Green
+                        }
+                      }
                
                # Extract Artifacts
                - task: ExtractFiles@1
@@ -249,71 +249,71 @@ stages:
                  inputs:
                    targetType: 'inline'
                    script: |
-                     # Try to import WebAdministration module
-                     try {
-                       Import-Module WebAdministration -ErrorAction Stop
-                       Write-Host "WebAdministration module loaded successfully" -ForegroundColor Green
-                     } catch {
-                       Write-Host "WebAdministration module not available, using alternative method" -ForegroundColor Yellow
-                       # Use appcmd.exe instead
-                       $useAppCmd = $true
-                     }
-                     
-                     $stakeholders = @(
-                       @{Name="$(Stakeholder1.Name)"; Port="$(Stakeholder1.Port)"; Path="$(Stakeholder1.PhysicalPath)"; AppPool="$(Stakeholder1.AppPoolName)"; Deploy="$(Deploy.FT1)"},
-                       @{Name="$(Stakeholder2.Name)"; Port="$(Stakeholder2.Port)"; Path="$(Stakeholder2.PhysicalPath)"; AppPool="$(Stakeholder2.AppPoolName)"; Deploy="$(Deploy.FT2)"},
-                       @{Name="$(Stakeholder3.Name)"; Port="$(Stakeholder3.Port)"; Path="$(Stakeholder3.PhysicalPath)"; AppPool="$(Stakeholder3.AppPoolName)"; Deploy="$(Deploy.FT3)"},
-                       @{Name="$(Stakeholder4.Name)"; Port="$(Stakeholder4.Port)"; Path="$(Stakeholder4.PhysicalPath)"; AppPool="$(Stakeholder4.AppPoolName)"; Deploy="$(Deploy.R1)"}
-                     )
-                     
-                     foreach ($stakeholder in $stakeholders) {
-                       if ($stakeholder.Deploy -eq "true") {
-                         Write-Host "Configuring $($stakeholder.Name)..." -ForegroundColor Cyan
-                         
-                         if ($useAppCmd) {
-                           # Use appcmd.exe for IIS management
-                           try {
-                             # Create Application Pool
-                             & "C:\Windows\System32\inetsrv\appcmd.exe" add apppool /name:$($stakeholder.AppPool) /managedRuntimeVersion:v4.0 /managedPipelineMode:Integrated
-                             Write-Host "Created App Pool: $($stakeholder.AppPool)" -ForegroundColor Green
-                           } catch {
-                             Write-Host "App Pool may already exist: $($stakeholder.AppPool)" -ForegroundColor Yellow
+                      # Try to import WebAdministration module
+                      try {
+                        Import-Module WebAdministration -ErrorAction Stop
+                        Write-Host "WebAdministration module loaded successfully" -ForegroundColor Green
+                      } catch {
+                        Write-Host "WebAdministration module not available, using alternative method" -ForegroundColor Yellow
+                        # Use appcmd.exe instead
+                        $useAppCmd = $true
+                      }
+                      
+                      $stakeholders = @(
+                        @{Name="$(Stakeholder1.Name)"; Port="$(Stakeholder1.Port)"; Path="$(Stakeholder1.PhysicalPath)"; AppPool="$(Stakeholder1.AppPoolName)"; Deploy="$(Deploy.FT1)"},
+                        @{Name="$(Stakeholder2.Name)"; Port="$(Stakeholder2.Port)"; Path="$(Stakeholder2.PhysicalPath)"; AppPool="$(Stakeholder2.AppPoolName)"; Deploy="$(Deploy.FT2)"},
+                        @{Name="$(Stakeholder3.Name)"; Port="$(Stakeholder3.Port)"; Path="$(Stakeholder3.PhysicalPath)"; AppPool="$(Stakeholder3.AppPoolName)"; Deploy="$(Deploy.FT3)"},
+                        @{Name="$(Stakeholder4.Name)"; Port="$(Stakeholder4.Port)"; Path="$(Stakeholder4.PhysicalPath)"; AppPool="$(Stakeholder4.AppPoolName)"; Deploy="$(Deploy.R1)"}
+                      )
+                      
+                      foreach ($stakeholder in $stakeholders) {
+                        if ($stakeholder.Deploy -eq "true") {
+                           Write-Host "Configuring $($stakeholder.Name)..." -ForegroundColor Cyan
+                           
+                           if ($useAppCmd) {
+                             # Use appcmd.exe for IIS management
+                             try {
+                               # Create Application Pool
+                               & "C:\Windows\System32\inetsrv\appcmd.exe" add apppool /name:$($stakeholder.AppPool) /managedRuntimeVersion:v4.0 /managedPipelineMode:Integrated
+                               Write-Host "Created App Pool: $($stakeholder.AppPool)" -ForegroundColor Green
+                             } catch {
+                               Write-Host "App Pool may already exist: $($stakeholder.AppPool)" -ForegroundColor Yellow
+                             }
+                             
+                             try {
+                               # Create Website
+                               & "C:\Windows\System32\inetsrv\appcmd.exe" add site /name:$($stakeholder.Name) /physicalPath:$($stakeholder.Path) /bindings:http/*:$($stakeholder.Port):
+                               & "C:\Windows\System32\inetsrv\appcmd.exe" set app "$($stakeholder.Name)/" /applicationPool:$($stakeholder.AppPool)
+                               Write-Host "Created Website: $($stakeholder.Name)" -ForegroundColor Green
+                             } catch {
+                               Write-Host "Website may already exist: $($stakeholder.Name)" -ForegroundColor Yellow
+                             }
+                           } else {
+                             # Use PowerShell cmdlets
+                             try {
+                               # Create Application Pool
+                               New-WebAppPool -Name $stakeholder.AppPool -ErrorAction SilentlyContinue
+                               Set-ItemProperty "IIS:\AppPools\$($stakeholder.AppPool)" -Name managedRuntimeVersion -Value "v4.0"
+                               Set-ItemProperty "IIS:\AppPools\$($stakeholder.AppPool)" -Name managedPipelineMode -Value "Integrated"
+                               Write-Host "Created App Pool: $($stakeholder.AppPool)" -ForegroundColor Green
+                             } catch {
+                               Write-Host "App Pool may already exist: $($stakeholder.AppPool)" -ForegroundColor Yellow
+                             }
+                             
+                             try {
+                               # Create Website
+                               New-Website -Name $stakeholder.Name -PhysicalPath $stakeholder.Path -ApplicationPool $stakeholder.AppPool -Port $stakeholder.Port -ErrorAction SilentlyContinue
+                               Write-Host "Created Website: $($stakeholder.Name)" -ForegroundColor Green
+                             } catch {
+                               Write-Host "Website may already exist: $($stakeholder.Name)" -ForegroundColor Yellow
+                             }
                            }
                            
-                           try {
-                             # Create Website
-                             & "C:\Windows\System32\inetsrv\appcmd.exe" add site /name:$($stakeholder.Name) /physicalPath:$($stakeholder.Path) /bindings:http/*:$($stakeholder.Port):
-                             & "C:\Windows\System32\inetsrv\appcmd.exe" set app "$($stakeholder.Name)/" /applicationPool:$($stakeholder.AppPool)
-                             Write-Host "Created Website: $($stakeholder.Name)" -ForegroundColor Green
-                           } catch {
-                             Write-Host "Website may already exist: $($stakeholder.Name)" -ForegroundColor Yellow
-                           }
-                         } else {
-                           # Use PowerShell cmdlets
-                           try {
-                             # Create Application Pool
-                             New-WebAppPool -Name $stakeholder.AppPool -ErrorAction SilentlyContinue
-                             Set-ItemProperty "IIS:\AppPools\$($stakeholder.AppPool)" -Name managedRuntimeVersion -Value "v4.0"
-                             Set-ItemProperty "IIS:\AppPools\$($stakeholder.AppPool)" -Name managedPipelineMode -Value "Integrated"
-                             Write-Host "Created App Pool: $($stakeholder.AppPool)" -ForegroundColor Green
-                           } catch {
-                             Write-Host "App Pool may already exist: $($stakeholder.AppPool)" -ForegroundColor Yellow
-                           }
-                           
-                           try {
-                             # Create Website
-                             New-Website -Name $stakeholder.Name -PhysicalPath $stakeholder.Path -ApplicationPool $stakeholder.AppPool -Port $stakeholder.Port -ErrorAction SilentlyContinue
-                             Write-Host "Created Website: $($stakeholder.Name)" -ForegroundColor Green
-                           } catch {
-                             Write-Host "Website may already exist: $($stakeholder.Name)" -ForegroundColor Yellow
-                           }
-                         }
-                         
-                         Write-Host "$($stakeholder.Name) configured" -ForegroundColor Green
-                       } else {
-                         Write-Host "Skipping configuration for $($stakeholder.Name) (Deploy flag is false)" -ForegroundColor Yellow
-                       }
-                     }
+                           Write-Host "$($stakeholder.Name) configured" -ForegroundColor Green
+                        } else {
+                           Write-Host "Skipping configuration for $($stakeholder.Name) (Deploy flag is false)" -ForegroundColor Yellow
+                        }
+                      }
                
                # Deploy Files
                - task: PowerShell@2
@@ -321,30 +321,30 @@ stages:
                  inputs:
                    targetType: 'inline'
                    script: |
-                     Write-Host "Deploying Build $(BuildNumber) from Branch $(BranchName)" -ForegroundColor Cyan
-                     
-                     $stakeholders = @(
-                       @{Name="$(Stakeholder1.Name)"; Source="$(DeploymentBasePath)"; Dest="$(Stakeholder1.PhysicalPath)"; Deploy="$(Deploy.FT1)"},
-                       @{Name="$(Stakeholder2.Name)"; Source="$(DeploymentBasePath)"; Dest="$(Stakeholder2.PhysicalPath)"; Deploy="$(Deploy.FT2)"},
-                       @{Name="$(Stakeholder3.Name)"; Source="$(DeploymentBasePath)"; Dest="$(Stakeholder3.PhysicalPath)"; Deploy="$(Deploy.FT3)"},
-                       @{Name="$(Stakeholder4.Name)"; Source="$(DeploymentBasePath)"; Dest="$(Stakeholder4.PhysicalPath)"; Deploy="$(Deploy.R1)"}
-                     )
-                     
-                     foreach ($stakeholder in $stakeholders) {
-                       if ($stakeholder.Deploy -eq "true") {
-                         Write-Host "Deploying to $($stakeholder.Name)..." -ForegroundColor Cyan
-                         
-                         # Clear and copy files
-                         if (Test-Path $stakeholder.Dest) {
-                           Get-ChildItem -Path $stakeholder.Dest -Exclude "App_Data" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-                         }
-                         Copy-Item -Path "$($stakeholder.Source)\*" -Destination $stakeholder.Dest -Recurse -Force
-                         
-                         Write-Host "$($stakeholder.Name) deployed successfully" -ForegroundColor Green
-                       } else {
-                         Write-Host "Skipping deployment for $($stakeholder.Name) (Deploy flag is false)" -ForegroundColor Yellow
-                       }
-                     }
+                      Write-Host "Deploying Build $(BuildNumber) from Branch $(BranchName)" -ForegroundColor Cyan
+                      
+                      $stakeholders = @(
+                        @{Name="$(Stakeholder1.Name)"; Source="$(DeploymentBasePath)"; Dest="$(Stakeholder1.PhysicalPath)"; Deploy="$(Deploy.FT1)"},
+                        @{Name="$(Stakeholder2.Name)"; Source="$(DeploymentBasePath)"; Dest="$(Stakeholder2.PhysicalPath)"; Deploy="$(Deploy.FT2)"},
+                        @{Name="$(Stakeholder3.Name)"; Source="$(DeploymentBasePath)"; Dest="$(Stakeholder3.PhysicalPath)"; Deploy="$(Deploy.FT3)"},
+                        @{Name="$(Stakeholder4.Name)"; Source="$(DeploymentBasePath)"; Dest="$(Stakeholder4.PhysicalPath)"; Deploy="$(Deploy.R1)"}
+                      )
+                      
+                      foreach ($stakeholder in $stakeholders) {
+                        if ($stakeholder.Deploy -eq "true") {
+                           Write-Host "Deploying to $($stakeholder.Name)..." -ForegroundColor Cyan
+                           
+                           # Clear and copy files
+                           if (Test-Path $stakeholder.Dest) {
+                             Get-ChildItem -Path $stakeholder.Dest -Exclude "App_Data" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+                           }
+                           Copy-Item -Path "$($stakeholder.Source)\*" -Destination $stakeholder.Dest -Recurse -Force
+                           
+                           Write-Host "$($stakeholder.Name) deployed successfully" -ForegroundColor Green
+                        } else {
+                           Write-Host "Skipping deployment for $($stakeholder.Name) (Deploy flag is false)" -ForegroundColor Yellow
+                        }
+                      }
                
                # Inject SIT Configuration into web.config
                - task: PowerShell@2
@@ -352,205 +352,205 @@ stages:
                  inputs:
                    targetType: 'inline'
                    script: |
-                     Write-Host "================================================" -ForegroundColor Cyan
-                     Write-Host "🔧 SIT CONFIGURATION INJECTION" -ForegroundColor Cyan
-                     Write-Host "================================================" -ForegroundColor Cyan
+                      Write-Host "================================================" -ForegroundColor Cyan
+                      Write-Host "🔧 SIT CONFIGURATION INJECTION" -ForegroundColor Cyan
+                      Write-Host "================================================" -ForegroundColor Cyan
+                      
+                      # Enhanced stakeholder configuration with better error handling
+                      $stakeholders = @(
+                        @{Name="$(Stakeholder1.Name)"; Path="$(Stakeholder1.PhysicalPath)"; Deploy="$(Deploy.FT1)"; Port="$(Stakeholder1.Port)"; VarGroup="SIT_FT1"},
+                        @{Name="$(Stakeholder2.Name)"; Path="$(Stakeholder2.PhysicalPath)"; Deploy="$(Deploy.FT2)"; Port="$(Stakeholder2.Port)"; VarGroup="SIT_FT2"},
+                        @{Name="$(Stakeholder3.Name)"; Path="$(Stakeholder3.PhysicalPath)"; Deploy="$(Deploy.FT3)"; Port="$(Stakeholder3.Port)"; VarGroup="SIT_FT3"},
+                        @{Name="$(Stakeholder4.Name)"; Path="$(Stakeholder4.PhysicalPath)"; Deploy="$(Deploy.R1)"; Port="$(Stakeholder4.Port)"; VarGroup="SIT_R1"}
+                      )
+                      
+                      $totalUpdated = 0
+                      $totalSkipped = 0
+                      $processedSites = 0
                      
-                     # Enhanced stakeholder configuration with better error handling
-                     $stakeholders = @(
-                       @{Name="$(Stakeholder1.Name)"; Path="$(Stakeholder1.PhysicalPath)"; Deploy="$(Deploy.FT1)"; Port="$(Stakeholder1.Port)"; VarGroup="SIT_FT1"},
-                       @{Name="$(Stakeholder2.Name)"; Path="$(Stakeholder2.PhysicalPath)"; Deploy="$(Deploy.FT2)"; Port="$(Stakeholder2.Port)"; VarGroup="SIT_FT2"},
-                       @{Name="$(Stakeholder3.Name)"; Path="$(Stakeholder3.PhysicalPath)"; Deploy="$(Deploy.FT3)"; Port="$(Stakeholder3.Port)"; VarGroup="SIT_FT3"},
-                       @{Name="$(Stakeholder4.Name)"; Path="$(Stakeholder4.PhysicalPath)"; Deploy="$(Deploy.R1)"; Port="$(Stakeholder4.Port)"; VarGroup="SIT_R1"}
-                     )
-                     
-                     $totalUpdated = 0
-                     $totalSkipped = 0
-                     $processedSites = 0
-                    
-                    # Dynamic variable detection - fetch ALL variables from Azure DevOps Variable Groups
-                    function Get-SITVariables {
-                        $allVariables = @{}
-                        
-                        # Get ALL environment variables from Azure DevOps Variable Groups
-                        Get-ChildItem Env: | ForEach-Object {
-                            $varName = $_.Name
-                            $varValue = $_.Value
-                            
-                            # Skip system variables and Azure DevOps built-in variables
-                            if ($varValue -and $varValue.Trim() -ne "" -and 
-                                $varName -notmatch '^(PATH|USERNAME|USERPROFILE|PATHEXT|APPDATA|USERDOMAIN|SystemRoot|ProgramFiles|TEMP|TMP|windir|COMPUTERNAME|LOGONSERVER|SESSIONNAME|ALLUSERSPROFILE|CommonProgramFiles|CommonProgramFiles\(x86\)|CommonProgramW6432|ProgramData|ProgramFiles\(x86\)|ProgramW6432|PUBLIC|HOMEDRIVE|HOMEPATH|LOCALAPPDATA|OneDrive|OS|PROCESSOR_ARCHITECTURE|PROCESSOR_IDENTIFIER|PROCESSOR_LEVEL|PROCESSOR_REVISION|NUMBER_OF_PROCESSORS|Build|Agent|Pipeline|System)') {
-                                $allVariables[$varName] = $varValue
-                            }
-                        }
-                        
-                        return $allVariables
-                    }
-                     
-                     # Enhanced web.config processing with better error handling
-                    function Process-WebConfig {
-                        param($stakeholder, $allVariables)
-                         
-                         $webConfigPath = Join-Path $stakeholder.Path "web.config"
-                         
-                         if (-not (Test-Path $webConfigPath)) {
-                             Write-Host "  ⚠️  web.config not found at: $webConfigPath" -ForegroundColor Yellow
-                             return @{ Updated = 0; Skipped = 0; Errors = 1 }
-                         }
-                         
-                         try {
-                             # Read and validate web.config
-                             [xml]$webConfig = Get-Content $webConfigPath -ErrorAction Stop
-                             
-                             if (-not $webConfig.configuration) {
-                                 Write-Host "  ❌ Invalid web.config structure - missing configuration root" -ForegroundColor Red
-                                 return @{ Updated = 0; Skipped = 0; Errors = 1 }
-                             }
-                             
-                             $updatedCount = 0
-                             $skippedCount = 0
-                             
-                            # Get ALL existing keys from web.config
-                            $existingAppSettings = @{}
-                            $existingConnectionStrings = @{}
-                            
-                            # Extract AppSettings keys
-                            if ($webConfig.configuration.appSettings) {
-                                $webConfig.configuration.appSettings.add | ForEach-Object {
-                                    $existingAppSettings[$_.key] = $_.value
-                                }
-                            }
-                            
-                            # Extract ConnectionString names
-                            if ($webConfig.configuration.connectionStrings) {
-                                $webConfig.configuration.connectionStrings.add | ForEach-Object {
-                                    $existingConnectionStrings[$_.name] = $_.connectionString
-                                }
-                            }
-                            
-                            Write-Host "  📋 Found $($existingAppSettings.Count) AppSettings and $($existingConnectionStrings.Count) ConnectionStrings in web.config" -ForegroundColor Cyan
-                            
-                            # Dynamic matching: Try to match each variable with web.config keys
-                            foreach ($variable in $allVariables.GetEnumerator()) {
-                                $varName = $variable.Key
-                                $varValue = $variable.Value
-                                $matched = $false
-                                
-                                # Try to match with AppSettings keys (case-insensitive and partial matching)
-                                $matchedAppKey = $existingAppSettings.Keys | Where-Object { 
-                                    $_ -eq $varName -or 
-                                    $_ -like "*$varName*" -or 
-                                    $varName -like "*$_*" -or
-                                    $_ -replace '[^a-zA-Z0-9]', '' -eq $varName -replace '[^a-zA-Z0-9]', '' -or
-                                    $varName -replace '[^a-zA-Z0-9]', '' -eq $_ -replace '[^a-zA-Z0-9]', ''
-                                }
-                                
-                                if ($matchedAppKey) {
-                                    $existingSetting = $webConfig.configuration.appSettings.SelectSingleNode("add[@key='$matchedAppKey']")
-                                    if ($existingSetting) {
-                                        $oldValue = $existingSetting.value
-                                        $existingSetting.value = $varValue
-                                        Write-Host "    ✅ Updated AppSetting: $matchedAppKey = $varValue" -ForegroundColor Green
-                                        if ($oldValue -ne $varValue) {
-                                            Write-Host "      📝 Previous value: $oldValue" -ForegroundColor DarkGray
-                                        }
-                                        $updatedCount++
-                                        $matched = $true
-                                    }
-                                }
-                                
-                                # Try to match with ConnectionString names (case-insensitive and partial matching)
-                                if (-not $matched) {
-                                    $matchedConnKey = $existingConnectionStrings.Keys | Where-Object { 
-                                        $_ -eq $varName -or 
-                                        $_ -like "*$varName*" -or 
-                                        $varName -like "*$_*" -or
-                                        $_ -replace '[^a-zA-Z0-9]', '' -eq $varName -replace '[^a-zA-Z0-9]', '' -or
-                                        $varName -replace '[^a-zA-Z0-9]', '' -eq $_ -replace '[^a-zA-Z0-9]', ''
-                                    }
-                                    
-                                    if ($matchedConnKey) {
-                                        $existingConnection = $webConfig.configuration.connectionStrings.SelectSingleNode("add[@name='$matchedConnKey']")
-                                        if ($existingConnection) {
-                                            $oldValue = $existingConnection.connectionString
-                                            $existingConnection.connectionString = $varValue
-                                            Write-Host "    ✅ Updated ConnectionString: $matchedConnKey = $varValue" -ForegroundColor Green
-                                            if ($oldValue -ne $varValue) {
-                                                Write-Host "      📝 Previous value: $oldValue" -ForegroundColor DarkGray
-                                            }
-                                            $updatedCount++
-                                            $matched = $true
-                                        }
-                                    }
-                                }
-                                
-                                if (-not $matched) {
-                                    Write-Host "    ⏭️  Skipped: $varName (no matching key found in web.config)" -ForegroundColor Yellow
-                                    $skippedCount++
-                                }
-                            }
-                             
-                             # Save with backup
-                             $backupPath = "$webConfigPath.backup.$(Get-Date -Format 'yyyyMMdd_HHmmss')"
-                             Copy-Item $webConfigPath $backupPath -Force
-                             Write-Host "  💾 Backup created: $backupPath" -ForegroundColor DarkCyan
-                             
-                             $webConfig.Save($webConfigPath)
-                             Write-Host "  💾 web.config saved successfully" -ForegroundColor Green
-                             
-                             return @{ Updated = $updatedCount; Skipped = $skippedCount; Errors = 0 }
-                             
-                         } catch {
-                             Write-Host "  ❌ Error processing web.config: $($_.Exception.Message)" -ForegroundColor Red
-                             return @{ Updated = 0; Skipped = 0; Errors = 1 }
-                         }
-                     }
-                     
-                     # Process each stakeholder
-                     foreach ($stakeholder in $stakeholders) {
-                         if ($stakeholder.Deploy -eq "true") {
-                             Write-Host ""
-                             Write-Host "🌐 Processing $($stakeholder.Name) (Port: $($stakeholder.Port)) using $($stakeholder.VarGroup)..." -ForegroundColor Cyan
-                             Write-Host "📁 Path: $($stakeholder.Path)" -ForegroundColor DarkCyan
-                             
-                            # Get ALL variables for this site from Azure DevOps Variable Group
-                            $allVariables = Get-SITVariables
-                            
-                            if ($allVariables.Count -eq 0) {
-                                Write-Host "  ⚠️  No variables found in $($stakeholder.VarGroup) variable group" -ForegroundColor Yellow
-                                continue
-                            }
-                            
-                            Write-Host "  📊 Found $($allVariables.Count) variables from $($stakeholder.VarGroup) variable group" -ForegroundColor Cyan
-                            
-                            # Process web.config with dynamic matching
-                            $result = Process-WebConfig $stakeholder $allVariables
-                             
-                             $totalUpdated += $result.Updated
-                             $totalSkipped += $result.Skipped
-                             $processedSites++
-                             
-                             Write-Host "  📈 Result: $($result.Updated) updated, $($result.Skipped) skipped" -ForegroundColor $(if ($result.Errors -gt 0) { "Red" } else { "Green" })
-                         } else {
-                             Write-Host "⏭️  Skipping $($stakeholder.Name) (Deploy flag is false)" -ForegroundColor Yellow
-                         }
-                     }
-                     
-                     # Final summary
-                     Write-Host ""
-                     Write-Host "================================================" -ForegroundColor Cyan
-                     Write-Host "📊 INJECTION SUMMARY" -ForegroundColor Cyan
-                     Write-Host "================================================" -ForegroundColor Cyan
-                     Write-Host "Sites processed: $processedSites" -ForegroundColor White
-                     Write-Host "Total settings updated: $totalUpdated" -ForegroundColor Green
-                     Write-Host "Total settings skipped: $totalSkipped" -ForegroundColor Gray
-                     Write-Host "================================================" -ForegroundColor Cyan
-                     
-                     if ($totalUpdated -gt 0) {
-                         Write-Host "✅ SIT configuration injection completed successfully!" -ForegroundColor Green
-                     } else {
-                         Write-Host "⚠️  No settings were updated" -ForegroundColor Yellow
-                     }
+                      # Dynamic variable detection - fetch ALL variables from Azure DevOps Variable Groups
+                      function Get-SITVariables {
+                           $allVariables = @{}
+                           
+                           # Get ALL environment variables from Azure DevOps Variable Groups
+                           Get-ChildItem Env: | ForEach-Object {
+                               $varName = $_.Name
+                               $varValue = $_.Value
+                               
+                               # Skip system variables and Azure DevOps built-in variables
+                               if ($varValue -and $varValue.Trim() -ne "" -and 
+                                   $varName -notmatch '^(PATH|USERNAME|USERPROFILE|PATHEXT|APPDATA|USERDOMAIN|SystemRoot|ProgramFiles|TEMP|TMP|windir|COMPUTERNAME|LOGONSERVER|SESSIONNAME|ALLUSERSPROFILE|CommonProgramFiles|CommonProgramFiles\(x86\)|CommonProgramW6432|ProgramData|ProgramFiles\(x86\)|ProgramW6432|PUBLIC|HOMEDRIVE|HOMEPATH|LOCALAPPDATA|OneDrive|OS|PROCESSOR_ARCHITECTURE|PROCESSOR_IDENTIFIER|PROCESSOR_LEVEL|PROCESSOR_REVISION|NUMBER_OF_PROCESSORS|Build|Agent|Pipeline|System)') {
+                                   $allVariables[$varName] = $varValue
+                               }
+                           }
+                          
+                           return $allVariables
+                      }
+                      
+                      # Enhanced web.config processing with better error handling
+                      function Process-WebConfig {
+                           param($stakeholder, $allVariables)
+                           
+                           $webConfigPath = Join-Path $stakeholder.Path "web.config"
+                           
+                           if (-not (Test-Path $webConfigPath)) {
+                               Write-Host "  ⚠️  web.config not found at: $webConfigPath" -ForegroundColor Yellow
+                               return @{ Updated = 0; Skipped = 0; Errors = 1 }
+                           }
+                           
+                           try {
+                               # Read and validate web.config
+                               [xml]$webConfig = Get-Content $webConfigPath -ErrorAction Stop
+                               
+                               if (-not $webConfig.configuration) {
+                                   Write-Host "  ❌ Invalid web.config structure - missing configuration root" -ForegroundColor Red
+                                   return @{ Updated = 0; Skipped = 0; Errors = 1 }
+                               }
+                               
+                               $updatedCount = 0
+                               $skippedCount = 0
+                               
+                              # Get ALL existing keys from web.config
+                              $existingAppSettings = @{}
+                              $existingConnectionStrings = @{}
+                              
+                              # Extract AppSettings keys
+                              if ($webConfig.configuration.appSettings) {
+                                  $webConfig.configuration.appSettings.add | ForEach-Object {
+                                      $existingAppSettings[$_.key] = $_.value
+                                  }
+                              }
+                              
+                              # Extract ConnectionString names
+                              if ($webConfig.configuration.connectionStrings) {
+                                  $webConfig.configuration.connectionStrings.add | ForEach-Object {
+                                      $existingConnectionStrings[$_.name] = $_.connectionString
+                                  }
+                              }
+                              
+                              Write-Host "  📋 Found $($existingAppSettings.Count) AppSettings and $($existingConnectionStrings.Count) ConnectionStrings in web.config" -ForegroundColor Cyan
+                              
+                              # Dynamic matching: Try to match each variable with web.config keys
+                              foreach ($variable in $allVariables.GetEnumerator()) {
+                                  $varName = $variable.Key
+                                  $varValue = $variable.Value
+                                  $matched = $false
+                                  
+                                  # Try to match with AppSettings keys (case-insensitive and partial matching)
+                                  $matchedAppKey = $existingAppSettings.Keys | Where-Object { 
+                                      $_ -eq $varName -or 
+                                      $_ -like "*$varName*" -or 
+                                      $varName -like "*$_*" -or
+                                      $_ -replace '[^a-zA-Z0-9]', '' -eq $varName -replace '[^a-zA-Z0-9]', '' -or
+                                      $varName -replace '[^a-zA-Z0-9]', '' -eq $_ -replace '[^a-zA-Z0-9]', ''
+                                  }
+                                  
+                                  if ($matchedAppKey) {
+                                      $existingSetting = $webConfig.configuration.appSettings.SelectSingleNode("add[@key='$matchedAppKey']")
+                                      if ($existingSetting) {
+                                          $oldValue = $existingSetting.value
+                                          $existingSetting.value = $varValue
+                                          Write-Host "    ✅ Updated AppSetting: $matchedAppKey = $varValue" -ForegroundColor Green
+                                          if ($oldValue -ne $varValue) {
+                                              Write-Host "      📝 Previous value: $oldValue" -ForegroundColor DarkGray
+                                          }
+                                          $updatedCount++
+                                          $matched = $true
+                                      }
+                                  }
+                                  
+                                  # Try to match with ConnectionString names (case-insensitive and partial matching)
+                                  if (-not $matched) {
+                                      $matchedConnKey = $existingConnectionStrings.Keys | Where-Object { 
+                                          $_ -eq $varName -or 
+                                          $_ -like "*$varName*" -or 
+                                          $varName -like "*$_*" -or
+                                          $_ -replace '[^a-zA-Z0-9]', '' -eq $varName -replace '[^a-zA-Z0-9]', '' -or
+                                          $varName -replace '[^a-zA-Z0-9]', '' -eq $_ -replace '[^a-zA-Z0-9]', ''
+                                      }
+                                      
+                                      if ($matchedConnKey) {
+                                          $existingConnection = $webConfig.configuration.connectionStrings.SelectSingleNode("add[@name='$matchedConnKey']")
+                                          if ($existingConnection) {
+                                              $oldValue = $existingConnection.connectionString
+                                              $existingConnection.connectionString = $varValue
+                                              Write-Host "    ✅ Updated ConnectionString: $matchedConnKey = $varValue" -ForegroundColor Green
+                                              if ($oldValue -ne $varValue) {
+                                                  Write-Host "      📝 Previous value: $oldValue" -ForegroundColor DarkGray
+                                              }
+                                              $updatedCount++
+                                              $matched = $true
+                                          }
+                                      }
+                                  }
+                                  
+                                  if (-not $matched) {
+                                      Write-Host "    ⏭️  Skipped: $varName (no matching key found in web.config)" -ForegroundColor Yellow
+                                      $skippedCount++
+                                  }
+                              }
+                               
+                               # Save with backup
+                               $backupPath = "$webConfigPath.backup.$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+                               Copy-Item $webConfigPath $backupPath -Force
+                               Write-Host "  💾 Backup created: $backupPath" -ForegroundColor DarkCyan
+                               
+                               $webConfig.Save($webConfigPath)
+                               Write-Host "  💾 web.config saved successfully" -ForegroundColor Green
+                               
+                               return @{ Updated = $updatedCount; Skipped = $skippedCount; Errors = 0 }
+                               
+                           } catch {
+                               Write-Host "  ❌ Error processing web.config: $($_.Exception.Message)" -ForegroundColor Red
+                               return @{ Updated = 0; Skipped = 0; Errors = 1 }
+                           }
+                      }
+                      
+                      # Process each stakeholder
+                      foreach ($stakeholder in $stakeholders) {
+                           if ($stakeholder.Deploy -eq "true") {
+                               Write-Host ""
+                               Write-Host "🌐 Processing $($stakeholder.Name) (Port: $($stakeholder.Port)) using $($stakeholder.VarGroup)..." -ForegroundColor Cyan
+                               Write-Host "📁 Path: $($stakeholder.Path)" -ForegroundColor DarkCyan
+                               
+                              # Get ALL variables for this site from Azure DevOps Variable Group
+                              $allVariables = Get-SITVariables
+                              
+                              if ($allVariables.Count -eq 0) {
+                                  Write-Host "  ⚠️  No variables found in $($stakeholder.VarGroup) variable group" -ForegroundColor Yellow
+                                  continue
+                              }
+                              
+                              Write-Host "  📊 Found $($allVariables.Count) variables from $($stakeholder.VarGroup) variable group" -ForegroundColor Cyan
+                              
+                              # Process web.config with dynamic matching
+                              $result = Process-WebConfig $stakeholder $allVariables
+                               
+                               $totalUpdated += $result.Updated
+                               $totalSkipped += $result.Skipped
+                               $processedSites++
+                               
+                               Write-Host "  📈 Result: $($result.Updated) updated, $($result.Skipped) skipped" -ForegroundColor $(if ($result.Errors -gt 0) { "Red" } else { "Green" })
+                           } else {
+                               Write-Host "⏭️  Skipping $($stakeholder.Name) (Deploy flag is false)" -ForegroundColor Yellow
+                           }
+                      }
+                      
+                      # Final summary
+                      Write-Host ""
+                      Write-Host "================================================" -ForegroundColor Cyan
+                      Write-Host "📊 INJECTION SUMMARY" -ForegroundColor Cyan
+                      Write-Host "================================================" -ForegroundColor Cyan
+                      Write-Host "Sites processed: $processedSites" -ForegroundColor White
+                      Write-Host "Total settings updated: $totalUpdated" -ForegroundColor Green
+                      Write-Host "Total settings skipped: $totalSkipped" -ForegroundColor Gray
+                      Write-Host "================================================" -ForegroundColor Cyan
+                      
+                      if ($totalUpdated -gt 0) {
+                           Write-Host "✅ SIT configuration injection completed successfully!" -ForegroundColor Green
+                      } else {
+                           Write-Host "⚠️  No settings were updated" -ForegroundColor Yellow
+                      }
                
                # Set Permissions
                - task: PowerShell@2
@@ -558,20 +558,20 @@ stages:
                  inputs:
                    targetType: 'inline'
                    script: |
-                     $paths = @()
-                     
-                     if ("$(Deploy.FT1)" -eq "true") { $paths += "$(Stakeholder1.PhysicalPath)" }
-                     if ("$(Deploy.FT2)" -eq "true") { $paths += "$(Stakeholder2.PhysicalPath)" }
-                     if ("$(Deploy.FT3)" -eq "true") { $paths += "$(Stakeholder3.PhysicalPath)" }
-                     if ("$(Deploy.R1)" -eq "true") { $paths += "$(Stakeholder4.PhysicalPath)" }
-                     
-                     foreach ($path in $paths) {
-                       $acl = Get-Acl $path
-                       $iisUsersRule = New-Object System.Security.AccessControl.FileSystemAccessRule("IIS_IUSRS","FullControl","ContainerInherit,ObjectInherit","None","Allow")
-                       $acl.SetAccessRule($iisUsersRule)
-                       Set-Acl $path $acl
-                       Write-Host "Permissions set for: $path" -ForegroundColor Green
-                     }
+                      $paths = @()
+                      
+                      if ("$(Deploy.FT1)" -eq "true") { $paths += "$(Stakeholder1.PhysicalPath)" }
+                      if ("$(Deploy.FT2)" -eq "true") { $paths += "$(Stakeholder2.PhysicalPath)" }
+                      if ("$(Deploy.FT3)" -eq "true") { $paths += "$(Stakeholder3.PhysicalPath)" }
+                      if ("$(Deploy.R1)" -eq "true") { $paths += "$(Stakeholder4.PhysicalPath)" }
+                      
+                      foreach ($path in $paths) {
+                        $acl = Get-Acl $path
+                        $iisUsersRule = New-Object System.Security.AccessControl.FileSystemAccessRule("IIS_IUSRS","FullControl","ContainerInherit,ObjectInherit","None","Allow")
+                        $acl.SetAccessRule($iisUsersRule)
+                        Set-Acl $path $acl
+                        Write-Host "Permissions set for: $path" -ForegroundColor Green
+                      }
                
                # Start Services
                - task: PowerShell@2
@@ -579,86 +579,86 @@ stages:
                  inputs:
                    targetType: 'inline'
                    script: |
-                     # Try to import WebAdministration module
-                     try {
-                       Import-Module WebAdministration -ErrorAction Stop
-                       Write-Host "WebAdministration module loaded successfully" -ForegroundColor Green
-                       $usePowerShell = $true
-                     } catch {
-                       Write-Host "WebAdministration module not available, using appcmd.exe" -ForegroundColor Yellow
-                       $usePowerShell = $false
-                     }
-                     
-                     $stakeholders = @(
-                       @{Name="$(Stakeholder1.Name)"; AppPool="$(Stakeholder1.AppPoolName)"; Port="$(Stakeholder1.Port)"; Deploy="$(Deploy.FT1)"},
-                       @{Name="$(Stakeholder2.Name)"; AppPool="$(Stakeholder2.AppPoolName)"; Port="$(Stakeholder2.Port)"; Deploy="$(Deploy.FT2)"},
-                       @{Name="$(Stakeholder3.Name)"; AppPool="$(Stakeholder3.AppPoolName)"; Port="$(Stakeholder3.Port)"; Deploy="$(Deploy.FT3)"},
-                       @{Name="$(Stakeholder4.Name)"; AppPool="$(Stakeholder4.AppPoolName)"; Port="$(Stakeholder4.Port)"; Deploy="$(Deploy.R1)"}
-                     )
-                     
-                     $deployedSites = @()
-                     
-                     foreach ($stakeholder in $stakeholders) {
-                       if ($stakeholder.Deploy -eq "true") {
-                         if ($usePowerShell) {
-                           # Use PowerShell cmdlets with error handling
-                           try {
-                             Start-WebAppPool -Name $stakeholder.AppPool -ErrorAction SilentlyContinue
-                             Write-Host "App Pool $($stakeholder.AppPool) started or already running" -ForegroundColor Green
-                           } catch {
-                             Write-Host "App Pool $($stakeholder.AppPool) may already be running" -ForegroundColor Yellow
+                      # Try to import WebAdministration module
+                      try {
+                        Import-Module WebAdministration -ErrorAction Stop
+                        Write-Host "WebAdministration module loaded successfully" -ForegroundColor Green
+                        $usePowerShell = $true
+                      } catch {
+                        Write-Host "WebAdministration module not available, using appcmd.exe" -ForegroundColor Yellow
+                        $usePowerShell = $false
+                      }
+                      
+                      $stakeholders = @(
+                        @{Name="$(Stakeholder1.Name)"; AppPool="$(Stakeholder1.AppPoolName)"; Port="$(Stakeholder1.Port)"; Deploy="$(Deploy.FT1)"},
+                        @{Name="$(Stakeholder2.Name)"; AppPool="$(Stakeholder2.AppPoolName)"; Port="$(Stakeholder2.Port)"; Deploy="$(Deploy.FT2)"},
+                        @{Name="$(Stakeholder3.Name)"; AppPool="$(Stakeholder3.AppPoolName)"; Port="$(Stakeholder3.Port)"; Deploy="$(Deploy.FT3)"},
+                        @{Name="$(Stakeholder4.Name)"; AppPool="$(Stakeholder4.AppPoolName)"; Port="$(Stakeholder4.Port)"; Deploy="$(Deploy.R1)"}
+                      )
+                      
+                      $deployedSites = @()
+                      
+                      foreach ($stakeholder in $stakeholders) {
+                        if ($stakeholder.Deploy -eq "true") {
+                           if ($usePowerShell) {
+                             # Use PowerShell cmdlets with error handling
+                             try {
+                               Start-WebAppPool -Name $stakeholder.AppPool -ErrorAction SilentlyContinue
+                               Write-Host "App Pool $($stakeholder.AppPool) started or already running" -ForegroundColor Green
+                             } catch {
+                               Write-Host "App Pool $($stakeholder.AppPool) may already be running" -ForegroundColor Yellow
+                             }
+                             
+                             try {
+                               Start-Website -Name $stakeholder.Name -ErrorAction SilentlyContinue
+                               Write-Host "Website $($stakeholder.Name) started or already running" -ForegroundColor Green
+                             } catch {
+                               Write-Host "Website $($stakeholder.Name) may already be running" -ForegroundColor Yellow
+                             }
+                           } else {
+                             # Use appcmd.exe with error handling
+                             try {
+                               & "C:\Windows\System32\inetsrv\appcmd.exe" start apppool /apppool.name:$($stakeholder.AppPool) 2>$null
+                               Write-Host "App Pool $($stakeholder.AppPool) started or already running" -ForegroundColor Green
+                             } catch {
+                               Write-Host "App Pool $($stakeholder.AppPool) may already be running" -ForegroundColor Yellow
+                             }
+                             
+                             try {
+                               & "C:\Windows\System32\inetsrv\appcmd.exe" start site /site.name:$($stakeholder.Name) 2>$null
+                               Write-Host "Website $($stakeholder.Name) started or already running" -ForegroundColor Green
+                             } catch {
+                               Write-Host "Website $($stakeholder.Name) may already be running" -ForegroundColor Yellow
+                             }
                            }
-                           
-                           try {
-                             Start-Website -Name $stakeholder.Name -ErrorAction SilentlyContinue
-                             Write-Host "Website $($stakeholder.Name) started or already running" -ForegroundColor Green
-                           } catch {
-                             Write-Host "Website $($stakeholder.Name) may already be running" -ForegroundColor Yellow
-                           }
-                         } else {
-                           # Use appcmd.exe with error handling
-                           try {
-                             & "C:\Windows\System32\inetsrv\appcmd.exe" start apppool /apppool.name:$($stakeholder.AppPool) 2>$null
-                             Write-Host "App Pool $($stakeholder.AppPool) started or already running" -ForegroundColor Green
-                           } catch {
-                             Write-Host "App Pool $($stakeholder.AppPool) may already be running" -ForegroundColor Yellow
-                           }
-                           
-                           try {
-                             & "C:\Windows\System32\inetsrv\appcmd.exe" start site /site.name:$($stakeholder.Name) 2>$null
-                             Write-Host "Website $($stakeholder.Name) started or already running" -ForegroundColor Green
-                           } catch {
-                             Write-Host "Website $($stakeholder.Name) may already be running" -ForegroundColor Yellow
-                           }
-                         }
-                         Write-Host "$($stakeholder.Name) started" -ForegroundColor Green
-                         $deployedSites += @{Name=$stakeholder.Name; Port=$stakeholder.Port}
-                       } else {
-                         Write-Host "Skipping start for $($stakeholder.Name) (Deploy flag is false)" -ForegroundColor Yellow
-                       }
-                     }
-                     
-                     Write-Host "================================================" -ForegroundColor Cyan
-                     Write-Host "DEPLOYMENT COMPLETED SUCCESSFULLY!" -ForegroundColor Green
-                     Write-Host "================================================" -ForegroundColor Cyan
-                     Write-Host "Branch: $(BranchName)" -ForegroundColor Yellow
-                     Write-Host "Build: $(BuildNumber)" -ForegroundColor Yellow
-                     Write-Host "Version: $(BuildVersion)" -ForegroundColor Yellow
-                     Write-Host "================================================" -ForegroundColor Cyan
-                     Write-Host "DEPLOYED WEBSITES:" -ForegroundColor Cyan
-                     Write-Host "================================================" -ForegroundColor Cyan
-                     
-                     if ($deployedSites.Count -eq 0) {
-                       Write-Host "⚠️  NO WEBSITES WERE DEPLOYED" -ForegroundColor Red
-                       Write-Host "All deployment flags were set to false" -ForegroundColor Yellow
-                     } else {
-                       Write-Host "✅ Successfully deployed $($deployedSites.Count) website(s):" -ForegroundColor Green
-                       Write-Host ""
-                       foreach ($site in $deployedSites) {
-                         Write-Host "🌐 $($site.Name): http://localhost:$($site.Port)" -ForegroundColor White
-                       }
-                       Write-Host ""
-                       Write-Host "🔧 SIT Configuration injected into all deployed sites" -ForegroundColor Cyan
-                     }
-                     
-                     Write-Host "================================================" -ForegroundColor Cyan
+                           Write-Host "$($stakeholder.Name) started" -ForegroundColor Green
+                           $deployedSites += @{Name=$stakeholder.Name; Port=$stakeholder.Port}
+                        } else {
+                           Write-Host "Skipping start for $($stakeholder.Name) (Deploy flag is false)" -ForegroundColor Yellow
+                        }
+                      }
+                      
+                      Write-Host "================================================" -ForegroundColor Cyan
+                      Write-Host "DEPLOYMENT COMPLETED SUCCESSFULLY!" -ForegroundColor Green
+                      Write-Host "================================================" -ForegroundColor Cyan
+                      Write-Host "Branch: $(BranchName)" -ForegroundColor Yellow
+                      Write-Host "Build: $(BuildNumber)" -ForegroundColor Yellow
+                      Write-Host "Version: $(BuildVersion)" -ForegroundColor Yellow
+                      Write-Host "================================================" -ForegroundColor Cyan
+                      Write-Host "DEPLOYED WEBSITES:" -ForegroundColor Cyan
+                      Write-Host "================================================" -ForegroundColor Cyan
+                      
+                      if ($deployedSites.Count -eq 0) {
+                        Write-Host "⚠️  NO WEBSITES WERE DEPLOYED" -ForegroundColor Red
+                        Write-Host "All deployment flags were set to false" -ForegroundColor Yellow
+                      } else {
+                        Write-Host "✅ Successfully deployed $($deployedSites.Count) website(s):" -ForegroundColor Green
+                        Write-Host ""
+                        foreach ($site in $deployedSites) {
+                           Write-Host "🌐 $($site.Name): http://localhost:$($site.Port)" -ForegroundColor White
+                        }
+                        Write-Host ""
+                        Write-Host "🔧 SIT Configuration injected into all deployed sites" -ForegroundColor Cyan
+                      }
+                      
+                      Write-Host "================================================" -ForegroundColor Cyan
