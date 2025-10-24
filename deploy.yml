@@ -362,11 +362,11 @@ stages:
                        @{Name="$(Stakeholder2.Name)"; Path="$(Stakeholder2.PhysicalPath)"; Deploy="$(Deploy.FT2)"; Port="$(Stakeholder2.Port)"; VarGroup="SIT_FT2"},
                        @{Name="$(Stakeholder3.Name)"; Path="$(Stakeholder3.PhysicalPath)"; Deploy="$(Deploy.FT3)"; Port="$(Stakeholder3.Port)"; VarGroup="SIT_FT3"},
                        @{Name="$(Stakeholder4.Name)"; Path="$(Stakeholder4.PhysicalPath)"; Deploy="$(Deploy.R1)"; Port="$(Stakeholder4.Port)"; VarGroup="SIT_R1"}
-                    )
-                    
-                    $totalUpdated = 0
-                    $totalSkipped = 0
-                    $processedSites = 0
+                     )
+                     
+                     $totalUpdated = 0
+                     $totalSkipped = 0
+                     $processedSites = 0
                     
                     # Dynamic variable detection - fetch ALL variables from Azure DevOps Variable Groups
                     function Get-SITVariables {
