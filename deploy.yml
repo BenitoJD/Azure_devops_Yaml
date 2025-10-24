@@ -28,6 +28,13 @@ parameters:
     type: boolean
     default: true
 
+# Variable Groups for SIT environment configuration per site
+variables:
+  - group: SIT_FT1
+  - group: SIT_FT2
+  - group: SIT_FT3
+  - group: SIT_R1
+
 variables:
   # Build Information
   BuildNumber: '$(Build.BuildNumber)'
@@ -353,10 +360,10 @@ stages:
                      
                      # Enhanced stakeholder configuration with better error handling
                      $stakeholders = @(
-                       @{Name="$(Stakeholder1.Name)"; Path="$(Stakeholder1.PhysicalPath)"; Deploy="$(Deploy.FT1)"; Port="$(Stakeholder1.Port)"},
-                       @{Name="$(Stakeholder2.Name)"; Path="$(Stakeholder2.PhysicalPath)"; Deploy="$(Deploy.FT2)"; Port="$(Stakeholder2.Port)"},
-                       @{Name="$(Stakeholder3.Name)"; Path="$(Stakeholder3.PhysicalPath)"; Deploy="$(Deploy.FT3)"; Port="$(Stakeholder3.Port)"},
-                       @{Name="$(Stakeholder4.Name)"; Path="$(Stakeholder4.PhysicalPath)"; Deploy="$(Deploy.R1)"; Port="$(Stakeholder4.Port)"}
+                       @{Name="$(Stakeholder1.Name)"; Path="$(Stakeholder1.PhysicalPath)"; Deploy="$(Deploy.FT1)"; Port="$(Stakeholder1.Port)"; VarGroup="SIT_FT1"},
+                       @{Name="$(Stakeholder2.Name)"; Path="$(Stakeholder2.PhysicalPath)"; Deploy="$(Deploy.FT2)"; Port="$(Stakeholder2.Port)"; VarGroup="SIT_FT2"},
+                       @{Name="$(Stakeholder3.Name)"; Path="$(Stakeholder3.PhysicalPath)"; Deploy="$(Deploy.FT3)"; Port="$(Stakeholder3.Port)"; VarGroup="SIT_FT3"},
+                       @{Name="$(Stakeholder4.Name)"; Path="$(Stakeholder4.PhysicalPath)"; Deploy="$(Deploy.R1)"; Port="$(Stakeholder4.Port)"; VarGroup="SIT_R1"}
                      )
                      
                      $totalUpdated = 0
@@ -493,14 +500,14 @@ stages:
                      foreach ($stakeholder in $stakeholders) {
                          if ($stakeholder.Deploy -eq "true") {
                              Write-Host ""
-                             Write-Host "🌐 Processing $($stakeholder.Name) (Port: $($stakeholder.Port))..." -ForegroundColor Cyan
+                             Write-Host "🌐 Processing $($stakeholder.Name) (Port: $($stakeholder.Port)) using $($stakeholder.VarGroup)..." -ForegroundColor Cyan
                              Write-Host "📁 Path: $($stakeholder.Path)" -ForegroundColor DarkCyan
                              
                              # Get variables for this site
                              $sitVars = Get-SITVariables
                              
                              if ($sitVars.AppSettings.Count -eq 0 -and $sitVars.ConnectionStrings.Count -eq 0) {
-                                 Write-Host "  ⚠️  No variables found for $($stakeholder.Name)" -ForegroundColor Yellow
+                                 Write-Host "  ⚠️  No variables found in $($stakeholder.VarGroup) variable group" -ForegroundColor Yellow
                                  continue
                              }
                              
