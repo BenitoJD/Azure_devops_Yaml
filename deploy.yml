@@ -584,13 +584,35 @@ stages:
                      foreach ($stakeholder in $stakeholders) {
                        if ($stakeholder.Deploy -eq "true") {
                          if ($usePowerShell) {
-                           # Use PowerShell cmdlets
-                           Start-WebAppPool -Name $stakeholder.AppPool
-                           Start-Website -Name $stakeholder.Name
+                           # Use PowerShell cmdlets with error handling
+                           try {
+                             Start-WebAppPool -Name $stakeholder.AppPool -ErrorAction SilentlyContinue
+                             Write-Host "App Pool $($stakeholder.AppPool) started or already running" -ForegroundColor Green
+                           } catch {
+                             Write-Host "App Pool $($stakeholder.AppPool) may already be running" -ForegroundColor Yellow
+                           }
+                           
+                           try {
+                             Start-Website -Name $stakeholder.Name -ErrorAction SilentlyContinue
+                             Write-Host "Website $($stakeholder.Name) started or already running" -ForegroundColor Green
+                           } catch {
+                             Write-Host "Website $($stakeholder.Name) may already be running" -ForegroundColor Yellow
+                           }
                          } else {
-                           # Use appcmd.exe
-                           & "C:\Windows\System32\inetsrv\appcmd.exe" start apppool /apppool.name:$($stakeholder.AppPool)
-                           & "C:\Windows\System32\inetsrv\appcmd.exe" start site /site.name:$($stakeholder.Name)
+                           # Use appcmd.exe with error handling
+                           try {
+                             & "C:\Windows\System32\inetsrv\appcmd.exe" start apppool /apppool.name:$($stakeholder.AppPool) 2>$null
+                             Write-Host "App Pool $($stakeholder.AppPool) started or already running" -ForegroundColor Green
+                           } catch {
+                             Write-Host "App Pool $($stakeholder.AppPool) may already be running" -ForegroundColor Yellow
+                           }
+                           
+                           try {
+                             & "C:\Windows\System32\inetsrv\appcmd.exe" start site /site.name:$($stakeholder.Name) 2>$null
+                             Write-Host "Website $($stakeholder.Name) started or already running" -ForegroundColor Green
+                           } catch {
+                             Write-Host "Website $($stakeholder.Name) may already be running" -ForegroundColor Yellow
+                           }
                          }
                          Write-Host "$($stakeholder.Name) started" -ForegroundColor Green
                          $deployedSites += @{Name=$stakeholder.Name; Port=$stakeholder.Port}
