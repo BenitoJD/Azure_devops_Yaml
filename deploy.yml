@@ -374,13 +374,13 @@ stages:
                          # Comprehensive connection string patterns
                          $connectionStringPattern = '^(ConnectionString|OBDContext|MasterDataEntities|DefaultConnection|.*ConnectionString.*|.*Context.*)'
                          
-                         $env: | Where-Object { $_.Name -match $appSettingsPattern } | ForEach-Object {
+                         Get-ChildItem Env: | Where-Object { $_.Name -match $appSettingsPattern } | ForEach-Object {
                              if ($_.Value -and $_.Value.Trim() -ne "") {
                                  $appSettingsVars[$_.Name] = $_.Value
                              }
                          }
                          
-                         $env: | Where-Object { $_.Name -match $connectionStringPattern } | ForEach-Object {
+                         Get-ChildItem Env: | Where-Object { $_.Name -match $connectionStringPattern } | ForEach-Object {
                              if ($_.Value -and $_.Value.Trim() -ne "") {
                                  $connectionStringVars[$_.Name] = $_.Value
                              }
