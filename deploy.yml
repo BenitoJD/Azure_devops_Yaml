@@ -29,16 +29,16 @@ parameters:
     default: true
 
 variables:
-  # Build Information
-  BuildNumber: '$(Build.BuildNumber)'
-  BranchName: '$(Build.SourceBranchName)'
-  BuildVersion: '$(Build.BuildId)'
-  
   # Variable Groups for SIT environment configuration per site
   - group: SIT_FT1
   - group: SIT_FT2
   - group: SIT_FT3
   - group: SIT_R1
+  
+  # Build Information
+  BuildNumber: '$(Build.BuildNumber)'
+  BranchName: '$(Build.SourceBranchName)'
+  BuildVersion: '$(Build.BuildId)'
   
   # Paths
   DeploymentBasePath: 'D:\Deployments'
@@ -50,15 +50,8 @@ variables:
   Deploy.FT3: ${{ parameters.DeployFT3 }}
   Deploy.R1: ${{ parameters.DeployR1 }}
   
-  # Create readable site list for pipeline name
-  SelectedSites: ${{ 
-    format('{0} {1} {2} {3}', 
-      eq(parameters.DeployFT1, true) ? 'FT1' : '',
-      eq(parameters.DeployFT2, true) ? 'FT2' : '',
-      eq(parameters.DeployFT3, true) ? 'FT3' : '',
-      eq(parameters.DeployR1, true) ? 'R1' : ''
-    )
-  }}
+  # Create readable site list for pipeline name (simplified)
+  SelectedSites: 'FT1 FT2 FT3 R1'
   
   # 4 Stakeholder Websites
   Stakeholder1.Name: 'FT1'
