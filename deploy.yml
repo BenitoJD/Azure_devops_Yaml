@@ -379,17 +379,35 @@ stages:
                          # Comprehensive connection string patterns
                          $connectionStringPattern = '^(ConnectionString|OBDContext|MasterDataEntities|DefaultConnection|.*ConnectionString.*|.*Context.*)'
                          
-                         Get-ChildItem Env: | Where-Object { $_.Name -match $appSettingsPattern } | ForEach-Object {
-                             if ($_.Value -and $_.Value.Trim() -ne "") {
-                                 $appSettingsVars[$_.Name] = $_.Value
-                             }
-                         }
-                         
-                         Get-ChildItem Env: | Where-Object { $_.Name -match $connectionStringPattern } | ForEach-Object {
-                             if ($_.Value -and $_.Value.Trim() -ne "") {
-                                 $connectionStringVars[$_.Name] = $_.Value
-                             }
-                         }
+                        # Variable name mapping from Azure DevOps Variable Groups to web.config keys
+                        $variableMappings = @{
+                            'SERVER_REPORTSERVICE_URI' = 'Server_ReportService_Uri'
+                            'REPORTSERVERWEBSERVICEURL' = 'ReportServerWebServiceUrl'
+                            'REPORTSERVERURL' = 'ReportServerUrl'
+                            'REPORTSERVERFOLDERNAME' = 'ReportServerFolderName'
+                            'SITEEDITORTOOL_LOCATION' = 'SiteEditorTool_Location'
+                            'OBDCONTEXT' = 'OBDContext'
+                            'MDSERVICEURL' = 'MDServiceUrl'
+                        }
+                        
+                        Get-ChildItem Env: | ForEach-Object {
+                            $varName = $_.Name
+                            $varValue = $_.Value
+                            
+                            if ($varValue -and $varValue.Trim() -ne "") {
+                                # Check if this variable has a mapping
+                                if ($variableMappings.ContainsKey($varName)) {
+                                    $mappedKey = $variableMappings[$varName]
+                                    
+                                    # Determine if it's an AppSetting or ConnectionString
+                                    if ($mappedKey -eq 'OBDContext') {
+                                        $connectionStringVars[$mappedKey] = $varValue
+                                    } else {
+                                        $appSettingsVars[$mappedKey] = $varValue
+                                    }
+                                }
+                            }
+                        }
                          
                          return @{
                              AppSettings = $appSettingsVars
