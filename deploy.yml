@@ -367,63 +367,63 @@ stages:
                       $totalUpdated = 0
                       $totalSkipped = 0
                       $processedSites = 0
-                     
-                    # Get only variables from the specific variable group for this site
-                    function Get-SITVariables {
-                        param($varGroupName)
-                        $siteVariables = @{}
+                      
+                      # Get only variables from the specific variable group for this site
+                      function Get-SITVariables {
+                         param($varGroupName)
+                         $siteVariables = @{}
                         
-                        # Get all environment variables
-                        $allEnvVars = Get-ChildItem Env:
-                        
-                        # Define patterns for system/Azure DevOps variables to exclude
-                        $excludePatterns = @(
-                            '^PATH$', '^USERNAME$', '^USERPROFILE$', '^PATHEXT$', '^APPDATA$', '^USERDOMAIN$',
-                            '^SystemRoot$', '^ProgramFiles', '^TEMP$', '^TMP$', '^windir$', '^COMPUTERNAME$',
-                            '^LOGONSERVER$', '^SESSIONNAME$', '^ALLUSERSPROFILE$', '^CommonProgramFiles',
-                            '^PUBLIC$', '^HOMEDRIVE$', '^HOMEPATH$', '^LOCALAPPDATA$', '^OneDrive$', '^OS$',
-                            '^PROCESSOR_', '^NUMBER_OF_PROCESSORS$', '^Build\.', '^Agent\.', '^Pipeline\.',
-                            '^System\.', '^TF_', '^AZURE_', '^VSTS_', '^Deploy\.', '^Stakeholder',
-                            '^SelectedSites$', '^DeploymentBasePath$', '^BackupBasePath$'
-                        )
-                        
-                        # Filter out system variables and keep only configuration variables
-                        foreach ($envVar in $allEnvVars) {
-                            $varName = $envVar.Name
-                            $varValue = $envVar.Value
-                            
-                            # Skip if empty or matches exclusion patterns
-                            if (-not $varValue -or $varValue.Trim() -eq "") { continue }
-                            
-                            $shouldExclude = $false
-                            foreach ($pattern in $excludePatterns) {
-                                if ($varName -match $pattern) {
-                                    $shouldExclude = $true
-                                    break
-                                }
-                            }
-                            
-                            if (-not $shouldExclude) {
-                                # Additional filters for technical/system values
-                                if ($varValue -notmatch '^[0-9]+$' -and  # Skip pure numbers
-                                    $varValue -notmatch '^[a-f0-9\-]{8,}$' -and  # Skip GUIDs
-                                    $varValue -notmatch '^C:\\' -and  # Skip C: paths
-                                    $varValue -notmatch '^D:\\' -and  # Skip D: paths  
-                                    $varValue -notmatch '^http://10\.' -and  # Skip internal URLs
-                                    $varValue -notmatch '^vstfs://' -and  # Skip Azure DevOps URLs
-                                    $varValue -notmatch '^VSTS_' -and  # Skip VSTS variables
-                                    $varValue.Length -gt 1 -and  # Skip single characters
-                                    $varValue.Length -lt 200) {  # Skip very long strings
-                                    
-                                    $siteVariables[$varName] = $varValue
-                                    Write-Host "  📋 Found config variable: $varName" -ForegroundColor DarkCyan
-                                }
-                            }
-                        }
-                        
-                        Write-Host "  🔍 Found $($siteVariables.Count) configuration variables from $varGroupName" -ForegroundColor Cyan
-                        return $siteVariables
-                    }
+                         # Get all environment variables
+                         $allEnvVars = Get-ChildItem Env:
+                         
+                         # Define patterns for system/Azure DevOps variables to exclude
+                         $excludePatterns = @(
+                             '^PATH$', '^USERNAME$', '^USERPROFILE$', '^PATHEXT$', '^APPDATA$', '^USERDOMAIN$',
+                             '^SystemRoot$', '^ProgramFiles', '^TEMP$', '^TMP$', '^windir$', '^COMPUTERNAME$',
+                             '^LOGONSERVER$', '^SESSIONNAME$', '^ALLUSERSPROFILE$', '^CommonProgramFiles',
+                             '^PUBLIC$', '^HOMEDRIVE$', '^HOMEPATH$', '^LOCALAPPDATA$', '^OneDrive$', '^OS$',
+                             '^PROCESSOR_', '^NUMBER_OF_PROCESSORS$', '^Build\.', '^Agent\.', '^Pipeline\.',
+                             '^System\.', '^TF_', '^AZURE_', '^VSTS_', '^Deploy\.', '^Stakeholder',
+                             '^SelectedSites$', '^DeploymentBasePath$', '^BackupBasePath$'
+                         )
+                         
+                         # Filter out system variables and keep only configuration variables
+                         foreach ($envVar in $allEnvVars) {
+                             $varName = $envVar.Name
+                             $varValue = $envVar.Value
+                             
+                             # Skip if empty or matches exclusion patterns
+                             if (-not $varValue -or $varValue.Trim() -eq "") { continue }
+                             
+                             $shouldExclude = $false
+                             foreach ($pattern in $excludePatterns) {
+                                 if ($varName -match $pattern) {
+                                     $shouldExclude = $true
+                                     break
+                                 }
+                             }
+                             
+                             if (-not $shouldExclude) {
+                                 # Additional filters for technical/system values
+                                 if ($varValue -notmatch '^[0-9]+$' -and  # Skip pure numbers
+                                     $varValue -notmatch '^[a-f0-9\-]{8,}$' -and  # Skip GUIDs
+                                     $varValue -notmatch '^C:\\' -and  # Skip C: paths
+                                     $varValue -notmatch '^D:\\' -and  # Skip D: paths  
+                                     $varValue -notmatch '^http://10\.' -and  # Skip internal URLs
+                                     $varValue -notmatch '^vstfs://' -and  # Skip Azure DevOps URLs
+                                     $varValue -notmatch '^VSTS_' -and  # Skip VSTS variables
+                                     $varValue.Length -gt 1 -and  # Skip single characters
+                                     $varValue.Length -lt 200) {  # Skip very long strings
+                                     
+                                     $siteVariables[$varName] = $varValue
+                                     Write-Host "  📋 Found config variable: $varName" -ForegroundColor DarkCyan
+                                 }
+                             }
+                         }
+                         
+                         Write-Host "  🔍 Found $($siteVariables.Count) configuration variables from $varGroupName" -ForegroundColor Cyan
+                         return $siteVariables
+                      }
                       
                       # Enhanced web.config processing with better error handling
                       function Process-WebConfig {
