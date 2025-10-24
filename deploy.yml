@@ -46,8 +46,8 @@ variables:
   Deploy.FT3: ${{ parameters.DeployFT3 }}
   Deploy.R1: ${{ parameters.DeployR1 }}
   
-  # Create readable site list for pipeline name (simplified)
-  SelectedSites: 'FT1 FT2 FT3 R1'
+  # Create readable site list for pipeline name (will be set dynamically)
+  SelectedSites: ''
   
   # 4 Stakeholder Websites
   Stakeholder1.Name: 'FT1'
@@ -124,6 +124,23 @@ stages:
                       Write-Host "FT3          : $(Deploy.FT3)" -ForegroundColor $(if ("$(Deploy.FT3)" -eq "true") { "Green" } else { "Red" })
                       Write-Host "R1           : $(Deploy.R1)" -ForegroundColor $(if ("$(Deploy.R1)" -eq "true") { "Green" } else { "Red" })
                       Write-Host "================================================" -ForegroundColor Cyan
+               
+               # Set SelectedSites variable dynamically
+               - task: PowerShell@2
+                 displayName: '🔧 Set SelectedSites Variable'
+                 inputs:
+                   targetType: 'inline'
+                   script: |
+                      $selectedSites = @()
+                      
+                      if ("$(Deploy.FT1)" -eq "true") { $selectedSites += "FT1" }
+                      if ("$(Deploy.FT2)" -eq "true") { $selectedSites += "FT2" }
+                      if ("$(Deploy.FT3)" -eq "true") { $selectedSites += "FT3" }
+                      if ("$(Deploy.R1)" -eq "true") { $selectedSites += "R1" }
+                      
+                      $sitesList = $selectedSites -join " "
+                      Write-Host "Setting SelectedSites to: $sitesList" -ForegroundColor Cyan
+                      Write-Host "##vso[task.setvariable variable=SelectedSites]$sitesList"
                
                # Display Selected Deployment Sites
                - task: PowerShell@2
@@ -721,12 +738,86 @@ stages:
                         Write-Host "Permissions set for: $path" -ForegroundColor Green
                       }
                
+               # Stop Services (Clean Start)
+               - task: PowerShell@2
+                 displayName: '⏹️ Stop All Websites - Clean Start'
+                 inputs:
+                   targetType: 'inline'
+                   script: |
+                      Write-Host "================================================" -ForegroundColor Cyan
+                      Write-Host "🛑 STOPPING WEBSITES FOR CLEAN START" -ForegroundColor Cyan
+                      Write-Host "================================================" -ForegroundColor Cyan
+                      
+                      # Try to import WebAdministration module
+                      try {
+                        Import-Module WebAdministration -ErrorAction Stop
+                        Write-Host "WebAdministration module loaded successfully" -ForegroundColor Green
+                        $usePowerShell = $true
+                      } catch {
+                        Write-Host "WebAdministration module not available, using appcmd.exe" -ForegroundColor Yellow
+                        $usePowerShell = $false
+                      }
+                      
+                      $stakeholders = @(
+                        @{Name="$(Stakeholder1.Name)"; AppPool="$(Stakeholder1.AppPoolName)"; Deploy="$(Deploy.FT1)"},
+                        @{Name="$(Stakeholder2.Name)"; AppPool="$(Stakeholder2.AppPoolName)"; Deploy="$(Deploy.FT2)"},
+                        @{Name="$(Stakeholder3.Name)"; AppPool="$(Stakeholder3.AppPoolName)"; Deploy="$(Deploy.FT3)"},
+                        @{Name="$(Stakeholder4.Name)"; AppPool="$(Stakeholder4.AppPoolName)"; Deploy="$(Deploy.R1)"}
+                      )
+                      
+                      foreach ($stakeholder in $stakeholders) {
+                        if ($stakeholder.Deploy -eq "true") {
+                           Write-Host "Stopping $($stakeholder.Name)..." -ForegroundColor Cyan
+                           
+                           if ($usePowerShell) {
+                             # Stop Website first
+                             try {
+                               Stop-Website -Name $stakeholder.Name -ErrorAction Stop
+                               Write-Host "Website $($stakeholder.Name) stopped" -ForegroundColor Green
+                             } catch {
+                               Write-Host "Website $($stakeholder.Name) was not running or already stopped" -ForegroundColor Yellow
+                             }
+                             
+                             # Stop App Pool
+                             try {
+                               Stop-WebAppPool -Name $stakeholder.AppPool -ErrorAction Stop
+                               Write-Host "App Pool $($stakeholder.AppPool) stopped" -ForegroundColor Green
+                             } catch {
+                               Write-Host "App Pool $($stakeholder.AppPool) was not running or already stopped" -ForegroundColor Yellow
+                             }
+                           } else {
+                             # Use appcmd.exe
+                             try {
+                               & "C:\Windows\System32\inetsrv\appcmd.exe" stop site /site.name:$($stakeholder.Name) 2>$null
+                               Write-Host "Website $($stakeholder.Name) stopped" -ForegroundColor Green
+                             } catch {
+                               Write-Host "Website $($stakeholder.Name) was not running or already stopped" -ForegroundColor Yellow
+                             }
+                             
+                             try {
+                               & "C:\Windows\System32\inetsrv\appcmd.exe" stop apppool /apppool.name:$($stakeholder.AppPool) 2>$null
+                               Write-Host "App Pool $($stakeholder.AppPool) stopped" -ForegroundColor Green
+                             } catch {
+                               Write-Host "App Pool $($stakeholder.AppPool) was not running or already stopped" -ForegroundColor Yellow
+                             }
+                           }
+                        }
+                      }
+                      
+                      Write-Host "================================================" -ForegroundColor Cyan
+                      Write-Host "✅ STOP COMPLETED" -ForegroundColor Green
+                      Write-Host "================================================" -ForegroundColor Cyan
+               
                # Start Services
                - task: PowerShell@2
                  displayName: '▶️ Start All Websites - $(BranchName) v$(BuildVersion)'
                  inputs:
                    targetType: 'inline'
                    script: |
+                      Write-Host "================================================" -ForegroundColor Cyan
+                      Write-Host "🚀 STARTING WEBSITES" -ForegroundColor Cyan
+                      Write-Host "================================================" -ForegroundColor Cyan
+                      
                       # Try to import WebAdministration module
                       try {
                         Import-Module WebAdministration -ErrorAction Stop
@@ -745,45 +836,67 @@ stages:
                       )
                       
                       $deployedSites = @()
+                      $failedSites = @()
                       
                       foreach ($stakeholder in $stakeholders) {
                         if ($stakeholder.Deploy -eq "true") {
+                           Write-Host "Starting $($stakeholder.Name)..." -ForegroundColor Cyan
+                           $siteStarted = $false
+                           
                            if ($usePowerShell) {
-                             # Use PowerShell cmdlets with error handling
+                             # Start App Pool first
                              try {
-                               Start-WebAppPool -Name $stakeholder.AppPool -ErrorAction SilentlyContinue
-                               Write-Host "App Pool $($stakeholder.AppPool) started or already running" -ForegroundColor Green
+                               Start-WebAppPool -Name $stakeholder.AppPool -ErrorAction Stop
+                               Write-Host "App Pool $($stakeholder.AppPool) started" -ForegroundColor Green
+                               
+                               # Start Website
+                               Start-Website -Name $stakeholder.Name -ErrorAction Stop
+                               Write-Host "Website $($stakeholder.Name) started" -ForegroundColor Green
+                               $siteStarted = $true
+                               
                              } catch {
-                               Write-Host "App Pool $($stakeholder.AppPool) may already be running" -ForegroundColor Yellow
-                             }
-                             
-                             try {
-                               Start-Website -Name $stakeholder.Name -ErrorAction SilentlyContinue
-                               Write-Host "Website $($stakeholder.Name) started or already running" -ForegroundColor Green
-                             } catch {
-                               Write-Host "Website $($stakeholder.Name) may already be running" -ForegroundColor Yellow
+                               Write-Host "❌ Failed to start $($stakeholder.Name): $($_.Exception.Message)" -ForegroundColor Red
+                               $failedSites += $stakeholder.Name
                              }
                            } else {
-                             # Use appcmd.exe with error handling
+                             # Use appcmd.exe
                              try {
-                               & "C:\Windows\System32\inetsrv\appcmd.exe" start apppool /apppool.name:$($stakeholder.AppPool) 2>$null
-                               Write-Host "App Pool $($stakeholder.AppPool) started or already running" -ForegroundColor Green
+                               $appPoolResult = & "C:\Windows\System32\inetsrv\appcmd.exe" start apppool /apppool.name:$($stakeholder.AppPool) 2>&1
+                               if ($LASTEXITCODE -eq 0) {
+                                 Write-Host "App Pool $($stakeholder.AppPool) started" -ForegroundColor Green
+                                 
+                                 $siteResult = & "C:\Windows\System32\inetsrv\appcmd.exe" start site /site.name:$($stakeholder.Name) 2>&1
+                                 if ($LASTEXITCODE -eq 0) {
+                                   Write-Host "Website $($stakeholder.Name) started" -ForegroundColor Green
+                                   $siteStarted = $true
+                                 } else {
+                                   Write-Host "❌ Failed to start website $($stakeholder.Name): $siteResult" -ForegroundColor Red
+                                   $failedSites += $stakeholder.Name
+                                 }
+                               } else {
+                                 Write-Host "❌ Failed to start app pool $($stakeholder.AppPool): $appPoolResult" -ForegroundColor Red
+                                 $failedSites += $stakeholder.Name
+                               }
                              } catch {
-                               Write-Host "App Pool $($stakeholder.AppPool) may already be running" -ForegroundColor Yellow
-                             }
-                             
-                             try {
-                               & "C:\Windows\System32\inetsrv\appcmd.exe" start site /site.name:$($stakeholder.Name) 2>$null
-                               Write-Host "Website $($stakeholder.Name) started or already running" -ForegroundColor Green
-                             } catch {
-                               Write-Host "Website $($stakeholder.Name) may already be running" -ForegroundColor Yellow
+                               Write-Host "❌ Failed to start $($stakeholder.Name): $($_.Exception.Message)" -ForegroundColor Red
+                               $failedSites += $stakeholder.Name
                              }
                            }
-                           Write-Host "$($stakeholder.Name) started" -ForegroundColor Green
-                           $deployedSites += @{Name=$stakeholder.Name; Port=$stakeholder.Port}
+                           
+                           if ($siteStarted) {
+                             $deployedSites += @{Name=$stakeholder.Name; Port=$stakeholder.Port}
+                             Write-Host "✅ $($stakeholder.Name) started successfully" -ForegroundColor Green
+                           }
                         } else {
                            Write-Host "Skipping start for $($stakeholder.Name) (Deploy flag is false)" -ForegroundColor Yellow
                         }
+                      }
+                      
+                      # Report results
+                      Write-Host "================================================" -ForegroundColor Cyan
+                      if ($failedSites.Count -gt 0) {
+                        Write-Host "❌ FAILED TO START: $($failedSites -join ', ')" -ForegroundColor Red
+                        Write-Host "================================================" -ForegroundColor Cyan
                       }
                       
                       Write-Host "================================================" -ForegroundColor Cyan
