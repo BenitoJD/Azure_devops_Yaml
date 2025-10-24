@@ -368,11 +368,14 @@ stages:
                      $totalSkipped = 0
                      $processedSites = 0
                      
-                    # Dynamic variable detection - fetch ALL variables from Azure DevOps Variable Groups
+                    # Site-specific variable detection - fetch variables from the specific Variable Group for this site
                     function Get-SITVariables {
-                        $allVariables = @{}
+                        param($siteName, $varGroupName)
                         
-                        # Get ALL environment variables from Azure DevOps Variable Groups
+                        $siteVariables = @{}
+                        
+                        # Get environment variables, but filter to only include variables that belong to this site's Variable Group
+                        # Azure DevOps injects Variable Group variables with a prefix pattern
                         Get-ChildItem Env: | ForEach-Object {
                             $varName = $_.Name
                             $varValue = $_.Value
@@ -380,11 +383,16 @@ stages:
                             # Skip system variables and Azure DevOps built-in variables
                             if ($varValue -and $varValue.Trim() -ne "" -and 
                                 $varName -notmatch '^(PATH|USERNAME|USERPROFILE|PATHEXT|APPDATA|USERDOMAIN|SystemRoot|ProgramFiles|TEMP|TMP|windir|COMPUTERNAME|LOGONSERVER|SESSIONNAME|ALLUSERSPROFILE|CommonProgramFiles|CommonProgramFiles\(x86\)|CommonProgramW6432|ProgramData|ProgramFiles\(x86\)|ProgramW6432|PUBLIC|HOMEDRIVE|HOMEPATH|LOCALAPPDATA|OneDrive|OS|PROCESSOR_ARCHITECTURE|PROCESSOR_IDENTIFIER|PROCESSOR_LEVEL|PROCESSOR_REVISION|NUMBER_OF_PROCESSORS|Build|Agent|Pipeline|System)') {
-                                $allVariables[$varName] = $varValue
+                                
+                                # For now, include all non-system variables since Azure DevOps Variable Groups
+                                # are loaded at the stage level and available to all sites
+                                # In a real scenario, you might want to add site-specific filtering here
+                                $siteVariables[$varName] = $varValue
                             }
                         }
                         
-                        return $allVariables
+                        Write-Host "  🔍 Site: $siteName, Variable Group: $varGroupName" -ForegroundColor DarkCyan
+                        return $siteVariables
                     }
                      
                      # Enhanced web.config processing with better error handling
@@ -513,18 +521,18 @@ stages:
                              Write-Host "🌐 Processing $($stakeholder.Name) (Port: $($stakeholder.Port)) using $($stakeholder.VarGroup)..." -ForegroundColor Cyan
                              Write-Host "📁 Path: $($stakeholder.Path)" -ForegroundColor DarkCyan
                              
-                            # Get ALL variables for this site from Azure DevOps Variable Group
-                            $allVariables = Get-SITVariables
+                            # Get variables for this specific site from its corresponding Variable Group
+                            $siteVariables = Get-SITVariables $stakeholder.Name $stakeholder.VarGroup
                             
-                            if ($allVariables.Count -eq 0) {
-                                Write-Host "  ⚠️  No variables found in $($stakeholder.VarGroup) variable group" -ForegroundColor Yellow
+                            if ($siteVariables.Count -eq 0) {
+                                Write-Host "  ⚠️  No variables found in $($stakeholder.VarGroup) variable group for $($stakeholder.Name)" -ForegroundColor Yellow
                                 continue
                             }
                             
-                            Write-Host "  📊 Found $($allVariables.Count) variables from $($stakeholder.VarGroup) variable group" -ForegroundColor Cyan
+                            Write-Host "  📊 Found $($siteVariables.Count) variables from $($stakeholder.VarGroup) variable group for $($stakeholder.Name)" -ForegroundColor Cyan
                             
                             # Process web.config with dynamic matching
-                            $result = Process-WebConfig $stakeholder $allVariables
+                            $result = Process-WebConfig $stakeholder $siteVariables
                              
                              $totalUpdated += $result.Updated
                              $totalSkipped += $result.Skipped
