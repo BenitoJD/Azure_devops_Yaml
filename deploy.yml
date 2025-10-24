@@ -373,6 +373,18 @@ stages:
                       Write-Host "🔍 VARIABLE GROUP DIAGNOSTICS" -ForegroundColor Magenta
                       Write-Host "================================================" -ForegroundColor Magenta
                       
+                      # Show ALL environment variables for debugging
+                      Write-Host "`n🔍 ALL ENVIRONMENT VARIABLES (first 20):" -ForegroundColor Yellow
+                      Get-ChildItem Env: | Select-Object -First 20 | ForEach-Object {
+                          Write-Host "   $($_.Name) = $($_.Value)" -ForegroundColor Gray
+                      }
+                      
+                      # Show variables that might be related to our variable groups
+                      Write-Host "`n🔍 VARIABLES CONTAINING 'SIT':" -ForegroundColor Yellow
+                      Get-ChildItem Env: | Where-Object { $_.Name -like "*SIT*" } | ForEach-Object {
+                          Write-Host "   $($_.Name) = $($_.Value)" -ForegroundColor Cyan
+                      }
+                      
                       $allVarGroups = @("SIT_FT1", "SIT_FT2", "SIT_FT3", "SIT_R1")
                       
                       foreach ($varGroup in $allVarGroups) {
