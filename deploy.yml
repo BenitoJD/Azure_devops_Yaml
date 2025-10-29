@@ -144,7 +144,11 @@ stages:
 
                       # Update build display name at runtime to include selected sites
                       $date = Get-Date -Format "yyyyMMdd"
-                      $newName = "$(BuildDefinitionName)_$(BranchName)_$date_Sites[$sitesList]"
+                      $definitionName = $env:BUILD_DEFINITIONNAME
+                      $branchName = $env:BUILD_SOURCEBRANCHNAME
+                      if (-not $definitionName -or $definitionName.Trim() -eq '') { $definitionName = 'Build' }
+                      if (-not $branchName -or $branchName.Trim() -eq '') { $branchName = 'UnknownBranch' }
+                      $newName = "${definitionName}_${branchName}_$date_Sites[$sitesList]"
                       Write-Host "Updating build name to: $newName" -ForegroundColor Cyan
                       Write-Host "##vso[build.updatebuildnumber]$newName"
                
