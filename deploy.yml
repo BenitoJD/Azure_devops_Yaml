@@ -3,8 +3,8 @@ pool:
 trigger:
 - none
 
-# Add name template for pipeline run display (uses compile-time SelectedSitesStatic)
-name: $(BuildDefinitionName)_$(SourceBranchName)_$(Date:yyyyMMdd)$(Rev:.r)_Sites[$(SelectedSitesStatic)]
+# Add name template for pipeline run display; final name updated at runtime
+name: $(BuildDefinitionName)_$(SourceBranchName)_$(Date:yyyyMMdd)$(Rev:.r)
 
 parameters:
   # ============================================
@@ -45,13 +45,6 @@ variables:
   Deploy.FT2: ${{ parameters.DeployFT2 }}
   Deploy.FT3: ${{ parameters.DeployFT3 }}
   Deploy.R1: ${{ parameters.DeployR1 }}
-  
-  # Compile-time site list for run name (evaluated before the run starts)
-  SelectedSitesStatic: >
-    ${{ if eq(parameters.DeployFT1, true) }}FT1 
-    ${{ if eq(parameters.DeployFT2, true) }}FT2 
-    ${{ if eq(parameters.DeployFT3, true) }}FT3 
-    ${{ if eq(parameters.DeployR1, true) }}R1
   
   # Create readable site list for pipeline name (will be set dynamically)
   SelectedSites: ''
@@ -148,6 +141,12 @@ stages:
                       $sitesList = $selectedSites -join " "
                       Write-Host "Setting SelectedSites to: $sitesList" -ForegroundColor Cyan
                       Write-Host "##vso[task.setvariable variable=SelectedSites]$sitesList"
+
+                      # Update build display name at runtime to include selected sites
+                      $date = Get-Date -Format "yyyyMMdd"
+                      $newName = "$(BuildDefinitionName)_$(BranchName)_$date_Sites[$sitesList]"
+                      Write-Host "Updating build name to: $newName" -ForegroundColor Cyan
+                      Write-Host "##vso[build.updatebuildnumber]$newName"
                
                # Display Selected Deployment Sites
                - task: PowerShell@2
