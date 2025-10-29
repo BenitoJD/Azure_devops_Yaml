@@ -3,8 +3,8 @@ pool:
 trigger:
 - none
 
-# Add name template for pipeline run display
-name: $(BuildDefinitionName)_$(SourceBranchName)_$(Date:yyyyMMdd)$(Rev:.r)_Sites[$(SelectedSites)]
+# Add name template for pipeline run display (uses compile-time SelectedSitesStatic)
+name: $(BuildDefinitionName)_$(SourceBranchName)_$(Date:yyyyMMdd)$(Rev:.r)_Sites[$(SelectedSitesStatic)]
 
 parameters:
   # ============================================
@@ -45,6 +45,13 @@ variables:
   Deploy.FT2: ${{ parameters.DeployFT2 }}
   Deploy.FT3: ${{ parameters.DeployFT3 }}
   Deploy.R1: ${{ parameters.DeployR1 }}
+  
+  # Compile-time site list for run name (evaluated before the run starts)
+  SelectedSitesStatic: >
+    ${{ if eq(parameters.DeployFT1, true) }}FT1 
+    ${{ if eq(parameters.DeployFT2, true) }}FT2 
+    ${{ if eq(parameters.DeployFT3, true) }}FT3 
+    ${{ if eq(parameters.DeployR1, true) }}R1
   
   # Create readable site list for pipeline name (will be set dynamically)
   SelectedSites: ''
@@ -307,26 +314,56 @@ stages:
                              } catch {
                                Write-Host "Website may already exist: $($stakeholder.Name)" -ForegroundColor Yellow
                              }
-                           } else {
-                             # Use PowerShell cmdlets
-                             try {
-                               # Create Application Pool
-                               New-WebAppPool -Name $stakeholder.AppPool -ErrorAction SilentlyContinue
-                               Set-ItemProperty "IIS:\AppPools\$($stakeholder.AppPool)" -Name managedRuntimeVersion -Value "v4.0"
-                               Set-ItemProperty "IIS:\AppPools\$($stakeholder.AppPool)" -Name managedPipelineMode -Value "Integrated"
-                               Write-Host "Created App Pool: $($stakeholder.AppPool)" -ForegroundColor Green
-                             } catch {
-                               Write-Host "App Pool may already exist: $($stakeholder.AppPool)" -ForegroundColor Yellow
-                             }
-                             
-                             try {
-                               # Create Website
-                               New-Website -Name $stakeholder.Name -PhysicalPath $stakeholder.Path -ApplicationPool $stakeholder.AppPool -Port $stakeholder.Port -ErrorAction SilentlyContinue
-                               Write-Host "Created Website: $($stakeholder.Name)" -ForegroundColor Green
-                             } catch {
-                               Write-Host "Website may already exist: $($stakeholder.Name)" -ForegroundColor Yellow
-                             }
-                           }
+                          } else {
+                            # Use PowerShell cmdlets with existence checks and binding dedupe
+                            try {
+                              # Ensure Application Pool exists and is configured
+                              if (-not (Test-Path "IIS:\AppPools\$($stakeholder.AppPool)")) {
+                                New-WebAppPool -Name $stakeholder.AppPool -ErrorAction Stop | Out-Null
+                                Write-Host "Created App Pool: $($stakeholder.AppPool)" -ForegroundColor Green
+                              } else {
+                                Write-Host "App Pool exists: $($stakeholder.AppPool)" -ForegroundColor Yellow
+                              }
+                              Set-ItemProperty "IIS:\AppPools\$($stakeholder.AppPool)" -Name managedRuntimeVersion -Value "v4.0"
+                              Set-ItemProperty "IIS:\AppPools\$($stakeholder.AppPool)" -Name managedPipelineMode -Value "Integrated"
+                            } catch {
+                              Write-Host "Error ensuring App Pool $($stakeholder.AppPool): $($_.Exception.Message)" -ForegroundColor Red
+                            }
+                            
+                            try {
+                              $existingSite = Get-Website -Name $stakeholder.Name -ErrorAction SilentlyContinue
+                              if ($existingSite) {
+                                # Update existing site properties
+                                Set-ItemProperty "IIS:\Sites\$($stakeholder.Name)" -Name applicationPool -Value $stakeholder.AppPool
+                                Set-ItemProperty "IIS:\Sites\$($stakeholder.Name)" -Name physicalPath -Value $stakeholder.Path
+                                
+                                # Ensure single binding for http on the desired port
+                                $desiredBinding = "*:$($stakeholder.Port):"
+                                $httpBindings = Get-WebBinding -Name $stakeholder.Name -Protocol "http" -ErrorAction SilentlyContinue
+                                $matching = @()
+                                if ($httpBindings) { $matching = $httpBindings | Where-Object { $_.bindingInformation -eq $desiredBinding } }
+                                if (-not $matching -or $matching.Count -eq 0) {
+                                  New-WebBinding -Name $stakeholder.Name -Protocol "http" -Port $stakeholder.Port -IPAddress "*" -HostHeader ""
+                                  Write-Host "Added binding http/*:$($stakeholder.Port): to $($stakeholder.Name)" -ForegroundColor Green
+                                } elseif ($matching.Count -gt 1) {
+                                  # Remove duplicate bindings, keep one
+                                  $keep = $true
+                                  foreach ($b in $matching) {
+                                    if ($keep) { $keep = $false; continue }
+                                    Remove-WebBinding -Name $stakeholder.Name -Protocol "http" -BindingInformation $desiredBinding -ErrorAction SilentlyContinue
+                                  }
+                                  Write-Host "Removed duplicate bindings for $($stakeholder.Name) on port $($stakeholder.Port)" -ForegroundColor Yellow
+                                }
+                                Write-Host "Updated Website: $($stakeholder.Name)" -ForegroundColor Green
+                              } else {
+                                # Create new site with desired binding
+                                New-Website -Name $stakeholder.Name -PhysicalPath $stakeholder.Path -ApplicationPool $stakeholder.AppPool -Port $stakeholder.Port -ErrorAction Stop | Out-Null
+                                Write-Host "Created Website: $($stakeholder.Name)" -ForegroundColor Green
+                              }
+                            } catch {
+                              Write-Host "Error ensuring Website $($stakeholder.Name): $($_.Exception.Message)" -ForegroundColor Red
+                            }
+                          }
                            
                            Write-Host "$($stakeholder.Name) configured" -ForegroundColor Green
                         } else {
@@ -843,40 +880,65 @@ stages:
                            Write-Host "Starting $($stakeholder.Name)..." -ForegroundColor Cyan
                            $siteStarted = $false
                            
-                           if ($usePowerShell) {
-                             # Start App Pool first
-                             try {
-                               Start-WebAppPool -Name $stakeholder.AppPool -ErrorAction Stop
-                               Write-Host "App Pool $($stakeholder.AppPool) started" -ForegroundColor Green
-                               
-                               # Start Website
-                               Start-Website -Name $stakeholder.Name -ErrorAction Stop
-                               Write-Host "Website $($stakeholder.Name) started" -ForegroundColor Green
-                               $siteStarted = $true
-                               
-                             } catch {
-                               Write-Host "❌ Failed to start $($stakeholder.Name): $($_.Exception.Message)" -ForegroundColor Red
-                               $failedSites += $stakeholder.Name
-                             }
-                           } else {
+                          if ($usePowerShell) {
+                            # Start App Pool first if not already started
+                            try {
+                              $apState = (Get-WebAppPoolState -Name $stakeholder.AppPool -ErrorAction SilentlyContinue).Value
+                              if ($apState -ne 'Started') {
+                                Start-WebAppPool -Name $stakeholder.AppPool -ErrorAction Stop
+                                Write-Host "App Pool $($stakeholder.AppPool) started" -ForegroundColor Green
+                              } else {
+                                Write-Host "App Pool $($stakeholder.AppPool) already started" -ForegroundColor Yellow
+                              }
+                              
+                              # Start Website if not already started
+                              $site = Get-Website -Name $stakeholder.Name -ErrorAction SilentlyContinue
+                              if ($site) {
+                                if ($site.state -ne 'Started') {
+                                  Start-Website -Name $stakeholder.Name -ErrorAction Stop
+                                  Write-Host "Website $($stakeholder.Name) started" -ForegroundColor Green
+                                } else {
+                                  Write-Host "Website $($stakeholder.Name) already started" -ForegroundColor Yellow
+                                }
+                                $siteStarted = $true
+                              } else {
+                                Write-Host "❌ Website $($stakeholder.Name) not found" -ForegroundColor Red
+                                $failedSites += $stakeholder.Name
+                              }
+                            } catch {
+                              Write-Host "❌ Failed to start $($stakeholder.Name): $($_.Exception.Message)" -ForegroundColor Red
+                              $failedSites += $stakeholder.Name
+                            }
+                          } else {
                              # Use appcmd.exe
                              try {
-                               $appPoolResult = & "C:\Windows\System32\inetsrv\appcmd.exe" start apppool /apppool.name:$($stakeholder.AppPool) 2>&1
-                               if ($LASTEXITCODE -eq 0) {
-                                 Write-Host "App Pool $($stakeholder.AppPool) started" -ForegroundColor Green
-                                 
-                                 $siteResult = & "C:\Windows\System32\inetsrv\appcmd.exe" start site /site.name:$($stakeholder.Name) 2>&1
-                                 if ($LASTEXITCODE -eq 0) {
-                                   Write-Host "Website $($stakeholder.Name) started" -ForegroundColor Green
-                                   $siteStarted = $true
-                                 } else {
-                                   Write-Host "❌ Failed to start website $($stakeholder.Name): $siteResult" -ForegroundColor Red
-                                   $failedSites += $stakeholder.Name
-                                 }
-                               } else {
-                                 Write-Host "❌ Failed to start app pool $($stakeholder.AppPool): $appPoolResult" -ForegroundColor Red
-                                 $failedSites += $stakeholder.Name
-                               }
+                              $apState = (& "C:\Windows\System32\inetsrv\appcmd.exe" list apppool "$($stakeholder.AppPool)" /text:state 2>$null)
+                              if ($apState -ne "Started") {
+                                $appPoolResult = & "C:\Windows\System32\inetsrv\appcmd.exe" start apppool /apppool.name:$($stakeholder.AppPool) 2>&1
+                                if ($LASTEXITCODE -eq 0) {
+                                  Write-Host "App Pool $($stakeholder.AppPool) started" -ForegroundColor Green
+                                } else {
+                                  Write-Host "❌ Failed to start app pool $($stakeholder.AppPool): $appPoolResult" -ForegroundColor Red
+                                  $failedSites += $stakeholder.Name
+                                }
+                              } else {
+                                Write-Host "App Pool $($stakeholder.AppPool) already started" -ForegroundColor Yellow
+                              }
+                              
+                              $siteState = (& "C:\Windows\System32\inetsrv\appcmd.exe" list site "$($stakeholder.Name)" /text:state 2>$null)
+                              if ($siteState -ne "Started") {
+                                $siteResult = & "C:\Windows\System32\inetsrv\appcmd.exe" start site /site.name:$($stakeholder.Name) 2>&1
+                                if ($LASTEXITCODE -eq 0) {
+                                  Write-Host "Website $($stakeholder.Name) started" -ForegroundColor Green
+                                  $siteStarted = $true
+                                } else {
+                                  Write-Host "❌ Failed to start website $($stakeholder.Name): $siteResult" -ForegroundColor Red
+                                  $failedSites += $stakeholder.Name
+                                }
+                              } else {
+                                Write-Host "Website $($stakeholder.Name) already started" -ForegroundColor Yellow
+                                $siteStarted = $true
+                              }
                              } catch {
                                Write-Host "❌ Failed to start $($stakeholder.Name): $($_.Exception.Message)" -ForegroundColor Red
                                $failedSites += $stakeholder.Name
