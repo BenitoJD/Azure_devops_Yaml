@@ -4,7 +4,7 @@ pool:
 trigger:
 - none
 
-name: $(SourceBranchName)_$(Date:yyyyMMdd)$(Rev:.r)
+name: $(BuildDefinitionName)_$(SourceBranchName)_$(Date:yyyyMMdd)$(Rev:.r)
 
 parameters:
   - name: DeployFT1
@@ -29,8 +29,8 @@ variables:
   BranchName: '$(Build.SourceBranchName)'
   BuildVersion: '$(Build.BuildId)'
 
-  DeploymentBasePath: 'D:\\Deployments'
-  BackupBasePath: 'D:\\Backups'
+  DeploymentBasePath: 'D:\Deployments'
+  BackupBasePath: 'D:\Backups'
 
   Deploy.FT1: ${{ parameters.DeployFT1 }}
   Deploy.FT2: ${{ parameters.DeployFT2 }}
@@ -41,22 +41,22 @@ variables:
 
   Stakeholder1.Name: 'FT1'
   Stakeholder1.Port: '8091'
-  Stakeholder1.PhysicalPath: 'D:\\inetpub\\wwwroot\\FT1.Main'
+  Stakeholder1.PhysicalPath: 'D:\inetpub\wwwroot\FT1.Main'
   Stakeholder1.AppPoolName: 'FT1AppPool'
 
   Stakeholder2.Name: 'FT2'
   Stakeholder2.Port: '8092'
-  Stakeholder2.PhysicalPath: 'D:\\inetpub\\wwwroot\\FT2.Main'
+  Stakeholder2.PhysicalPath: 'D:\inetpub\wwwroot\FT2.Main'
   Stakeholder2.AppPoolName: 'FT2AppPool'
 
   Stakeholder3.Name: 'FT3'
   Stakeholder3.Port: '8093'
-  Stakeholder3.PhysicalPath: 'D:\\inetpub\\wwwroot\\FT3.Main'
+  Stakeholder3.PhysicalPath: 'D:\inetpub\wwwroot\FT3.Main'
   Stakeholder3.AppPoolName: 'FT3AppPool'
 
   Stakeholder4.Name: 'R1'
   Stakeholder4.Port: '8094'
-  Stakeholder4.PhysicalPath: 'D:\\inetpub\\wwwroot\\R1.Main'
+  Stakeholder4.PhysicalPath: 'D:\inetpub\wwwroot\R1.Main'
   Stakeholder4.AppPoolName: 'R1AppPool'
 
 resources:
@@ -180,10 +180,10 @@ stages:
                       if (-not (Test-Path "$(BackupBasePath)")) { New-Item -ItemType Directory -Path "$(BackupBasePath)" -Force | Out-Null }
                       foreach ($s in $stakeholders) {
                         if ($s.Deploy -eq "true") {
-                          $backupPath = "$(BackupBasePath)\\$($s.Name)_$(BranchName)_$(BuildNumber)_$timestamp"
+                          $backupPath = "$(BackupBasePath)\$($s.Name)_$(BranchName)_$(BuildNumber)_$timestamp"
                           if (Test-Path $s.Path) {
                             New-Item -ItemType Directory -Path $backupPath -Force | Out-Null
-                            Copy-Item -Path "$($s.Path)\\*" -Destination $backupPath -Recurse -Force
+                            Copy-Item -Path "$($s.Path)\*" -Destination $backupPath -Recurse -Force
                           }
                         }
                       }
@@ -197,7 +197,7 @@ stages:
         displayName: 'Ensure sites and app pools'
         environment:
           name: SIT
-        resourceType: virtualMachine
+          resourceType: virtualMachine
         strategy:
           runOnce:
             deploy:
@@ -218,19 +218,19 @@ stages:
                       foreach ($s in $stakeholders) {
                         if ($s.Deploy -ne "true") { continue }
                         if ($useAppCmd) {
-                          try { & "C:\\Windows\\System32\\inetsrv\\appcmd.exe" add apppool /name:$($s.AppPool) /managedRuntimeVersion:v4.0 /managedPipelineMode:Integrated } catch {}
+                          try { & "C:\Windows\System32\inetsrv\appcmd.exe" add apppool /name:$($s.AppPool) /managedRuntimeVersion:v4.0 /managedPipelineMode:Integrated } catch {}
                           try {
-                            & "C:\\Windows\\System32\\inetsrv\\appcmd.exe" add site /name:$($s.Name) /physicalPath:$($s.Path) /bindings:http/*:$($s.Port):
-                            & "C:\\Windows\\System32\\inetsrv\\appcmd.exe" set app "$($s.Name)/" /applicationPool:$($s.AppPool)
+                            & "C:\Windows\System32\inetsrv\appcmd.exe" add site /name:$($s.Name) /physicalPath:$($s.Path) /bindings:http/*:$($s.Port):
+                            & "C:\Windows\System32\inetsrv\appcmd.exe" set app "$($s.Name)/" /applicationPool:$($s.AppPool)
                           } catch {}
                         } else {
-                          if (-not (Test-Path "IIS:\\AppPools\\$($s.AppPool)")) { New-WebAppPool -Name $s.AppPool | Out-Null }
-                          Set-ItemProperty "IIS:\\AppPools\\$($s.AppPool)" -Name managedRuntimeVersion -Value "v4.0"
-                          Set-ItemProperty "IIS:\\AppPools\\$($s.AppPool)" -Name managedPipelineMode -Value "Integrated"
+                          if (-not (Test-Path "IIS:\AppPools\$($s.AppPool)")) { New-WebAppPool -Name $s.AppPool | Out-Null }
+                          Set-ItemProperty "IIS:\AppPools\$($s.AppPool)" -Name managedRuntimeVersion -Value "v4.0"
+                          Set-ItemProperty "IIS:\AppPools\$($s.AppPool)" -Name managedPipelineMode -Value "Integrated"
                           $site = Get-Website -Name $s.Name -ErrorAction SilentlyContinue
                           if ($site) {
-                            Set-ItemProperty "IIS:\\Sites\\$($s.Name)" -Name applicationPool -Value $s.AppPool
-                            Set-ItemProperty "IIS:\\Sites\\$($s.Name)" -Name physicalPath -Value $s.Path
+                            Set-ItemProperty "IIS:\Sites\$($s.Name)" -Name applicationPool -Value $s.AppPool
+                            Set-ItemProperty "IIS:\Sites\$($s.Name)" -Name physicalPath -Value $s.Path
                             $desired = "*:$($s.Port):"
                             $httpBindings = Get-WebBinding -Name $s.Name -Protocol "http" -ErrorAction SilentlyContinue
                             $matching = @(); if ($httpBindings) { $matching = $httpBindings | Where-Object { $_.bindingInformation -eq $desired } }
@@ -269,7 +269,7 @@ stages:
                       foreach ($s in $stakeholders) {
                         if ($s.Deploy -ne "true") { continue }
                         if (Test-Path $s.Dest) { Get-ChildItem -Path $s.Dest -Exclude "App_Data" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue }
-                        Copy-Item -Path "$($s.Source)\\*" -Destination $s.Dest -Recurse -Force
+                        Copy-Item -Path "$($s.Source)\*" -Destination $s.Dest -Recurse -Force
                       }
 
   - stage: InjectConfiguration
@@ -405,8 +405,8 @@ stages:
                           try { Stop-Website -Name $s.Name -ErrorAction Stop } catch {}
                           try { Stop-WebAppPool -Name $s.AppPool -ErrorAction Stop } catch {}
                         } else {
-                          try { & "C:\\Windows\\System32\\inetsrv\\appcmd.exe" stop site /site.name:$($s.Name) 2>$null } catch {}
-                          try { & "C:\\Windows\\System32\\inetsrv\\appcmd.exe" stop apppool /apppool.name:$($s.AppPool) 2>$null } catch {}
+                          try { & "C:\Windows\System32\inetsrv\appcmd.exe" stop site /site.name:$($s.Name) 2>$null } catch {}
+                          try { & "C:\Windows\System32\inetsrv\appcmd.exe" stop apppool /apppool.name:$($s.AppPool) 2>$null } catch {}
                         }
                       }
       - deployment: Start_Sites
@@ -439,7 +439,8 @@ stages:
                           $site = Get-Website -Name $s.Name -ErrorAction SilentlyContinue
                           if ($site) { if ($site.state -ne 'Started') { try { Start-Website -Name $s.Name -ErrorAction Stop } catch {} } }
                         } else {
-                          try { if ((& "C:\\Windows\\System32\\inetsrv\\appcmd.exe" list apppool "$($s.AppPool)" /text:state 2>$null) -ne "Started") { & "C:\\Windows\\System32\\inetsrv\\appcmd.exe" start apppool /apppool.name:$($s.AppPool) 2>$null } } catch {}
-                          try { if ((& "C:\\Windows\\System32\\inetsrv\\appcmd.exe" list site "$($s.Name)" /text:state 2>$null) -ne "Started") { & "C:\\Windows\\System32\\inetsrv\\appcmd.exe" start site /site.name:$($s.Name) 2>$null } } catch {}
+                          try { if ((& "C:\Windows\System32\inetsrv\appcmd.exe" list apppool "$($s.AppPool)" /text:state 2>$null) -ne "Started") { & "C:\Windows\System32\inetsrv\appcmd.exe" start apppool /apppool.name:$($s.AppPool) 2>$null } } catch {}
+                          try { if ((& "C:\Windows\System32\inetsrv\appcmd.exe" list site "$($s.Name)" /text:state 2>$null) -ne "Started") { & "C:\Windows\System32\inetsrv\appcmd.exe" start site /site.name:$($s.Name) 2>$null } } catch {}
                         }
                       }
+
