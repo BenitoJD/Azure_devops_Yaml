@@ -180,7 +180,12 @@ stages:
                       if (-not (Test-Path "$(BackupBasePath)")) { New-Item -ItemType Directory -Path "$(BackupBasePath)" -Force | Out-Null }
                       foreach ($s in $stakeholders) {
                         if ($s.Deploy -eq "true") {
-                          $backupPath = "$(BackupBasePath)\$($s.Name)_$(BranchName)_$(BuildNumber)_$timestamp"
+                          $buildId = "$(BuildVersion)"
+                          $branch = "$(BranchName)"
+                          $branchSafe = ($branch -replace "[^A-Za-z0-9._-]", "_")
+                          $namePart = "$($s.Name)_$branchSafe_$buildId_$timestamp"
+                          if ($namePart.Length -gt 150) { $namePart = $namePart.Substring(0,150) }
+                          $backupPath = Join-Path "$(BackupBasePath)" $namePart
                           if (Test-Path $s.Path) {
                             New-Item -ItemType Directory -Path $backupPath -Force | Out-Null
                             Copy-Item -Path "$($s.Path)\*" -Destination $backupPath -Recurse -Force
@@ -305,8 +310,34 @@ stages:
                       )
                       function Get-SITVariables { param($varGroupName)
                         $siteVariables = @{}
-                        $p1 = "$varGroupName."; Get-ChildItem Env: | Where-Object { $_.Name -like "$p1*" -and $_.Value -and $_.Value.Trim() -ne "" } | ForEach-Object { $siteVariables[$_.Name.Substring($p1.Length)] = $_.Value }
-                        $p2 = "$varGroupName" + "_"; Get-ChildItem Env: | Where-Object { $_.Name -like "$p2*" -and $_.Value -and $_.Value.Trim() -ne "" } | ForEach-Object { $siteVariables[$_.Name.Substring($p2.Length)] = $_.Value }
+                        $p1 = "$varGroupName."
+                        Get-ChildItem Env: |
+                          Where-Object { $_.Name -like "$p1*" -and $_.Value -and $_.Value.Trim() -ne "" } |
+                          ForEach-Object {
+                            $suffix = $_.Name.Substring($p1.Length)
+                            $normalized = $suffix
+                            if ($normalized -notmatch ':') {
+                              if ($normalized -match '__') { $normalized = $normalized -replace '__', ':' }
+                            }
+                            if ($normalized -notmatch ':') {
+                              if ($normalized -match '_') { $parts = $normalized -split '_', 2; if ($parts.Length -eq 2) { $normalized = $parts[0] + ':' + $parts[1] } }
+                            }
+                            $siteVariables[$normalized] = $_.Value
+                          }
+                        $p2 = "$varGroupName" + "_"
+                        Get-ChildItem Env: |
+                          Where-Object { $_.Name -like "$p2*" -and $_.Value -and $_.Value.Trim() -ne "" } |
+                          ForEach-Object {
+                            $suffix = $_.Name.Substring($p2.Length)
+                            $normalized = $suffix
+                            if ($normalized -notmatch ':') {
+                              if ($normalized -match '__') { $normalized = $normalized -replace '__', ':' }
+                            }
+                            if ($normalized -notmatch ':') {
+                              if ($normalized -match '_') { $parts = $normalized -split '_', 2; if ($parts.Length -eq 2) { $normalized = $parts[0] + ':' + $parts[1] } }
+                            }
+                            $siteVariables[$normalized] = $_.Value
+                          }
                         return $siteVariables }
                       function Set-JsonValue { param([hashtable]$jsonObj, [string]$path, [string]$value)
                         $segments = $path -split ':'
@@ -323,12 +354,29 @@ stages:
                           }
                         }
                       }
+                      function ConvertTo-Hashtable { param($obj)
+                        if ($null -eq $obj) { return $null }
+                        if ($obj -is [System.Collections.IDictionary]) {
+                          $h = @{}
+                          foreach ($k in $obj.Keys) { $h[$k] = ConvertTo-Hashtable $obj[$k] }
+                          return $h
+                        } elseif ($obj -is [System.Collections.IEnumerable] -and -not ($obj -is [string])) {
+                          $list = @()
+                          foreach ($i in $obj) { $list += ,(ConvertTo-Hashtable $i) }
+                          return $list
+                        } elseif ($obj -is [pscustomobject]) {
+                          $h = @{}
+                          $obj.PSObject.Properties | ForEach-Object { $h[$_.Name] = ConvertTo-Hashtable $_.Value }
+                          return $h
+                        } else { return $obj }
+                      }
                       function Process-AppSettings { param($rootPath, $variables)
                         $appSettingsPath = Join-Path $rootPath "appsettings.json"
                         if (-not (Test-Path $appSettingsPath)) { return @{ Updated = 0; Skipped = 0; Errors = 1 } }
                         try {
                           $jsonText = Get-Content $appSettingsPath -Raw -ErrorAction Stop
-                          $jsonObj = ConvertFrom-Json -InputObject $jsonText -AsHashtable
+                          $jsonParsed = ConvertFrom-Json -InputObject $jsonText
+                          $jsonObj = ConvertTo-Hashtable $jsonParsed
                           $updated = 0; $skipped = 0
                           foreach ($entry in $variables.GetEnumerator()) {
                             if (-not [string]::IsNullOrWhiteSpace($entry.Value)) {
@@ -345,10 +393,13 @@ stages:
                       foreach ($s in $stakeholders) {
                         if ($s.Deploy -ne "true") { continue }
                         $vars = Get-SITVariables $s.VarGroup
-                        if ($vars.Count -eq 0) { continue }
+                        Write-Host "[InjectConfig] Group=$($s.VarGroup) Site=$($s.Name) VarsFound=$($vars.Count)"
+                        if ($vars.Count -eq 0) { Write-Host "[InjectConfig] No variables found for $($s.VarGroup); skipping $($s.Name)"; continue }
                         $res = Process-AppSettings $s.Path $vars
+                        Write-Host "[InjectConfig] Updated=$($res.Updated) Skipped=$($res.Skipped) Errors=$($res.Errors) Path=$($s.Path)"
                         $totalUpdated += $res.Updated; $totalSkipped += $res.Skipped; $processed++
                       }
+                      Write-Host "[InjectConfig] SitesProcessed=$processed TotalUpdated=$totalUpdated TotalSkipped=$totalSkipped"
 
   - stage: Permissions
     displayName: 'Set Permissions'
