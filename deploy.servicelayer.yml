@@ -61,7 +61,7 @@ variables:
 
 resources:
   pipelines:
-  - pipeline: 'MasterData.ServiceLayer'
+  - pipeline: 'ServiceLayer'
     project: 'MasterData'
     source: 'MasterData.ServiceLayer'
 
@@ -168,7 +168,7 @@ stages:
           runOnce:
             deploy:
               steps:
-                - download: 'MasterData.ServiceLayer'
+                - download: 'ServiceLayer'
                   displayName: 'Download artifacts'
                   artifact: 'webapi-drop'
                 - task: PowerShell@2
