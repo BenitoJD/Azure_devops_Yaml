@@ -197,7 +197,7 @@ stages:
         displayName: 'Ensure sites and app pools'
         environment:
           name: SIT
-        resourceType: virtualMachine
+          resourceType: virtualMachine
         strategy:
           runOnce:
             deploy:
