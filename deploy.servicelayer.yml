@@ -392,7 +392,10 @@ stages:
                           try { $fi = Get-Item -LiteralPath $appSettingsPath -ErrorAction Stop; if ($fi.Attributes -band [IO.FileAttributes]::ReadOnly) { Attrib -R $appSettingsPath } } catch {}
                           ($jsonObj | ConvertTo-Json -Depth 50) | Out-File -FilePath $appSettingsPath -Encoding UTF8 -Force
                           return @{ Updated = $updated; Skipped = $skipped; Errors = 0 }
-                        } catch { Write-Host "[InjectConfig] JSON parse/update failed at $appSettingsPath: $($_.Exception.Message)"; return @{ Updated = 0; Skipped = 0; Errors = 1 } }
+                        } catch {
+                          Write-Host ("[InjectConfig] JSON parse/update failed at {0}: {1}" -f $appSettingsPath, $_.Exception.Message)
+                          return @{ Updated = 0; Skipped = 0; Errors = 1 }
+                        }
                       }
                       $totalUpdated = 0; $totalSkipped = 0; $processed = 0
                       foreach ($s in $stakeholders) {
