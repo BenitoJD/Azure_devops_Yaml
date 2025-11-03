@@ -6,6 +6,10 @@ trigger: none
 name: $(SourceBranchName)_$(Date:yyyyMMdd)$(Rev:.r)
 
 parameters:
+  - name: PipelineSource
+    displayName: 'Build pipeline name to download artifacts from'
+    type: string
+    default: 'MasterData.ServiceLayer'
   - name: DeployIT1
     displayName: 'Deploy IT1.API.MasterData.com'
     type: boolean
@@ -63,7 +67,7 @@ resources:
   pipelines:
   - pipeline: 'ServiceLayer'
     project: 'MasterData'
-    source: 'MasterData.ServiceLayer'
+    source: ${{ parameters.PipelineSource }}
 
 stages:
   - stage: Initialize
