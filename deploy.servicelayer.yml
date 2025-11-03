@@ -190,7 +190,7 @@ stages:
                 - task: ExtractFiles@1
                   displayName: 'Extract artifacts'
                   inputs:
-                    archiveFilePatterns: '$(Pipeline.Workspace)/MasterData.ServiceLayer/webapi-drop/*.zip'
+                    archiveFilePatterns: '$(Pipeline.Workspace)/ServiceLayer/webapi-drop/*.zip'
                     destinationFolder: '$(DeploymentBasePath)'
                     cleanDestinationFolder: true
                     overwriteExistingFiles: true
