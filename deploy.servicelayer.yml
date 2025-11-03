@@ -370,16 +370,80 @@ stages:
                           return $h
                         } else { return $obj }
                       }
+                      function Remove-JsonComments {
+                        param([string]$text)
+                        $sb = New-Object System.Text.StringBuilder
+                        $inString = $false
+                        $escape = $false
+                        $i = 0
+                        while ($i -lt $text.Length) {
+                          $ch = $text[$i]
+                          if ($inString) {
+                            $sb.Append($ch) | Out-Null
+                            if ($escape) { $escape = $false }
+                            elseif ($ch -eq '\\') { $escape = $true }
+                            elseif ($ch -eq '"') { $inString = $false }
+                            $i++
+                            continue
+                          }
+                          if ($ch -eq '"') { $inString = $true; $sb.Append($ch) | Out-Null; $i++; continue }
+                          if ($ch -eq '/' -and ($i + 1) -lt $text.Length) {
+                            $next = $text[$i+1]
+                            if ($next -eq '/') {
+                              # line comment, skip until newline
+                              $i += 2
+                              while ($i -lt $text.Length -and $text[$i] -ne "`n" -and $text[$i] -ne "`r") { $i++ }
+                              continue
+                            }
+                            if ($next -eq '*') {
+                              # block comment, skip until */
+                              $i += 2
+                              while ($i + 1 -lt $text.Length -and -not ($text[$i] -eq '*' -and $text[$i+1] -eq '/')) { $i++ }
+                              if ($i + 1 -lt $text.Length) { $i += 2 }
+                              continue
+                            }
+                          }
+                          $sb.Append($ch) | Out-Null
+                          $i++
+                        }
+                        return $sb.ToString()
+                      }
+                      function Remove-TrailingCommas {
+                        param([string]$text)
+                        $sb = New-Object System.Text.StringBuilder
+                        $inString = $false
+                        $escape = $false
+                        for ($i = 0; $i -lt $text.Length; $i++) {
+                          $ch = $text[$i]
+                          if ($inString) {
+                            $sb.Append($ch) | Out-Null
+                            if ($escape) { $escape = $false }
+                            elseif ($ch -eq '\\') { $escape = $true }
+                            elseif ($ch -eq '"') { $inString = $false }
+                            continue
+                          }
+                          if ($ch -eq '"') { $inString = $true; $sb.Append($ch) | Out-Null; continue }
+                          if ($ch -eq ',') {
+                            # lookahead for only whitespace then } or ]
+                            $j = $i + 1
+                            while ($j -lt $text.Length -and [char]::IsWhiteSpace($text[$j])) { $j++ }
+                            if ($j -lt $text.Length -and ($text[$j] -eq '}' -or $text[$j] -eq ']')) {
+                              # skip this comma
+                              continue
+                            }
+                          }
+                          $sb.Append($ch) | Out-Null
+                        }
+                        return $sb.ToString()
+                      }
                       function Process-AppSettings { param($rootPath, $variables)
                         $appSettingsPath = Join-Path $rootPath "appsettings.json"
                         if (-not (Test-Path $appSettingsPath)) { Write-Host "[InjectConfig] Missing appsettings.json at $appSettingsPath"; return @{ Updated = 0; Skipped = 0; Errors = 1 } }
                         try {
                           $jsonText = Get-Content $appSettingsPath -Raw -ErrorAction Stop
-                          # Tolerate comments and trailing commas in appsettings.json
-                          $noLineComments = $jsonText -replace '(?m)//.*$', ''
-                          $noBlockComments = [System.Text.RegularExpressions.Regex]::Replace($noLineComments, '/\*.*?\*/', '', [System.Text.RegularExpressions.RegexOptions]::Singleline)
-                          $noTrailingCommas = [System.Text.RegularExpressions.Regex]::Replace($noBlockComments, ',\s*(?=[}\]])', '')
-                          $jsonParsed = ConvertFrom-Json -InputObject $noTrailingCommas
+                          $clean = Remove-JsonComments -text $jsonText
+                          $clean = Remove-TrailingCommas -text $clean
+                          $jsonParsed = ConvertFrom-Json -InputObject $clean
                           $jsonObj = ConvertTo-Hashtable $jsonParsed
                           $updated = 0; $skipped = 0
                           foreach ($entry in $variables.GetEnumerator()) {
