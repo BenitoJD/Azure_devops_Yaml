@@ -67,7 +67,7 @@ resources:
   pipelines:
   - pipeline: 'ServiceLayer'
     project: 'MasterData'
-    source: ${{ parameters.PipelineSource }}
+    source: 'MasterData.ServiceLayer'
 
 stages:
   - stage: Initialize
