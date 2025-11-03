@@ -114,9 +114,50 @@ stages:
                       $newName = "${definitionName}_${branchName}_$date_Sites[$sitesList]"
                       Write-Host "##vso[build.updatebuildnumber]$newName"
 
+  - stage: Diagnostics
+    displayName: 'Diagnostics - Environment Variables'
+    dependsOn: Initialize
+    condition: succeeded()
+    variables:
+      - group: SIT_IT1_API
+      - group: SIT_IT2_API
+      - group: SIT_IT3_API
+      - group: SIT_IT4_API
+    jobs:
+      - deployment: Dump_Env
+        displayName: 'Dump environment variables'
+        environment:
+          name: SIT
+          resourceType: virtualMachine
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: none
+                - task: PowerShell@2
+                  displayName: 'Print environment variables'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      Write-Host "BuildNumber=$(BuildNumber)"
+                      Write-Host "BranchName=$(BranchName)"
+                      Write-Host "SelectedSites=$(SelectedSites)"
+                      Write-Host "---- All environment variables ----"
+                      Get-ChildItem Env: | Sort-Object Name | ForEach-Object { Write-Host "$($_.Name)=$($_.Value)" }
+                - task: PowerShell@2
+                  displayName: 'Print SIT_* variable group mapped env vars'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      $prefixes = @('SIT_IT1_API.', 'SIT_IT1_API_', 'SIT_IT2_API.', 'SIT_IT2_API_', 'SIT_IT3_API.', 'SIT_IT3_API_', 'SIT_IT4_API.', 'SIT_IT4_API_')
+                      foreach ($p in $prefixes) {
+                        Write-Host "--- Variables with prefix '$p' ---"
+                        Get-ChildItem Env: | Where-Object { $_.Name -like "$p*" } | Sort-Object Name | ForEach-Object { Write-Host "$($_.Name)=$($_.Value)" }
+                      }
+
   - stage: AcquireArtifacts
     displayName: 'Acquire Artifacts'
-    dependsOn: Initialize
+    dependsOn: Diagnostics
     condition: succeeded()
     jobs:
       - deployment: Acquire
