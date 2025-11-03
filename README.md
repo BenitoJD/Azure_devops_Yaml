@@ -1,12 +1,5 @@
 # Independent Stakeholder Website Deployment Pipeline
 
-## Primary Pipeline (Staged)
-
-- Use `deploy.yml` as the main, staged pipeline. It splits the flow into clear stages: Initialize → AcquireArtifacts → Backup → ConfigureIIS → DeployFiles → InjectConfiguration → Permissions → RestartServices.
-- `diagnostic.yml` remains available to inspect environment/variable group behavior when needed.
-
----
-
 This pipeline deploys 4 **independent main websites** for different stakeholders with branch-based naming and version management capabilities.
 
 ## Features
