@@ -372,10 +372,14 @@ stages:
                       }
                       function Process-AppSettings { param($rootPath, $variables)
                         $appSettingsPath = Join-Path $rootPath "appsettings.json"
-                        if (-not (Test-Path $appSettingsPath)) { return @{ Updated = 0; Skipped = 0; Errors = 1 } }
+                        if (-not (Test-Path $appSettingsPath)) { Write-Host "[InjectConfig] Missing appsettings.json at $appSettingsPath"; return @{ Updated = 0; Skipped = 0; Errors = 1 } }
                         try {
                           $jsonText = Get-Content $appSettingsPath -Raw -ErrorAction Stop
-                          $jsonParsed = ConvertFrom-Json -InputObject $jsonText
+                          # Tolerate comments and trailing commas in appsettings.json
+                          $noLineComments = $jsonText -replace '(?m)//.*$', ''
+                          $noBlockComments = [System.Text.RegularExpressions.Regex]::Replace($noLineComments, '/\*.*?\*/', '', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+                          $noTrailingCommas = [System.Text.RegularExpressions.Regex]::Replace($noBlockComments, ',\s*(?=[}\]])', '')
+                          $jsonParsed = ConvertFrom-Json -InputObject $noTrailingCommas
                           $jsonObj = ConvertTo-Hashtable $jsonParsed
                           $updated = 0; $skipped = 0
                           foreach ($entry in $variables.GetEnumerator()) {
@@ -385,9 +389,10 @@ stages:
                             } else { $skipped++ }
                           }
                           $backupPath = "$appSettingsPath.backup.$(Get-Date -Format 'yyyyMMdd_HHmmss')"; Copy-Item $appSettingsPath $backupPath -Force
+                          try { $fi = Get-Item -LiteralPath $appSettingsPath -ErrorAction Stop; if ($fi.Attributes -band [IO.FileAttributes]::ReadOnly) { Attrib -R $appSettingsPath } } catch {}
                           ($jsonObj | ConvertTo-Json -Depth 50) | Out-File -FilePath $appSettingsPath -Encoding UTF8 -Force
                           return @{ Updated = $updated; Skipped = $skipped; Errors = 0 }
-                        } catch { return @{ Updated = 0; Skipped = 0; Errors = 1 } }
+                        } catch { Write-Host "[InjectConfig] JSON parse/update failed at $appSettingsPath: $($_.Exception.Message)"; return @{ Updated = 0; Skipped = 0; Errors = 1 } }
                       }
                       $totalUpdated = 0; $totalSkipped = 0; $processed = 0
                       foreach ($s in $stakeholders) {
