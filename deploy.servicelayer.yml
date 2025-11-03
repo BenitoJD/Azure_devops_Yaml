@@ -61,10 +61,9 @@ variables:
 
 resources:
   pipelines:
-   - pipeline: 'MasterData.ServiceLayer'
-     project: 'MasterData'
-     source: 'MasterData.ServiceLayer'
-     branch: 'MDVersionUpgrade/Lonestar'
+  - pipeline: 'MasterData.ServiceLayer'
+    project: 'MasterData'
+    source: 'MasterData.ServiceLayer'
 
 stages:
   - stage: Initialize
