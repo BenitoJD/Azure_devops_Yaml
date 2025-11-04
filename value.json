@@ -1,0 +1,252 @@
+{
+    "MongoDatabaseSettings": {
+      "DatabaseName": "${MongoDatabaseSettings_Name}",
+      "ConnectionString": "${MongoDatabaseSettings_ConnectionString}"
+    },
+    "Logging": {
+      "LogLevel": {
+        "Default": "Warning"
+      }
+    },
+    "AllowedHosts": "*",
+    "MasterDataSettings": {
+      "includeTestStores": "${MasterDataSettings_includeTestStores}",
+      "MasterDataKey": "${MasterDataSettings_MasterDataKey}",
+      "MD_DBCon": "${MasterDataSettings_MD_DBCon}",
+      "MDIS_DBCon": "${MasterDataSettings_MDIS_DBCon}"
+    },
+    "3rdPartySettings": {
+      "Clients": [
+        {
+          "Name": "AHDL",
+          "Key": "b2e36256-1c97-4aef-a708-e7a8dfc90c29",
+          "Routes": [
+            {
+              "EndPoint": "api/DataRefresh/AH/Update"
+            }
+          ]
+        }
+      ]
+    },
+  
+    "NamespacePrefixes": {
+      "Namespaces": [
+        {
+          "Prefix": "xsi",
+          "Namespace": "http://www.w3.org/2001/XMLSchema-instance",
+          "AlwaysInclude": true
+        },
+        {
+          "Namespace": "tsf.productdatamanagement.common",
+          "Prefix": "prd-common",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.prescriptiondispensing.common",
+          "Prefix": "prs-common",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.storedatamanagement.common",
+          "Prefix": "str-common",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.prescriberdatamanagement.common",
+          "Prefix": "pdm-common",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.applicationmanagement.common",
+          "Prefix": "apm-common",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.ordervendormanagement.common",
+          "Prefix": "ord-common",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.patientdatamanagement.api.createUpdateAdverseReaction",
+          "Prefix": "IF101.01",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.patientdatamanagement.api.createUpdateExemption",
+          "Prefix": "IF101.02",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.productdatamanagement.api.createUpdateProductFlavour",
+          "Prefix": "IF101.03",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.prescriptiondispensing.api.createUpdateFormulary",
+          "Prefix": "IF101.04",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.patientdatamanagement.api.createUpdateMedicalCondition",
+          "Prefix": "IF101.05",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.prescriberdatamanagement.api.createUpdatePrescriberType",
+          "Prefix": "IF101.06",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.prescriptiondispensing.api.createUpdatePrescriptionFormType",
+          "Prefix": "IF101.07",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.prescriptiondispensing.api.createUpdateClinicalService",
+          "Prefix": "IF101.27",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.supplierdatamanagement.api.createUpdateSupplier",
+          "Prefix": "IF101.11",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.productdatamanagement.api.createUpdateUnitOfMeasure",
+          "Prefix": "IF101.12",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.applicationmanagement.api.createUpdateGeneralParameter",
+          "Prefix": "IF101.14",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.reimbursement.api.createUpdateLevyFee",
+          "Prefix": "IF101.21",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.productdatamanagement.api.createUpdateFormulation",
+          "Prefix": "IF101.22",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.prescriptiondispensing.api.createUpdateEpsResponseMessage",
+          "Prefix": "IF101.23",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.messaginggateway.api.createUpdateMessageReasons",
+          "Prefix": "IF101.24",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.newmedicineservice.api.createUpdateSAPArticle",
+          "Prefix": "IF101.30",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.ordervendormanagement.api.createUpdateOrderVendor",
+          "Prefix": "IF101.32",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.ordervendormanagement.api.createUpdateOrderVendorHierarchy",
+          "Prefix": "IF101.33",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.ordervendormanagement.api.createUpdateOrderService",
+          "Prefix": "IF101.34",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.prescriberdatamanagement.api.createUpdatePrescriber",
+          "Prefix": "IF102.01",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.prescriberdatamanagement.api.createUpdatePractice",
+          "Prefix": "IF102.02",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.productdatamanagement.api.createUpdateProduct",
+          "Prefix": "IF103.01",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.productdatamanagement.api.createUpdateLabelInstruction",
+          "Prefix": "IF103.03",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.productdatamanagement.api.createUpdateProductSKU",
+          "Prefix": "IF103.04",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.productdatamanagement.api.createUpdateActualProductPack",
+          "Prefix": "IF103.07",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.productdatamanagement.api.createUpdateHandoutPrompt",
+          "Prefix": "IF254.01",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.productdatamanagement.api.createUpdatePreferredProductSKU",
+          "Prefix": "IF105.01",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.productdatamanagement.api.createUpdatePreferredActualProductPack",
+          "Prefix": "IF105.02",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.productdatamanagement.api.createUpdateStoreGroup",
+          "Prefix": "IF105.03",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.storedatamanagement.api.createUpdateSite",
+          "Prefix": "IF108.01",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.storedatamanagement.api.createUpdateStoreServiceCentreLink",
+          "Prefix": "IF108.02",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.applicationmanagement.api.createUpdateMasterDataVersion",
+          "Prefix": "apm",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.productdatamanagement.api.createUpdateProductBarcode",
+          "Prefix": "prd",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.productdatamanagement.api.createUpdateProductGtin",
+          "Prefix": "prd",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.productdatamanagement.api.createUpdateProductLogistics",
+          "Prefix": "prd",
+          "AlwaysInclude": false
+        },
+        {
+          "Namespace": "tsf.productdatamanagement.api.createUpdateRegionalHubProduct",
+          "Prefix": "IF248.01",
+          "AlwaysInclude": false
+        }
+      ]
+    }
+  }
+  
