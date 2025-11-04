@@ -496,7 +496,7 @@ stages:
                         $value = $v.Value
                         Write-Host " - $($v.Name) -> $name"
                         Write-Host "##vso[task.setvariable variable=$name]$value"
-                        $env:$name = $value
+                        Set-Item "Env:$name" $value
                       }
                 - task: qetza.replacetokens.replacetokens-task.replacetokens@5
                   displayName: 'Replace tokens in appsettings.json - IT1'
@@ -525,7 +525,7 @@ stages:
                         $value = $v.Value
                         Write-Host " - $($v.Name) -> $name"
                         Write-Host "##vso[task.setvariable variable=$name]$value"
-                        $env:$name = $value
+                        Set-Item "Env:$name" $value
                       }
                 - task: qetza.replacetokens.replacetokens-task.replacetokens@5
                   displayName: 'Replace tokens in appsettings.json - IT2'
@@ -554,7 +554,7 @@ stages:
                         $value = $v.Value
                         Write-Host " - $($v.Name) -> $name"
                         Write-Host "##vso[task.setvariable variable=$name]$value"
-                        $env:$name = $value
+                        Set-Item "Env:$name" $value
                       }
                 - task: qetza.replacetokens.replacetokens-task.replacetokens@5
                   displayName: 'Replace tokens in appsettings.json - IT3'
@@ -583,7 +583,7 @@ stages:
                         $value = $v.Value
                         Write-Host " - $($v.Name) -> $name"
                         Write-Host "##vso[task.setvariable variable=$name]$value"
-                        $env:$name = $value
+                        Set-Item "Env:$name" $value
                       }
                 - task: qetza.replacetokens.replacetokens-task.replacetokens@5
                   displayName: 'Replace tokens in appsettings.json - IT4'
