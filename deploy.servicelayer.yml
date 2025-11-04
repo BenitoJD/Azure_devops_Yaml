@@ -114,6 +114,32 @@ stages:
                       $newName = "${definitionName}_${branchName}_$date_Sites[$sitesList]"
                       Write-Host "##vso[build.updatebuildnumber]$newName"
 
+  - stage: Diagnose
+    displayName: 'Diagnose environment variables'
+    dependsOn: Initialize
+    condition: succeeded()
+    jobs:
+      - deployment: Diagnose_Env
+        displayName: 'Dump env and check variable'
+        environment:
+          name: SIT
+          resourceType: virtualMachine
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: none
+                - task: PowerShell@2
+                  displayName: 'Dump environment variables'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      Write-Host "Agent: $env:AGENT_NAME | Machine: $env:COMPUTERNAME | OS: $env:OS"
+                      Write-Host "Build: $env:BUILD_BUILDNUMBER | Definition: $env:BUILD_DEFINITIONNAME | Branch: $env:BUILD_SOURCEBRANCHNAME"
+                      Write-Host "--- BEGIN ENV ---"
+                      Get-ChildItem Env: | Sort-Object Name | ForEach-Object { Write-Host ("{0}={1}" -f $_.Name, $_.Value) }
+                      Write-Host "--- END ENV ---"
+
   - stage: AcquireArtifacts
     displayName: 'Acquire Artifacts'
     dependsOn: Initialize
