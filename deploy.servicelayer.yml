@@ -387,11 +387,14 @@ stages:
                           [string]$newValue
                         )
                         $escaped = Escape-JsonString $newValue
-                        $pattern = '(?mi)("' + [Regex]::Escape($leafKey) + '"\s*:\s*)"[^"]*"'
+                        $pattern1 = '(?mi)("' + [Regex]::Escape($leafKey) + '"\s*:\s*)"[^"]*"'
                         $replacement = '$1"' + $escaped + '"'
-                        $newText = [Regex]::Replace($jsonText, $pattern, $replacement, 1)
-                        $changed = -not ($newText -eq $jsonText)
-                        return @{ Text = $newText; Changed = $changed }
+                        $newText = [Regex]::Replace($jsonText, $pattern1, $replacement, 1)
+                        if (-not ($newText -eq $jsonText)) { return @{ Text = $newText; Changed = $true } }
+                        $pattern2 = '(?mi)("' + [Regex]::Escape($leafKey) + '"\s*:\s*)("[^"]*"|\d+|true|false|null)'
+                        $newText2 = [Regex]::Replace($jsonText, $pattern2, $replacement, 1)
+                        $changed2 = -not ($newText2 -eq $jsonText)
+                        return @{ Text = $newText2; Changed = $changed2 }
                       }
                       function Process-AppSettings { param($rootPath, $variables)
                         $appSettingsPath = Join-Path $rootPath "appsettings.json"
