@@ -297,137 +297,105 @@ stages:
           runOnce:
             deploy:
               steps:
+                # IT1 – prepare variables without prefix and run File Transform
                 - task: PowerShell@2
-                  displayName: 'Inject configuration into appsettings.json'
+                  displayName: 'Prepare variables for transform - IT1'
+                  condition: and(succeeded(), eq(variables['Deploy.IT1'], 'true'))
                   inputs:
                     targetType: 'inline'
                     script: |
-                      $stakeholders = @(
-                        @{Name="$(Stakeholder1.Name)"; Path="$(Stakeholder1.PhysicalPath)"; Deploy="$(Deploy.IT1)"; VarGroup="SIT_IT1_API"},
-                        @{Name="$(Stakeholder2.Name)"; Path="$(Stakeholder2.PhysicalPath)"; Deploy="$(Deploy.IT2)"; VarGroup="SIT_IT2_API"},
-                        @{Name="$(Stakeholder3.Name)"; Path="$(Stakeholder3.PhysicalPath)"; Deploy="$(Deploy.IT3)"; VarGroup="SIT_IT3_API"},
-                        @{Name="$(Stakeholder4.Name)"; Path="$(Stakeholder4.PhysicalPath)"; Deploy="$(Deploy.IT4)"; VarGroup="SIT_IT4_API"}
-                      )
-                      function Get-SITVariables { param($varGroupName)
-                        $siteVariables = @{}
-                        $p1 = "$varGroupName."
+                      $prefixes = @('SIT_IT1_API.', 'SIT_IT1_API_')
+                      foreach ($p in $prefixes) {
                         Get-ChildItem Env: |
-                          Where-Object { $_.Name -like "$p1*" -and $_.Value -and $_.Value.Trim() -ne "" } |
+                          Where-Object { $_.Name -like "$p*" -and $_.Value -and $_.Value.Trim() -ne '' } |
                           ForEach-Object {
-                            $suffix = $_.Name.Substring($p1.Length)
-                            $normalized = $suffix
-                            if ($normalized -notmatch ':') {
-                              if ($normalized -match '__') { $normalized = $normalized -replace '__', ':' }
-                            }
-                            if ($normalized -notmatch ':') {
-                              if ($normalized -match '_') { $parts = $normalized -split '_', 2; if ($parts.Length -eq 2) { $normalized = $parts[0] + ':' + $parts[1] } }
-                            }
-                            $siteVariables[$normalized] = $_.Value
+                            $suffix = $_.Name.Substring($p.Length)
+                            $name = $suffix -replace '__','.' -replace '_','.'
+                            Write-Host "##vso[task.setvariable variable=$name]$($_.Value)"
                           }
-                        $p2 = "$varGroupName" + "_"
+                      }
+                - task: FileTransform@1
+                  displayName: 'JSON variable substitution - IT1'
+                  condition: and(succeeded(), eq(variables['Deploy.IT1'], 'true'))
+                  inputs:
+                    folderPath: '$(Stakeholder1.PhysicalPath)'
+                    fileType: 'json'
+                    targetFiles: 'appsettings.json'
+
+                # IT2 – prepare variables without prefix and run File Transform
+                - task: PowerShell@2
+                  displayName: 'Prepare variables for transform - IT2'
+                  condition: and(succeeded(), eq(variables['Deploy.IT2'], 'true'))
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      $prefixes = @('SIT_IT2_API.', 'SIT_IT2_API_')
+                      foreach ($p in $prefixes) {
                         Get-ChildItem Env: |
-                          Where-Object { $_.Name -like "$p2*" -and $_.Value -and $_.Value.Trim() -ne "" } |
+                          Where-Object { $_.Name -like "$p*" -and $_.Value -and $_.Value.Trim() -ne '' } |
                           ForEach-Object {
-                            $suffix = $_.Name.Substring($p2.Length)
-                            $normalized = $suffix
-                            if ($normalized -notmatch ':') {
-                              if ($normalized -match '__') { $normalized = $normalized -replace '__', ':' }
-                            }
-                            if ($normalized -notmatch ':') {
-                              if ($normalized -match '_') { $parts = $normalized -split '_', 2; if ($parts.Length -eq 2) { $normalized = $parts[0] + ':' + $parts[1] } }
-                            }
-                            $siteVariables[$normalized] = $_.Value
+                            $suffix = $_.Name.Substring($p.Length)
+                            $name = $suffix -replace '__','.' -replace '_','.'
+                            Write-Host "##vso[task.setvariable variable=$name]$($_.Value)"
                           }
-                        return $siteVariables }
-                      function Set-JsonValue { param([hashtable]$jsonObj, [string]$path, [string]$value)
-                        $segments = $path -split ':'
-                        $current = $jsonObj
-                        for ($i = 0; $i -lt $segments.Length; $i++) {
-                          $key = $segments[$i]
-                          $actualKey = ($current.Keys | Where-Object { $_ -ieq $key } | Select-Object -First 1)
-                          if (-not $actualKey) { return $false } # do not create missing nodes
-                          if ($i -eq $segments.Length - 1) {
-                            $current[$actualKey] = $value
-                            return $true
-                          } else {
-                            if ($current[$actualKey] -is [hashtable]) {
-                              $current = $current[$actualKey]
-                            } else {
-                              return $false
-                            }
+                      }
+                - task: FileTransform@1
+                  displayName: 'JSON variable substitution - IT2'
+                  condition: and(succeeded(), eq(variables['Deploy.IT2'], 'true'))
+                  inputs:
+                    folderPath: '$(Stakeholder2.PhysicalPath)'
+                    fileType: 'json'
+                    targetFiles: 'appsettings.json'
+
+                # IT3 – prepare variables without prefix and run File Transform
+                - task: PowerShell@2
+                  displayName: 'Prepare variables for transform - IT3'
+                  condition: and(succeeded(), eq(variables['Deploy.IT3'], 'true'))
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      $prefixes = @('SIT_IT3_API.', 'SIT_IT3_API_')
+                      foreach ($p in $prefixes) {
+                        Get-ChildItem Env: |
+                          Where-Object { $_.Name -like "$p*" -and $_.Value -and $_.Value.Trim() -ne '' } |
+                          ForEach-Object {
+                            $suffix = $_.Name.Substring($p.Length)
+                            $name = $suffix -replace '__','.' -replace '_','.'
+                            Write-Host "##vso[task.setvariable variable=$name]$($_.Value)"
                           }
-                        }
-                        return $false
                       }
-                      function ConvertTo-Hashtable { param($obj)
-                        if ($null -eq $obj) { return $null }
-                        if ($obj -is [System.Collections.IDictionary]) {
-                          $h = @{}
-                          foreach ($k in $obj.Keys) { $h[$k] = ConvertTo-Hashtable $obj[$k] }
-                          return $h
-                        } elseif ($obj -is [System.Collections.IEnumerable] -and -not ($obj -is [string])) {
-                          $list = @()
-                          foreach ($i in $obj) { $list += ,(ConvertTo-Hashtable $i) }
-                          return $list
-                        } elseif ($obj -is [pscustomobject]) {
-                          $h = @{}
-                          $obj.PSObject.Properties | ForEach-Object { $h[$_.Name] = ConvertTo-Hashtable $_.Value }
-                          return $h
-                        } else { return $obj }
-                      }
-                      # Simplified parsing: appsettings.json is strict JSON, no comment handling needed
-                      function Escape-JsonString { param([string]$v)
-                        if ($null -eq $v) { return '' }
-                        return ($v -replace '\\','\\\\' -replace '"','\\"')
-                      }
-                      function Replace-JsonLeafValueInText {
-                        param(
-                          [string]$jsonText,
-                          [string]$leafKey,
-                          [string]$newValue
-                        )
-                        $escaped = Escape-JsonString $newValue
-                        $pattern1 = '(?mi)("' + [Regex]::Escape($leafKey) + '"\s*:\s*)"[^"]*"'
-                        $replacement = '$1"' + $escaped + '"'
-                        $newText = [Regex]::Replace($jsonText, $pattern1, $replacement, 1)
-                        if (-not ($newText -eq $jsonText)) { return @{ Text = $newText; Changed = $true } }
-                        $pattern2 = '(?mi)("' + [Regex]::Escape($leafKey) + '"\s*:\s*)("[^"]*"|\d+|true|false|null)'
-                        $newText2 = [Regex]::Replace($jsonText, $pattern2, $replacement, 1)
-                        $changed2 = -not ($newText2 -eq $jsonText)
-                        return @{ Text = $newText2; Changed = $changed2 }
-                      }
-                      function Process-AppSettings { param($rootPath, $variables)
-                        $appSettingsPath = Join-Path $rootPath "appsettings.json"
-                        if (-not (Test-Path $appSettingsPath)) { Write-Host "[InjectConfig] Missing appsettings.json at $appSettingsPath"; return @{ Updated = 0; Skipped = 0; Errors = 1 } }
-                        try {
-                          $text = Get-Content $appSettingsPath -Raw -ErrorAction Stop
-                          $updated = 0; $skipped = 0
-                          foreach ($entry in $variables.GetEnumerator()) {
-                            if ([string]::IsNullOrWhiteSpace($entry.Value)) { $skipped++; continue }
-                            $leaf = ($entry.Key -split ':')[-1]
-                            $res = Replace-JsonLeafValueInText -jsonText $text -leafKey $leaf -newValue $entry.Value
-                            if ($res.Changed) { $text = $res.Text; $updated++; Write-Host "[InjectConfig] UpdatedKey=$leaf" } else { $skipped++; Write-Host "[InjectConfig] SkippedKey=$leaf (not found)" }
+                - task: FileTransform@1
+                  displayName: 'JSON variable substitution - IT3'
+                  condition: and(succeeded(), eq(variables['Deploy.IT3'], 'true'))
+                  inputs:
+                    folderPath: '$(Stakeholder3.PhysicalPath)'
+                    fileType: 'json'
+                    targetFiles: 'appsettings.json'
+
+                # IT4 – prepare variables without prefix and run File Transform
+                - task: PowerShell@2
+                  displayName: 'Prepare variables for transform - IT4'
+                  condition: and(succeeded(), eq(variables['Deploy.IT4'], 'true'))
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      $prefixes = @('SIT_IT4_API.', 'SIT_IT4_API_')
+                      foreach ($p in $prefixes) {
+                        Get-ChildItem Env: |
+                          Where-Object { $_.Name -like "$p*" -and $_.Value -and $_.Value.Trim() -ne '' } |
+                          ForEach-Object {
+                            $suffix = $_.Name.Substring($p.Length)
+                            $name = $suffix -replace '__','.' -replace '_','.'
+                            Write-Host "##vso[task.setvariable variable=$name]$($_.Value)"
                           }
-                          $backupPath = "$appSettingsPath.backup.$(Get-Date -Format 'yyyyMMdd_HHmmss')"; Copy-Item $appSettingsPath $backupPath -Force
-                          try { $fi = Get-Item -LiteralPath $appSettingsPath -ErrorAction Stop; if ($fi.Attributes -band [IO.FileAttributes]::ReadOnly) { Attrib -R $appSettingsPath } } catch {}
-                          $text | Out-File -FilePath $appSettingsPath -Encoding UTF8 -Force
-                          return @{ Updated = $updated; Skipped = $skipped; Errors = 0 }
-                        } catch {
-                          Write-Host ("[InjectConfig] Text replacement failed at {0}: {1}" -f $appSettingsPath, $_.Exception.Message)
-                          return @{ Updated = 0; Skipped = 0; Errors = 1 }
-                        }
                       }
-                      $totalUpdated = 0; $totalSkipped = 0; $processed = 0
-                      foreach ($s in $stakeholders) {
-                        if ($s.Deploy -ne "true") { continue }
-                        $vars = Get-SITVariables $s.VarGroup
-                        Write-Host "[InjectConfig] Group=$($s.VarGroup) Site=$($s.Name) VarsFound=$($vars.Count)"
-                        if ($vars.Count -eq 0) { Write-Host "[InjectConfig] No variables found for $($s.VarGroup); skipping $($s.Name)"; continue }
-                        $res = Process-AppSettings $s.Path $vars
-                        Write-Host "[InjectConfig] Updated=$($res.Updated) Skipped=$($res.Skipped) Errors=$($res.Errors) Path=$($s.Path)"
-                        $totalUpdated += $res.Updated; $totalSkipped += $res.Skipped; $processed++
-                      }
-                      Write-Host "[InjectConfig] SitesProcessed=$processed TotalUpdated=$totalUpdated TotalSkipped=$totalSkipped"
+                - task: FileTransform@1
+                  displayName: 'JSON variable substitution - IT4'
+                  condition: and(succeeded(), eq(variables['Deploy.IT4'], 'true'))
+                  inputs:
+                    folderPath: '$(Stakeholder4.PhysicalPath)'
+                    fileType: 'json'
+                    targetFiles: 'appsettings.json'
 
   - stage: Permissions
     displayName: 'Set Permissions'
