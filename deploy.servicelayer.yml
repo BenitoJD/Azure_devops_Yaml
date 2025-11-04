@@ -306,12 +306,110 @@ stages:
                     script: |
                       Write-Host "[Diag IT1] Scanning Env: for prefixes SIT_IT1_API. and SIT_IT1_API_"
                       $found = @()
+                      $remap = @{}
+                      $appPath = Join-Path "$(Stakeholder4.PhysicalPath)" 'appsettings.json'
+                      $jsonText = if (Test-Path $appPath) { Get-Content $appPath -Raw } else { $null }
+                      function Normalize-PathAgainstJson($jsonText, $dotPath) { if (-not $jsonText) { return $dotPath } try { $obj = $jsonText | ConvertFrom-Json -ErrorAction Stop } catch { return $dotPath } $segments = $dotPath.Split('.'); $cur = $obj; $norm = @(); foreach ($seg in $segments) { if ($cur -is [pscustomobject]) { $names = $cur.PSObject.Properties.Name; $match = $names | Where-Object { $_ -ieq $seg } | Select-Object -First 1; if (-not $match) { return $dotPath }; $norm += $match; $cur = $cur.$match } else { return $dotPath } } return ($norm -join '.') }
+                      function Find-LeafPaths($jsonText, $leaf) { if (-not $jsonText) { return @() } try { $obj = $jsonText | ConvertFrom-Json -ErrorAction Stop } catch { return @() } $results = @(); function Recurse($node,$prefix){ if ($node -is [pscustomobject]) { foreach ($p in $node.PSObject.Properties) { $path = if ($prefix){"$prefix.$($p.Name)"}else{$p.Name}; if ($p.MemberType -eq 'NoteProperty' -and ($p.Name -ieq $leaf)) { $script:results += $path }; Recurse $p.Value $path } } elseif ($node -is [System.Collections.IEnumerable] -and -not ($node -is [string])) { foreach ($e in $node) { Recurse $e $prefix } } }; Recurse $obj ''; return $results }
+                      $appPath = Join-Path "$(Stakeholder4.PhysicalPath)" 'appsettings.json'
+                      $jsonText = if (Test-Path $appPath) { Get-Content $appPath -Raw } else { $null }
+                      function Find-LeafPaths($jsonText, $leaf) { if (-not $jsonText) { return @() } try { $obj = $jsonText | ConvertFrom-Json -ErrorAction Stop } catch { return @() } $results = @(); function Recurse($node,$prefix){ if ($node -is [pscustomobject]) { foreach ($p in $node.PSObject.Properties) { $path = if ($prefix){"$prefix.$($p.Name)"}else{$p.Name}; if ($p.MemberType -eq 'NoteProperty' -and ($p.Name -ieq $leaf)) { $script:results += $path }; Recurse $p.Value $path } } elseif ($node -is [System.Collections.IEnumerable] -and -not ($node -is [string])) { foreach ($e in $node) { Recurse $e $prefix } } }; Recurse $obj ''; return $results }
+                      $appPath = Join-Path "$(Stakeholder3.PhysicalPath)" 'appsettings.json'
+                      $jsonText = if (Test-Path $appPath) { Get-Content $appPath -Raw } else { $null }
+                      function Normalize-PathAgainstJson($jsonText, $dotPath) { if (-not $jsonText) { return $dotPath } try { $obj = $jsonText | ConvertFrom-Json -ErrorAction Stop } catch { return $dotPath } $segments = $dotPath.Split('.'); $cur = $obj; $norm = @(); foreach ($seg in $segments) { if ($cur -is [pscustomobject]) { $names = $cur.PSObject.Properties.Name; $match = $names | Where-Object { $_ -ieq $seg } | Select-Object -First 1; if (-not $match) { return $dotPath }; $norm += $match; $cur = $cur.$match } else { return $dotPath } } return ($norm -join '.') }
+                      function Find-LeafPaths($jsonText, $leaf) { if (-not $jsonText) { return @() } try { $obj = $jsonText | ConvertFrom-Json -ErrorAction Stop } catch { return @() } $results = @(); function Recurse($node,$prefix){ if ($node -is [pscustomobject]) { foreach ($p in $node.PSObject.Properties) { $path = if ($prefix){"$prefix.$($p.Name)"}else{$p.Name}; if ($p.MemberType -eq 'NoteProperty' -and ($p.Name -ieq $leaf)) { $script:results += $path }; Recurse $p.Value $path } } elseif ($node -is [System.Collections.IEnumerable] -and -not ($node -is [string])) { foreach ($e in $node) { Recurse $e $prefix } } }; Recurse $obj ''; return $results }
+                      $appPath = Join-Path "$(Stakeholder3.PhysicalPath)" 'appsettings.json'
+                      $jsonText = if (Test-Path $appPath) { Get-Content $appPath -Raw } else { $null }
+                      function Find-LeafPaths($jsonText, $leaf) { if (-not $jsonText) { return @() } try { $obj = $jsonText | ConvertFrom-Json -ErrorAction Stop } catch { return @() } $results = @(); function Recurse($node,$prefix){ if ($node -is [pscustomobject]) { foreach ($p in $node.PSObject.Properties) { $path = if ($prefix){"$prefix.$($p.Name)"}else{$p.Name}; if ($p.MemberType -eq 'NoteProperty' -and ($p.Name -ieq $leaf)) { $script:results += $path }; Recurse $p.Value $path } } elseif ($node -is [System.Collections.IEnumerable] -and -not ($node -is [string])) { foreach ($e in $node) { Recurse $e $prefix } } }; Recurse $obj ''; return $results }
+                      $appPath = Join-Path "$(Stakeholder2.PhysicalPath)" 'appsettings.json'
+                      $jsonText = if (Test-Path $appPath) { Get-Content $appPath -Raw } else { $null }
+                      function Normalize-PathAgainstJson($jsonText, $dotPath) { if (-not $jsonText) { return $dotPath } try { $obj = $jsonText | ConvertFrom-Json -ErrorAction Stop } catch { return $dotPath } $segments = $dotPath.Split('.'); $cur = $obj; $norm = @(); foreach ($seg in $segments) { if ($cur -is [pscustomobject]) { $names = $cur.PSObject.Properties.Name; $match = $names | Where-Object { $_ -ieq $seg } | Select-Object -First 1; if (-not $match) { return $dotPath }; $norm += $match; $cur = $cur.$match } else { return $dotPath } } return ($norm -join '.') }
+                      function Find-LeafPaths($jsonText, $leaf) { if (-not $jsonText) { return @() } try { $obj = $jsonText | ConvertFrom-Json -ErrorAction Stop } catch { return @() } $results = @(); function Recurse($node,$prefix){ if ($node -is [pscustomobject]) { foreach ($p in $node.PSObject.Properties) { $path = if ($prefix){"$prefix.$($p.Name)"}else{$p.Name}; if ($p.MemberType -eq 'NoteProperty' -and ($p.Name -ieq $leaf)) { $script:results += $path }; Recurse $p.Value $path } } elseif ($node -is [System.Collections.IEnumerable] -and -not ($node -is [string])) { foreach ($e in $node) { Recurse $e $prefix } } }; Recurse $obj ''; return $results }
+                      $appPath = Join-Path "$(Stakeholder2.PhysicalPath)" 'appsettings.json'
+                      $jsonText = if (Test-Path $appPath) { Get-Content $appPath -Raw } else { $null }
+                      function Find-LeafPaths($jsonText, $leaf) {
+                        if (-not $jsonText) { return @() }
+                        try { $obj = $jsonText | ConvertFrom-Json -ErrorAction Stop } catch { return @() }
+                        $results = @()
+                        function Recurse($node, $prefix) {
+                          if ($node -is [pscustomobject]) {
+                            foreach ($p in $node.PSObject.Properties) {
+                              $path = if ($prefix) { "$prefix.$($p.Name)" } else { $p.Name }
+                              if ($p.MemberType -eq 'NoteProperty' -and ($p.Name -ieq $leaf)) { $script:results += $path }
+                              Recurse $p.Value $path
+                            }
+                          } elseif ($node -is [System.Collections.IEnumerable] -and -not ($node -is [string])) {
+                            foreach ($e in $node) { Recurse $e $prefix }
+                          }
+                        }
+                        Recurse $obj ''
+                        return $results
+                      }
+                      $appPath = Join-Path "$(Stakeholder1.PhysicalPath)" 'appsettings.json'
+                      $jsonText = if (Test-Path $appPath) { Get-Content $appPath -Raw } else { $null }
+                      function Normalize-PathAgainstJson($jsonText, $dotPath) {
+                        if (-not $jsonText) { return $dotPath }
+                        try { $obj = $jsonText | ConvertFrom-Json -ErrorAction Stop } catch { return $dotPath }
+                        $segments = $dotPath.Split('.')
+                        $cur = $obj; $norm = @()
+                        foreach ($seg in $segments) {
+                          if ($cur -is [pscustomobject]) {
+                            $names = $cur.PSObject.Properties.Name
+                            $match = $names | Where-Object { $_ -ieq $seg } | Select-Object -First 1
+                            if (-not $match) { return $dotPath }
+                            $norm += $match; $cur = $cur.$match
+                          } else { return $dotPath }
+                        }
+                        return ($norm -join '.')
+                      }
+                      function Find-LeafPaths($jsonText, $leaf) {
+                        if (-not $jsonText) { return @() }
+                        try { $obj = $jsonText | ConvertFrom-Json -ErrorAction Stop } catch { return @() }
+                        $results = @()
+                        function Recurse($node, $prefix) {
+                          if ($node -is [pscustomobject]) {
+                            foreach ($p in $node.PSObject.Properties) {
+                              $path = if ($prefix) { "$prefix.$($p.Name)" } else { $p.Name }
+                              if ($p.MemberType -eq 'NoteProperty' -and ($p.Name -ieq $leaf)) { $script:results += $path }
+                              Recurse $p.Value $path
+                            }
+                          } elseif ($node -is [System.Collections.IEnumerable] -and -not ($node -is [string])) {
+                            foreach ($e in $node) { Recurse $e $prefix }
+                          }
+                        }
+                        Recurse $obj ''
+                        return $results
+                      }
+                      $appPath = Join-Path "$(Stakeholder1.PhysicalPath)" 'appsettings.json'
+                      $jsonText = if (Test-Path $appPath) { Get-Content $appPath -Raw } else { $null }
+                      function Find-LeafPaths($jsonText, $leaf) {
+                        if (-not $jsonText) { return @() }
+                        try { $obj = $jsonText | ConvertFrom-Json -ErrorAction Stop } catch { return @() }
+                        $results = @()
+                        function Recurse($node, $prefix) {
+                          if ($node -is [pscustomobject]) {
+                            foreach ($p in $node.PSObject.Properties) {
+                              $path = if ($prefix) { "$prefix.$($p.Name)" } else { $p.Name }
+                              if ($p.MemberType -eq 'NoteProperty' -and ($p.Name -ieq $leaf)) { $script:results += $path }
+                              Recurse $p.Value $path
+                            }
+                          } elseif ($node -is [System.Collections.IEnumerable] -and -not ($node -is [string])) {
+                            foreach ($e in $node) { Recurse $e $prefix }
+                          }
+                        }
+                        Recurse $obj ''
+                        return $results
+                      }
                       foreach ($p in @('SIT_IT1_API.', 'SIT_IT1_API_')) {
                         Get-ChildItem Env: |
                           Where-Object { $_.Name -like "$p*" -and $_.Value -and $_.Value.Trim() -ne '' } |
                           ForEach-Object {
                             $suffix = $_.Name.Substring($p.Length)
-                            $mapped = $suffix -replace '__','.' -replace '_','.'
+                            $mapped = $suffix -replace '__','.' # keep single underscores
+                            if ($mapped -notmatch '\\.' -and $remap.ContainsKey($mapped.ToUpper())) { $mapped = $remap[$mapped.ToUpper()] } elseif ($mapped -notmatch '\\.' -and $jsonText) {
+                              $hits = Find-LeafPaths $jsonText $mapped
+                              if ($hits.Count -eq 1) { $mapped = $hits[0] }
+                            }
                             $masked = if ($_.Value.Length -gt 4) { ($_.Value.Substring(0,2) + '***' + $_.Value.Substring($_.Value.Length-2)) } else { '***' }
                             $found += [PSCustomObject]@{ EnvName = $_.Name; Mapped = $mapped; ValueSample = $masked }
                           }
@@ -326,15 +424,58 @@ stages:
                     targetType: 'inline'
                     script: |
                       $prefixes = @('SIT_IT1_API.', 'SIT_IT1_API_')
+                      $remap = @{}
                       foreach ($p in $prefixes) {
                         Get-ChildItem Env: |
                           Where-Object { $_.Name -like "$p*" -and $_.Value -and $_.Value.Trim() -ne '' } |
                           ForEach-Object {
                             $suffix = $_.Name.Substring($p.Length)
-                            $name = $suffix -replace '__','.' -replace '_','.'
+                            $name = $suffix -replace '__','.' # keep single underscores
+                            if ($name -notmatch '\\.' -and $remap.ContainsKey($name.ToUpper())) { $name = $remap[$name.ToUpper()] } elseif ($name -notmatch '\\.' -and $jsonText) {
+                              $hits = Find-LeafPaths $jsonText $name
+                              if ($hits.Count -eq 1) { $name = $hits[0] }
+                            }
+                            if ($jsonText -and $name -match '\\.') { $name = Normalize-PathAgainstJson $jsonText $name }
                             Write-Host "##vso[task.setvariable variable=$name]$($_.Value)"
                           }
                       }
+                      # Pre-transform capture and existence check
+                      $appPath = Join-Path "$(Stakeholder1.PhysicalPath)" 'appsettings.json'
+                      if (Test-Path $appPath) {
+                        $before = Get-Content $appPath -Raw
+                        $before | Out-File -FilePath (Join-Path $env:PIPELINE_WORKSPACE 'IT1_appsettings_before.json') -Encoding UTF8 -Force
+                        # Build the mapped list again to persist
+                        $mapped = @()
+                        foreach ($pfx in $prefixes) {
+                          Get-ChildItem Env: |
+                            Where-Object { $_.Name -like "$pfx*" -and $_.Value -and $_.Value.Trim() -ne '' } |
+                            ForEach-Object {
+                              $suf = $_.Name.Substring($pfx.Length)
+                              $n = $suf -replace '__','.'
+                              if ($n -notmatch '\\.' -and $remap.ContainsKey($n.ToUpper())) { $n = $remap[$n.ToUpper()] }
+                              $mapped += $n
+                            }
+                        }
+                        $mapped | Sort-Object -Unique | Out-File -FilePath (Join-Path $env:PIPELINE_WORKSPACE 'IT1_mapped.txt') -Encoding UTF8 -Force
+                        # Existence report
+                        function Test-JsonPath($jsonText, $dotPath) {
+                          try { $obj = $jsonText | ConvertFrom-Json -ErrorAction Stop } catch { return $false }
+                          $cur = $obj
+                          foreach ($seg in $dotPath.Split('.')) {
+                            if ($cur -is [pscustomobject]) {
+                              $names = $cur.PSObject.Properties.Name
+                              $match = $names | Where-Object { $_ -ieq $seg } | Select-Object -First 1
+                              if (-not $match) { return $false }
+                              $cur = $cur.$match
+                            } else { return $false }
+                          }
+                          return $true
+                        }
+                        $exists = @(); $notExists = @()
+                        foreach ($mp in ($mapped | Sort-Object -Unique)) { if (Test-JsonPath $before $mp) { $exists += $mp } else { $notExists += $mp } }
+                        Write-Host ("[Diag IT1] Paths existing pre-transform: {0}" -f $exists.Count)
+                        if ($notExists.Count -gt 0) { Write-Host '[Diag IT1] Paths NOT found pre-transform:'; $notExists | ForEach-Object { Write-Host "  - $_" } }
+                      } else { Write-Host '[Diag IT1] appsettings.json not found for pre-transform capture' }
                 - task: FileTransform@1
                   displayName: 'JSON variable substitution - IT1'
                   condition: and(succeeded(), eq(variables['Deploy.IT1'], 'true'))
@@ -342,6 +483,44 @@ stages:
                     folderPath: '$(Stakeholder1.PhysicalPath)'
                     fileType: 'json'
                     targetFiles: 'appsettings.json'
+                - task: PowerShell@2
+                  displayName: 'Post-transform diagnostics - IT1'
+                  condition: and(succeeded(), eq(variables['Deploy.IT1'], 'true'))
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      $path = Join-Path "$(Stakeholder1.PhysicalPath)" 'appsettings.json'
+                      if (-not (Test-Path $path)) { Write-Host '[Diag IT1] appsettings.json missing post-transform'; exit 0 }
+                      $beforePath = Join-Path $env:PIPELINE_WORKSPACE 'IT1_appsettings_before.json'
+                      $mapPath    = Join-Path $env:PIPELINE_WORKSPACE 'IT1_mapped.txt'
+                      if (-not (Test-Path $beforePath) -or -not (Test-Path $mapPath)) { Write-Host '[Diag IT1] Missing pre-transform artifacts'; exit 0 }
+                      $before = Get-Content $beforePath -Raw
+                      $after  = Get-Content $path -Raw
+                      $mapped = Get-Content $mapPath
+                      function Get-JsonValue($jsonText, $dotPath) {
+                        try { $obj = $jsonText | ConvertFrom-Json -ErrorAction Stop } catch { return $null }
+                        $cur = $obj
+                        foreach ($seg in $dotPath.Split('.')) {
+                          if ($cur -is [pscustomobject]) {
+                            $names = $cur.PSObject.Properties.Name
+                            $match = $names | Where-Object { $_ -ieq $seg } | Select-Object -First 1
+                            if (-not $match) { return $null }
+                            $cur = $cur.$match
+                          } else { return $null }
+                        }
+                        return $cur
+                      }
+                      $changed = @(); $unchanged = @(); $missing = @()
+                      foreach ($p in $mapped) {
+                        $b = Get-JsonValue $before $p
+                        $a = Get-JsonValue $after  $p
+                        if ($null -eq $b -and $null -eq $a) { $missing += $p; continue }
+                        if (("$b") -ne ("$a")) { $changed += [PSCustomObject]@{ Path=$p; Before="$b"; After="$a" } }
+                        else { $unchanged += $p }
+                      }
+                      Write-Host ("[Diag IT1] Changed={0} Unchanged={1} MissingPaths={2}" -f $changed.Count,$unchanged.Count,$missing.Count)
+                      if ($changed.Count -gt 0) { $changed | Format-Table -AutoSize | Out-String -Width 200 | Write-Host }
+                      if ($missing.Count -gt 0) { Write-Host '[Diag IT1] Missing:'; $missing | Sort-Object | ForEach-Object { Write-Host "  - $_" } }
 
                 # IT2 – diagnostics: show available env vars and mapped names
                 - task: PowerShell@2
@@ -352,12 +531,17 @@ stages:
                     script: |
                       Write-Host "[Diag IT2] Scanning Env: for prefixes SIT_IT2_API. and SIT_IT2_API_"
                       $found = @()
+                      $remap = @{}
                       foreach ($p in @('SIT_IT2_API.', 'SIT_IT2_API_')) {
                         Get-ChildItem Env: |
                           Where-Object { $_.Name -like "$p*" -and $_.Value -and $_.Value.Trim() -ne '' } |
                           ForEach-Object {
                             $suffix = $_.Name.Substring($p.Length)
-                            $mapped = $suffix -replace '__','.' -replace '_','.'
+                            $mapped = $suffix -replace '__','.'
+                            if ($mapped -notmatch '\\.' -and $remap.ContainsKey($mapped.ToUpper())) { $mapped = $remap[$mapped.ToUpper()] } elseif ($mapped -notmatch '\\.' -and $jsonText) {
+                              $hits = Find-LeafPaths $jsonText $mapped
+                              if ($hits.Count -eq 1) { $mapped = $hits[0] }
+                            }
                             $masked = if ($_.Value.Length -gt 4) { ($_.Value.Substring(0,2) + '***' + $_.Value.Substring($_.Value.Length-2)) } else { '***' }
                             $found += [PSCustomObject]@{ EnvName = $_.Name; Mapped = $mapped; ValueSample = $masked }
                           }
@@ -372,15 +556,39 @@ stages:
                     targetType: 'inline'
                     script: |
                       $prefixes = @('SIT_IT2_API.', 'SIT_IT2_API_')
+                      $remap = @{}
                       foreach ($p in $prefixes) {
                         Get-ChildItem Env: |
                           Where-Object { $_.Name -like "$p*" -and $_.Value -and $_.Value.Trim() -ne '' } |
                           ForEach-Object {
                             $suffix = $_.Name.Substring($p.Length)
-                            $name = $suffix -replace '__','.' -replace '_','.'
+                            $name = $suffix -replace '__','.'
+                            if ($name -notmatch '\\.' -and $remap.ContainsKey($name.ToUpper())) { $name = $remap[$name.ToUpper()] } elseif ($name -notmatch '\\.' -and $jsonText) { $hits = Find-LeafPaths $jsonText $name; if ($hits.Count -eq 1) { $name = $hits[0] } }
+                            if ($jsonText -and $name -match '\\.') { $name = Normalize-PathAgainstJson $jsonText $name }
                             Write-Host "##vso[task.setvariable variable=$name]$($_.Value)"
                           }
                       }
+                      $appPath = Join-Path "$(Stakeholder2.PhysicalPath)" 'appsettings.json'
+                      if (Test-Path $appPath) {
+                        $before = Get-Content $appPath -Raw
+                        $before | Out-File -FilePath (Join-Path $env:PIPELINE_WORKSPACE 'IT2_appsettings_before.json') -Encoding UTF8 -Force
+                        $mapped = @()
+                        foreach ($pfx in $prefixes) {
+                          Get-ChildItem Env: |
+                            Where-Object { $_.Name -like "$pfx*" -and $_.Value -and $_.Value.Trim() -ne '' } |
+                            ForEach-Object {
+                              $suf = $_.Name.Substring($pfx.Length)
+                              $n = $suf -replace '__','.'
+                              if ($n -notmatch '\\.' -and $remap.ContainsKey($n.ToUpper())) { $n = $remap[$n.ToUpper()] }
+                              $mapped += $n
+                            }
+                        }
+                        $mapped | Sort-Object -Unique | Out-File -FilePath (Join-Path $env:PIPELINE_WORKSPACE 'IT2_mapped.txt') -Encoding UTF8 -Force
+                        function Test-JsonPath($jsonText, $dotPath) { try { $obj = $jsonText | ConvertFrom-Json -ErrorAction Stop } catch { return $false } $cur = $obj; foreach ($seg in $dotPath.Split('.')) { if ($cur -is [pscustomobject]) { $names = $cur.PSObject.Properties.Name; $match = $names | Where-Object { $_ -ieq $seg } | Select-Object -First 1; if (-not $match) { return $false }; $cur = $cur.$match } else { return $false } } return $true }
+                        $exists = @(); $notExists = @(); foreach ($mp in ($mapped | Sort-Object -Unique)) { if (Test-JsonPath $before $mp) { $exists += $mp } else { $notExists += $mp } }
+                        Write-Host ("[Diag IT2] Paths existing pre-transform: {0}" -f $exists.Count)
+                        if ($notExists.Count -gt 0) { Write-Host '[Diag IT2] Paths NOT found pre-transform:'; $notExists | ForEach-Object { Write-Host "  - $_" } }
+                      } else { Write-Host '[Diag IT2] appsettings.json not found for pre-transform capture' }
                 - task: FileTransform@1
                   displayName: 'JSON variable substitution - IT2'
                   condition: and(succeeded(), eq(variables['Deploy.IT2'], 'true'))
@@ -388,6 +596,32 @@ stages:
                     folderPath: '$(Stakeholder2.PhysicalPath)'
                     fileType: 'json'
                     targetFiles: 'appsettings.json'
+                - task: PowerShell@2
+                  displayName: 'Post-transform diagnostics - IT2'
+                  condition: and(succeeded(), eq(variables['Deploy.IT2'], 'true'))
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      $path = Join-Path "$(Stakeholder2.PhysicalPath)" 'appsettings.json'
+                      if (-not (Test-Path $path)) { Write-Host '[Diag IT2] appsettings.json missing post-transform'; exit 0 }
+                      $beforePath = Join-Path $env:PIPELINE_WORKSPACE 'IT2_appsettings_before.json'
+                      $mapPath    = Join-Path $env:PIPELINE_WORKSPACE 'IT2_mapped.txt'
+                      if (-not (Test-Path $beforePath) -or -not (Test-Path $mapPath)) { Write-Host '[Diag IT2] Missing pre-transform artifacts'; exit 0 }
+                      $before = Get-Content $beforePath -Raw
+                      $after  = Get-Content $path -Raw
+                      $mapped = Get-Content $mapPath
+                      function Get-JsonValue($jsonText, $dotPath) { try { $obj = $jsonText | ConvertFrom-Json -ErrorAction Stop } catch { return $null } $cur = $obj; foreach ($seg in $dotPath.Split('.')) { if ($cur -is [pscustomobject]) { $names = $cur.PSObject.Properties.Name; $match = $names | Where-Object { $_ -ieq $seg } | Select-Object -First 1; if (-not $match) { return $null }; $cur = $cur.$match } else { return $null } } return $cur }
+                      $changed = @(); $unchanged = @(); $missing = @()
+                      foreach ($p in $mapped) {
+                        $b = Get-JsonValue $before $p
+                        $a = Get-JsonValue $after  $p
+                        if ($null -eq $b -and $null -eq $a) { $missing += $p; continue }
+                        if (("$b") -ne ("$a")) { $changed += [PSCustomObject]@{ Path=$p; Before="$b"; After="$a" } }
+                        else { $unchanged += $p }
+                      }
+                      Write-Host ("[Diag IT2] Changed={0} Unchanged={1} MissingPaths={2}" -f $changed.Count,$unchanged.Count,$missing.Count)
+                      if ($changed.Count -gt 0) { $changed | Format-Table -AutoSize | Out-String -Width 200 | Write-Host }
+                      if ($missing.Count -gt 0) { Write-Host '[Diag IT2] Missing:'; $missing | Sort-Object | ForEach-Object { Write-Host "  - $_" } }
 
                 # IT3 – diagnostics: show available env vars and mapped names
                 - task: PowerShell@2
@@ -398,12 +632,14 @@ stages:
                     script: |
                       Write-Host "[Diag IT3] Scanning Env: for prefixes SIT_IT3_API. and SIT_IT3_API_"
                       $found = @()
+                      $remap = @{}
                       foreach ($p in @('SIT_IT3_API.', 'SIT_IT3_API_')) {
                         Get-ChildItem Env: |
                           Where-Object { $_.Name -like "$p*" -and $_.Value -and $_.Value.Trim() -ne '' } |
                           ForEach-Object {
                             $suffix = $_.Name.Substring($p.Length)
-                            $mapped = $suffix -replace '__','.' -replace '_','.'
+                            $mapped = $suffix -replace '__','.'
+                            if ($mapped -notmatch '\\.' -and $remap.ContainsKey($mapped.ToUpper())) { $mapped = $remap[$mapped.ToUpper()] } elseif ($mapped -notmatch '\\.' -and $jsonText) { $hits = Find-LeafPaths $jsonText $mapped; if ($hits.Count -eq 1) { $mapped = $hits[0] } }
                             $masked = if ($_.Value.Length -gt 4) { ($_.Value.Substring(0,2) + '***' + $_.Value.Substring($_.Value.Length-2)) } else { '***' }
                             $found += [PSCustomObject]@{ EnvName = $_.Name; Mapped = $mapped; ValueSample = $masked }
                           }
@@ -418,15 +654,39 @@ stages:
                     targetType: 'inline'
                     script: |
                       $prefixes = @('SIT_IT3_API.', 'SIT_IT3_API_')
+                      $remap = @{}
                       foreach ($p in $prefixes) {
                         Get-ChildItem Env: |
                           Where-Object { $_.Name -like "$p*" -and $_.Value -and $_.Value.Trim() -ne '' } |
                           ForEach-Object {
                             $suffix = $_.Name.Substring($p.Length)
-                            $name = $suffix -replace '__','.' -replace '_','.'
+                            $name = $suffix -replace '__','.'
+                            if ($name -notmatch '\\.' -and $remap.ContainsKey($name.ToUpper())) { $name = $remap[$name.ToUpper()] } elseif ($name -notmatch '\\.' -and $jsonText) { $hits = Find-LeafPaths $jsonText $name; if ($hits.Count -eq 1) { $name = $hits[0] } }
+                            if ($jsonText -and $name -match '\\.') { $name = Normalize-PathAgainstJson $jsonText $name }
                             Write-Host "##vso[task.setvariable variable=$name]$($_.Value)"
                           }
                       }
+                      $appPath = Join-Path "$(Stakeholder3.PhysicalPath)" 'appsettings.json'
+                      if (Test-Path $appPath) {
+                        $before = Get-Content $appPath -Raw
+                        $before | Out-File -FilePath (Join-Path $env:PIPELINE_WORKSPACE 'IT3_appsettings_before.json') -Encoding UTF8 -Force
+                        $mapped = @()
+                        foreach ($pfx in $prefixes) {
+                          Get-ChildItem Env: |
+                            Where-Object { $_.Name -like "$pfx*" -and $_.Value -and $_.Value.Trim() -ne '' } |
+                            ForEach-Object {
+                              $suf = $_.Name.Substring($pfx.Length)
+                              $n = $suf -replace '__','.'
+                              if ($n -notmatch '\\.' -and $remap.ContainsKey($n.ToUpper())) { $n = $remap[$n.ToUpper()] }
+                              $mapped += $n
+                            }
+                        }
+                        $mapped | Sort-Object -Unique | Out-File -FilePath (Join-Path $env:PIPELINE_WORKSPACE 'IT3_mapped.txt') -Encoding UTF8 -Force
+                        function Test-JsonPath($jsonText, $dotPath) { try { $obj = $jsonText | ConvertFrom-Json -ErrorAction Stop } catch { return $false } $cur = $obj; foreach ($seg in $dotPath.Split('.')) { if ($cur -is [pscustomobject]) { $names = $cur.PSObject.Properties.Name; $match = $names | Where-Object { $_ -ieq $seg } | Select-Object -First 1; if (-not $match) { return $false }; $cur = $cur.$match } else { return $false } } return $true }
+                        $exists = @(); $notExists = @(); foreach ($mp in ($mapped | Sort-Object -Unique)) { if (Test-JsonPath $before $mp) { $exists += $mp } else { $notExists += $mp } }
+                        Write-Host ("[Diag IT3] Paths existing pre-transform: {0}" -f $exists.Count)
+                        if ($notExists.Count -gt 0) { Write-Host '[Diag IT3] Paths NOT found pre-transform:'; $notExists | ForEach-Object { Write-Host "  - $_" } }
+                      } else { Write-Host '[Diag IT3] appsettings.json not found for pre-transform capture' }
                 - task: FileTransform@1
                   displayName: 'JSON variable substitution - IT3'
                   condition: and(succeeded(), eq(variables['Deploy.IT3'], 'true'))
@@ -434,6 +694,32 @@ stages:
                     folderPath: '$(Stakeholder3.PhysicalPath)'
                     fileType: 'json'
                     targetFiles: 'appsettings.json'
+                - task: PowerShell@2
+                  displayName: 'Post-transform diagnostics - IT3'
+                  condition: and(succeeded(), eq(variables['Deploy.IT3'], 'true'))
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      $path = Join-Path "$(Stakeholder3.PhysicalPath)" 'appsettings.json'
+                      if (-not (Test-Path $path)) { Write-Host '[Diag IT3] appsettings.json missing post-transform'; exit 0 }
+                      $beforePath = Join-Path $env:PIPELINE_WORKSPACE 'IT3_appsettings_before.json'
+                      $mapPath    = Join-Path $env:PIPELINE_WORKSPACE 'IT3_mapped.txt'
+                      if (-not (Test-Path $beforePath) -or -not (Test-Path $mapPath)) { Write-Host '[Diag IT3] Missing pre-transform artifacts'; exit 0 }
+                      $before = Get-Content $beforePath -Raw
+                      $after  = Get-Content $path -Raw
+                      $mapped = Get-Content $mapPath
+                      function Get-JsonValue($jsonText, $dotPath) { try { $obj = $jsonText | ConvertFrom-Json -ErrorAction Stop } catch { return $null } $cur = $obj; foreach ($seg in $dotPath.Split('.')) { if ($cur -is [pscustomobject]) { $names = $cur.PSObject.Properties.Name; $match = $names | Where-Object { $_ -ieq $seg } | Select-Object -First 1; if (-not $match) { return $null }; $cur = $cur.$match } else { return $null } } return $cur }
+                      $changed = @(); $unchanged = @(); $missing = @()
+                      foreach ($p in $mapped) {
+                        $b = Get-JsonValue $before $p
+                        $a = Get-JsonValue $after  $p
+                        if ($null -eq $b -and $null -eq $a) { $missing += $p; continue }
+                        if (("$b") -ne ("$a")) { $changed += [PSCustomObject]@{ Path=$p; Before="$b"; After="$a" } }
+                        else { $unchanged += $p }
+                      }
+                      Write-Host ("[Diag IT3] Changed={0} Unchanged={1} MissingPaths={2}" -f $changed.Count,$unchanged.Count,$missing.Count)
+                      if ($changed.Count -gt 0) { $changed | Format-Table -AutoSize | Out-String -Width 200 | Write-Host }
+                      if ($missing.Count -gt 0) { Write-Host '[Diag IT3] Missing:'; $missing | Sort-Object | ForEach-Object { Write-Host "  - $_" } }
 
                 # IT4 – diagnostics: show available env vars and mapped names
                 - task: PowerShell@2
@@ -444,12 +730,21 @@ stages:
                     script: |
                       Write-Host "[Diag IT4] Scanning Env: for prefixes SIT_IT4_API. and SIT_IT4_API_"
                       $found = @()
+                      $remap = @{
+                        'CONNECTIONSTRING'  = 'MongoDatabaseSettings.ConnectionString'
+                        'DATABASENAME'      = 'MongoDatabaseSettings.DatabaseName'
+                        'INCLUDETESTSTORES' = 'MasterDataSettings.includeTestStores'
+                        'MASTERDATAKEY'     = 'MasterDataSettings.MasterDataKey'
+                        'MD_DBCON'          = 'MasterDataSettings.MD_DBCon'
+                        'MDIS_DBCON'        = 'MasterDataSettings.MDIS_DBCon'
+                      }
                       foreach ($p in @('SIT_IT4_API.', 'SIT_IT4_API_')) {
                         Get-ChildItem Env: |
                           Where-Object { $_.Name -like "$p*" -and $_.Value -and $_.Value.Trim() -ne '' } |
                           ForEach-Object {
                             $suffix = $_.Name.Substring($p.Length)
-                            $mapped = $suffix -replace '__','.' -replace '_','.'
+                            $mapped = $suffix -replace '__','.'
+                            if ($mapped -notmatch '\\.' -and $remap.ContainsKey($mapped.ToUpper())) { $mapped = $remap[$mapped.ToUpper()] } elseif ($mapped -notmatch '\\.' -and $jsonText) { $hits = Find-LeafPaths $jsonText $mapped; if ($hits.Count -eq 1) { $mapped = $hits[0] } }
                             $masked = if ($_.Value.Length -gt 4) { ($_.Value.Substring(0,2) + '***' + $_.Value.Substring($_.Value.Length-2)) } else { '***' }
                             $found += [PSCustomObject]@{ EnvName = $_.Name; Mapped = $mapped; ValueSample = $masked }
                           }
@@ -464,15 +759,46 @@ stages:
                     targetType: 'inline'
                     script: |
                       $prefixes = @('SIT_IT4_API.', 'SIT_IT4_API_')
+                      $remap = @{
+                        'CONNECTIONSTRING'  = 'MongoDatabaseSettings.ConnectionString'
+                        'DATABASENAME'      = 'MongoDatabaseSettings.DatabaseName'
+                        'INCLUDETESTSTORES' = 'MasterDataSettings.includeTestStores'
+                        'MASTERDATAKEY'     = 'MasterDataSettings.MasterDataKey'
+                        'MD_DBCON'          = 'MasterDataSettings.MD_DBCon'
+                        'MDIS_DBCON'        = 'MasterDataSettings.MDIS_DBCon'
+                      }
                       foreach ($p in $prefixes) {
                         Get-ChildItem Env: |
                           Where-Object { $_.Name -like "$p*" -and $_.Value -and $_.Value.Trim() -ne '' } |
                           ForEach-Object {
                             $suffix = $_.Name.Substring($p.Length)
-                            $name = $suffix -replace '__','.' -replace '_','.'
+                            $name = $suffix -replace '__','.'
+                            if ($name -notmatch '\\.' -and $remap.ContainsKey($name.ToUpper())) { $name = $remap[$name.ToUpper()] } elseif ($name -notmatch '\\.' -and $jsonText) { $hits = Find-LeafPaths $jsonText $name; if ($hits.Count -eq 1) { $name = $hits[0] } }
+                            if ($jsonText -and $name -match '\\.') { $name = Normalize-PathAgainstJson $jsonText $name }
                             Write-Host "##vso[task.setvariable variable=$name]$($_.Value)"
                           }
                       }
+                      $appPath = Join-Path "$(Stakeholder4.PhysicalPath)" 'appsettings.json'
+                      if (Test-Path $appPath) {
+                        $before = Get-Content $appPath -Raw
+                        $before | Out-File -FilePath (Join-Path $env:PIPELINE_WORKSPACE 'IT4_appsettings_before.json') -Encoding UTF8 -Force
+                        $mapped = @()
+                        foreach ($pfx in $prefixes) {
+                          Get-ChildItem Env: |
+                            Where-Object { $_.Name -like "$pfx*" -and $_.Value -and $_.Value.Trim() -ne '' } |
+                            ForEach-Object {
+                              $suf = $_.Name.Substring($pfx.Length)
+                              $n = $suf -replace '__','.'
+                              if ($n -notmatch '\\.' -and $remap.ContainsKey($n.ToUpper())) { $n = $remap[$n.ToUpper()] }
+                              $mapped += $n
+                            }
+                        }
+                        $mapped | Sort-Object -Unique | Out-File -FilePath (Join-Path $env:PIPELINE_WORKSPACE 'IT4_mapped.txt') -Encoding UTF8 -Force
+                        function Test-JsonPath($jsonText, $dotPath) { try { $obj = $jsonText | ConvertFrom-Json -ErrorAction Stop } catch { return $false } $cur = $obj; foreach ($seg in $dotPath.Split('.')) { if ($cur -is [pscustomobject]) { $names = $cur.PSObject.Properties.Name; $match = $names | Where-Object { $_ -ieq $seg } | Select-Object -First 1; if (-not $match) { return $false }; $cur = $cur.$match } else { return $false } } return $true }
+                        $exists = @(); $notExists = @(); foreach ($mp in ($mapped | Sort-Object -Unique)) { if (Test-JsonPath $before $mp) { $exists += $mp } else { $notExists += $mp } }
+                        Write-Host ("[Diag IT4] Paths existing pre-transform: {0}" -f $exists.Count)
+                        if ($notExists.Count -gt 0) { Write-Host '[Diag IT4] Paths NOT found pre-transform:'; $notExists | ForEach-Object { Write-Host "  - $_" } }
+                      } else { Write-Host '[Diag IT4] appsettings.json not found for pre-transform capture' }
                 - task: FileTransform@1
                   displayName: 'JSON variable substitution - IT4'
                   condition: and(succeeded(), eq(variables['Deploy.IT4'], 'true'))
@@ -480,6 +806,32 @@ stages:
                     folderPath: '$(Stakeholder4.PhysicalPath)'
                     fileType: 'json'
                     targetFiles: 'appsettings.json'
+                - task: PowerShell@2
+                  displayName: 'Post-transform diagnostics - IT4'
+                  condition: and(succeeded(), eq(variables['Deploy.IT4'], 'true'))
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      $path = Join-Path "$(Stakeholder4.PhysicalPath)" 'appsettings.json'
+                      if (-not (Test-Path $path)) { Write-Host '[Diag IT4] appsettings.json missing post-transform'; exit 0 }
+                      $beforePath = Join-Path $env:PIPELINE_WORKSPACE 'IT4_appsettings_before.json'
+                      $mapPath    = Join-Path $env:PIPELINE_WORKSPACE 'IT4_mapped.txt'
+                      if (-not (Test-Path $beforePath) -or -not (Test-Path $mapPath)) { Write-Host '[Diag IT4] Missing pre-transform artifacts'; exit 0 }
+                      $before = Get-Content $beforePath -Raw
+                      $after  = Get-Content $path -Raw
+                      $mapped = Get-Content $mapPath
+                      function Get-JsonValue($jsonText, $dotPath) { try { $obj = $jsonText | ConvertFrom-Json -ErrorAction Stop } catch { return $null } $cur = $obj; foreach ($seg in $dotPath.Split('.')) { if ($cur -is [pscustomobject]) { $names = $cur.PSObject.Properties.Name; $match = $names | Where-Object { $_ -ieq $seg } | Select-Object -First 1; if (-not $match) { return $null }; $cur = $cur.$match } else { return $null } } return $cur }
+                      $changed = @(); $unchanged = @(); $missing = @()
+                      foreach ($p in $mapped) {
+                        $b = Get-JsonValue $before $p
+                        $a = Get-JsonValue $after  $p
+                        if ($null -eq $b -and $null -eq $a) { $missing += $p; continue }
+                        if (("$b") -ne ("$a")) { $changed += [PSCustomObject]@{ Path=$p; Before="$b"; After="$a" } }
+                        else { $unchanged += $p }
+                      }
+                      Write-Host ("[Diag IT4] Changed={0} Unchanged={1} MissingPaths={2}" -f $changed.Count,$unchanged.Count,$missing.Count)
+                      if ($changed.Count -gt 0) { $changed | Format-Table -AutoSize | Out-String -Width 200 | Write-Host }
+                      if ($missing.Count -gt 0) { Write-Host '[Diag IT4] Missing:'; $missing | Sort-Object | ForEach-Object { Write-Host "  - $_" } }
 
   - stage: Permissions
     displayName: 'Set Permissions'
