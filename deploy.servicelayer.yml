@@ -376,25 +376,41 @@ stages:
                         } else { return $obj }
                       }
                       # Simplified parsing: appsettings.json is strict JSON, no comment handling needed
+                      function Escape-JsonString { param([string]$v)
+                        if ($null -eq $v) { return '' }
+                        return ($v -replace '\\','\\\\' -replace '"','\\"')
+                      }
+                      function Replace-JsonLeafValueInText {
+                        param(
+                          [string]$jsonText,
+                          [string]$leafKey,
+                          [string]$newValue
+                        )
+                        $escaped = Escape-JsonString $newValue
+                        $pattern = '(?mi)("' + [Regex]::Escape($leafKey) + '"\s*:\s*)"[^"]*"'
+                        $replacement = '$1"' + $escaped + '"'
+                        $newText = [Regex]::Replace($jsonText, $pattern, $replacement, 1)
+                        $changed = -not ($newText -eq $jsonText)
+                        return @{ Text = $newText; Changed = $changed }
+                      }
                       function Process-AppSettings { param($rootPath, $variables)
                         $appSettingsPath = Join-Path $rootPath "appsettings.json"
                         if (-not (Test-Path $appSettingsPath)) { Write-Host "[InjectConfig] Missing appsettings.json at $appSettingsPath"; return @{ Updated = 0; Skipped = 0; Errors = 1 } }
                         try {
-                          $jsonText = Get-Content $appSettingsPath -Raw -ErrorAction Stop
-                          $jsonParsed = ConvertFrom-Json -InputObject $jsonText
-                          $jsonObj = ConvertTo-Hashtable $jsonParsed
+                          $text = Get-Content $appSettingsPath -Raw -ErrorAction Stop
                           $updated = 0; $skipped = 0
                           foreach ($entry in $variables.GetEnumerator()) {
-                            if (-not [string]::IsNullOrWhiteSpace($entry.Value)) {
-                              if (Set-JsonValue -jsonObj $jsonObj -path $entry.Key -value $entry.Value) { $updated++ } else { $skipped++ }
-                            } else { $skipped++ }
+                            if ([string]::IsNullOrWhiteSpace($entry.Value)) { $skipped++; continue }
+                            $leaf = ($entry.Key -split ':')[-1]
+                            $res = Replace-JsonLeafValueInText -jsonText $text -leafKey $leaf -newValue $entry.Value
+                            if ($res.Changed) { $text = $res.Text; $updated++ } else { $skipped++ }
                           }
                           $backupPath = "$appSettingsPath.backup.$(Get-Date -Format 'yyyyMMdd_HHmmss')"; Copy-Item $appSettingsPath $backupPath -Force
                           try { $fi = Get-Item -LiteralPath $appSettingsPath -ErrorAction Stop; if ($fi.Attributes -band [IO.FileAttributes]::ReadOnly) { Attrib -R $appSettingsPath } } catch {}
-                          ($jsonObj | ConvertTo-Json -Depth 50) | Out-File -FilePath $appSettingsPath -Encoding UTF8 -Force
+                          $text | Out-File -FilePath $appSettingsPath -Encoding UTF8 -Force
                           return @{ Updated = $updated; Skipped = $skipped; Errors = 0 }
                         } catch {
-                          Write-Host ("[InjectConfig] JSON parse/update failed at {0}: {1}" -f $appSettingsPath, $_.Exception.Message)
+                          Write-Host ("[InjectConfig] Text replacement failed at {0}: {1}" -f $appSettingsPath, $_.Exception.Message)
                           return @{ Updated = 0; Skipped = 0; Errors = 1 }
                         }
                       }
