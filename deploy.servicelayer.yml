@@ -297,6 +297,27 @@ stages:
           runOnce:
             deploy:
               steps:
+                # IT1 – diagnostics: show available env vars and mapped names
+                - task: PowerShell@2
+                  displayName: 'Diagnostics: env → mapped variables - IT1'
+                  condition: and(succeeded(), eq(variables['Deploy.IT1'], 'true'))
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      Write-Host "[Diag IT1] Scanning Env: for prefixes SIT_IT1_API. and SIT_IT1_API_"
+                      $found = @()
+                      foreach ($p in @('SIT_IT1_API.', 'SIT_IT1_API_')) {
+                        Get-ChildItem Env: |
+                          Where-Object { $_.Name -like "$p*" -and $_.Value -and $_.Value.Trim() -ne '' } |
+                          ForEach-Object {
+                            $suffix = $_.Name.Substring($p.Length)
+                            $mapped = $suffix -replace '__','.' -replace '_','.'
+                            $masked = if ($_.Value.Length -gt 4) { ($_.Value.Substring(0,2) + '***' + $_.Value.Substring($_.Value.Length-2)) } else { '***' }
+                            $found += [PSCustomObject]@{ EnvName = $_.Name; Mapped = $mapped; ValueSample = $masked }
+                          }
+                      }
+                      Write-Host ("[Diag IT1] VarsFound={0}" -f $found.Count)
+                      $found | Sort-Object Mapped | Format-Table -AutoSize | Out-String -Width 200 | Write-Host
                 # IT1 – prepare variables without prefix and run File Transform
                 - task: PowerShell@2
                   displayName: 'Prepare variables for transform - IT1'
@@ -322,6 +343,27 @@ stages:
                     fileType: 'json'
                     targetFiles: 'appsettings.json'
 
+                # IT2 – diagnostics: show available env vars and mapped names
+                - task: PowerShell@2
+                  displayName: 'Diagnostics: env → mapped variables - IT2'
+                  condition: and(succeeded(), eq(variables['Deploy.IT2'], 'true'))
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      Write-Host "[Diag IT2] Scanning Env: for prefixes SIT_IT2_API. and SIT_IT2_API_"
+                      $found = @()
+                      foreach ($p in @('SIT_IT2_API.', 'SIT_IT2_API_')) {
+                        Get-ChildItem Env: |
+                          Where-Object { $_.Name -like "$p*" -and $_.Value -and $_.Value.Trim() -ne '' } |
+                          ForEach-Object {
+                            $suffix = $_.Name.Substring($p.Length)
+                            $mapped = $suffix -replace '__','.' -replace '_','.'
+                            $masked = if ($_.Value.Length -gt 4) { ($_.Value.Substring(0,2) + '***' + $_.Value.Substring($_.Value.Length-2)) } else { '***' }
+                            $found += [PSCustomObject]@{ EnvName = $_.Name; Mapped = $mapped; ValueSample = $masked }
+                          }
+                      }
+                      Write-Host ("[Diag IT2] VarsFound={0}" -f $found.Count)
+                      $found | Sort-Object Mapped | Format-Table -AutoSize | Out-String -Width 200 | Write-Host
                 # IT2 – prepare variables without prefix and run File Transform
                 - task: PowerShell@2
                   displayName: 'Prepare variables for transform - IT2'
@@ -347,6 +389,27 @@ stages:
                     fileType: 'json'
                     targetFiles: 'appsettings.json'
 
+                # IT3 – diagnostics: show available env vars and mapped names
+                - task: PowerShell@2
+                  displayName: 'Diagnostics: env → mapped variables - IT3'
+                  condition: and(succeeded(), eq(variables['Deploy.IT3'], 'true'))
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      Write-Host "[Diag IT3] Scanning Env: for prefixes SIT_IT3_API. and SIT_IT3_API_"
+                      $found = @()
+                      foreach ($p in @('SIT_IT3_API.', 'SIT_IT3_API_')) {
+                        Get-ChildItem Env: |
+                          Where-Object { $_.Name -like "$p*" -and $_.Value -and $_.Value.Trim() -ne '' } |
+                          ForEach-Object {
+                            $suffix = $_.Name.Substring($p.Length)
+                            $mapped = $suffix -replace '__','.' -replace '_','.'
+                            $masked = if ($_.Value.Length -gt 4) { ($_.Value.Substring(0,2) + '***' + $_.Value.Substring($_.Value.Length-2)) } else { '***' }
+                            $found += [PSCustomObject]@{ EnvName = $_.Name; Mapped = $mapped; ValueSample = $masked }
+                          }
+                      }
+                      Write-Host ("[Diag IT3] VarsFound={0}" -f $found.Count)
+                      $found | Sort-Object Mapped | Format-Table -AutoSize | Out-String -Width 200 | Write-Host
                 # IT3 – prepare variables without prefix and run File Transform
                 - task: PowerShell@2
                   displayName: 'Prepare variables for transform - IT3'
@@ -372,6 +435,27 @@ stages:
                     fileType: 'json'
                     targetFiles: 'appsettings.json'
 
+                # IT4 – diagnostics: show available env vars and mapped names
+                - task: PowerShell@2
+                  displayName: 'Diagnostics: env → mapped variables - IT4'
+                  condition: and(succeeded(), eq(variables['Deploy.IT4'], 'true'))
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      Write-Host "[Diag IT4] Scanning Env: for prefixes SIT_IT4_API. and SIT_IT4_API_"
+                      $found = @()
+                      foreach ($p in @('SIT_IT4_API.', 'SIT_IT4_API_')) {
+                        Get-ChildItem Env: |
+                          Where-Object { $_.Name -like "$p*" -and $_.Value -and $_.Value.Trim() -ne '' } |
+                          ForEach-Object {
+                            $suffix = $_.Name.Substring($p.Length)
+                            $mapped = $suffix -replace '__','.' -replace '_','.'
+                            $masked = if ($_.Value.Length -gt 4) { ($_.Value.Substring(0,2) + '***' + $_.Value.Substring($_.Value.Length-2)) } else { '***' }
+                            $found += [PSCustomObject]@{ EnvName = $_.Name; Mapped = $mapped; ValueSample = $masked }
+                          }
+                      }
+                      Write-Host ("[Diag IT4] VarsFound={0}" -f $found.Count)
+                      $found | Sort-Object Mapped | Format-Table -AutoSize | Out-String -Width 200 | Write-Host
                 # IT4 – prepare variables without prefix and run File Transform
                 - task: PowerShell@2
                   displayName: 'Prepare variables for transform - IT4'
