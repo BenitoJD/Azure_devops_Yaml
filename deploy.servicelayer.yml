@@ -400,22 +400,30 @@ stages:
                         Recurse $obj ''
                         return $results
                       }
+                      $appPath = Join-Path "$(Stakeholder1.PhysicalPath)" 'appsettings.json'
+                      $jsonText = if (Test-Path $appPath) { Get-Content $appPath -Raw } else { $null }
                       foreach ($p in @('SIT_IT1_API.', 'SIT_IT1_API_')) {
                         Get-ChildItem Env: |
                           Where-Object { $_.Name -like "$p*" -and $_.Value -and $_.Value.Trim() -ne '' } |
                           ForEach-Object {
                             $suffix = $_.Name.Substring($p.Length)
                             $mapped = $suffix -replace '__','.' # keep single underscores
-                            if ($mapped -notmatch '\\.' -and $remap.ContainsKey($mapped.ToUpper())) { $mapped = $remap[$mapped.ToUpper()] } elseif ($mapped -notmatch '\\.' -and $jsonText) {
-                              $hits = Find-LeafPaths $jsonText $mapped
-                              if ($hits.Count -eq 1) { $mapped = $hits[0] }
-                            }
+                            $hits = @()
+                            if ($mapped -notmatch '\\.' -and $jsonText) { $hits = Find-LeafPaths $jsonText $mapped; if ($hits.Count -eq 1) { $mapped = $hits[0] } }
+                            $mapType = if ($suffix -match '__' -or $mapped -match '\\.') { 'ExactPath' } elseif ($hits.Count -eq 1) { 'AutoLeafUnique' } elseif ($hits.Count -gt 1) { 'Ambiguous' } else { 'NoMatch' }
                             $masked = if ($_.Value.Length -gt 4) { ($_.Value.Substring(0,2) + '***' + $_.Value.Substring($_.Value.Length-2)) } else { '***' }
-                            $found += [PSCustomObject]@{ EnvName = $_.Name; Mapped = $mapped; ValueSample = $masked }
+                            $found += [PSCustomObject]@{ EnvName = $_.Name; Mapped = $mapped; MapType=$mapType; Hits=$hits.Count; ValueSample = $masked }
                           }
                       }
                       Write-Host ("[Diag IT1] VarsFound={0}" -f $found.Count)
-                      $found | Sort-Object Mapped | Format-Table -AutoSize | Out-String -Width 200 | Write-Host
+                      $found | Sort-Object MapType, Mapped | Format-Table EnvName,MapType,Hits,Mapped,ValueSample -AutoSize | Out-String -Width 200 | Write-Host
+                      $amb = @($found | Where-Object { $_.MapType -eq 'Ambiguous' })
+                      $miss = @($found | Where-Object { $_.MapType -eq 'NoMatch' })
+                      $auto = @($found | Where-Object { $_.MapType -eq 'AutoLeafUnique' })
+                      $exact = @($found | Where-Object { $_.MapType -eq 'ExactPath' })
+                      Write-Host ("[Diag IT1] Summary: Exact={0} Auto={1} Ambiguous={2} NoMatch={3}" -f $exact.Count,$auto.Count,$amb.Count,$miss.Count)
+                      if ($amb.Count -gt 0) { Write-Host "##vso[task.logissue type=warning][Diag IT1] Ambiguous leaf names:"; $amb | ForEach-Object { Write-Host ("  - {0} → {1} (hits={2})" -f $_.EnvName,$_.Mapped,$_.Hits) } }
+                      if ($miss.Count -gt 0) { Write-Host "##vso[task.logissue type=warning][Diag IT1] NoMatch leaf names:"; $miss | ForEach-Object { Write-Host ("  - {0} (leaf='{1}')" -f $_.EnvName, ($_.EnvName -replace '^SIT_IT1_API[._]','')) } }
                 # IT1 – prepare variables without prefix and run File Transform
                 - task: PowerShell@2
                   displayName: 'Prepare variables for transform - IT1'
@@ -532,22 +540,29 @@ stages:
                       Write-Host "[Diag IT2] Scanning Env: for prefixes SIT_IT2_API. and SIT_IT2_API_"
                       $found = @()
                       $remap = @{}
+                      $appPath = Join-Path "$(Stakeholder2.PhysicalPath)" 'appsettings.json'
+                      $jsonText = if (Test-Path $appPath) { Get-Content $appPath -Raw } else { $null }
                       foreach ($p in @('SIT_IT2_API.', 'SIT_IT2_API_')) {
                         Get-ChildItem Env: |
                           Where-Object { $_.Name -like "$p*" -and $_.Value -and $_.Value.Trim() -ne '' } |
                           ForEach-Object {
                             $suffix = $_.Name.Substring($p.Length)
                             $mapped = $suffix -replace '__','.'
-                            if ($mapped -notmatch '\\.' -and $remap.ContainsKey($mapped.ToUpper())) { $mapped = $remap[$mapped.ToUpper()] } elseif ($mapped -notmatch '\\.' -and $jsonText) {
-                              $hits = Find-LeafPaths $jsonText $mapped
-                              if ($hits.Count -eq 1) { $mapped = $hits[0] }
-                            }
+                            $hits = @(); if ($mapped -notmatch '\\.' -and $jsonText) { $hits = Find-LeafPaths $jsonText $mapped; if ($hits.Count -eq 1) { $mapped = $hits[0] } }
+                            $mapType = if ($suffix -match '__' -or $mapped -match '\\.') { 'ExactPath' } elseif ($hits.Count -eq 1) { 'AutoLeafUnique' } elseif ($hits.Count -gt 1) { 'Ambiguous' } else { 'NoMatch' }
                             $masked = if ($_.Value.Length -gt 4) { ($_.Value.Substring(0,2) + '***' + $_.Value.Substring($_.Value.Length-2)) } else { '***' }
-                            $found += [PSCustomObject]@{ EnvName = $_.Name; Mapped = $mapped; ValueSample = $masked }
+                            $found += [PSCustomObject]@{ EnvName = $_.Name; Mapped = $mapped; MapType=$mapType; Hits=$hits.Count; ValueSample = $masked }
                           }
                       }
                       Write-Host ("[Diag IT2] VarsFound={0}" -f $found.Count)
-                      $found | Sort-Object Mapped | Format-Table -AutoSize | Out-String -Width 200 | Write-Host
+                      $found | Sort-Object MapType, Mapped | Format-Table EnvName,MapType,Hits,Mapped,ValueSample -AutoSize | Out-String -Width 200 | Write-Host
+                      $amb = @($found | Where-Object { $_.MapType -eq 'Ambiguous' })
+                      $miss = @($found | Where-Object { $_.MapType -eq 'NoMatch' })
+                      $auto = @($found | Where-Object { $_.MapType -eq 'AutoLeafUnique' })
+                      $exact = @($found | Where-Object { $_.MapType -eq 'ExactPath' })
+                      Write-Host ("[Diag IT2] Summary: Exact={0} Auto={1} Ambiguous={2} NoMatch={3}" -f $exact.Count,$auto.Count,$amb.Count,$miss.Count)
+                      if ($amb.Count -gt 0) { Write-Host "##vso[task.logissue type=warning][Diag IT2] Ambiguous leaf names:"; $amb | ForEach-Object { Write-Host ("  - {0} → {1} (hits={2})" -f $_.EnvName,$_.Mapped,$_.Hits) } }
+                      if ($miss.Count -gt 0) { Write-Host "##vso[task.logissue type=warning][Diag IT2] NoMatch leaf names:"; $miss | ForEach-Object { Write-Host ("  - {0} (leaf='{1}')" -f $_.EnvName, ($_.EnvName -replace '^SIT_IT2_API[._]','')) } }
                 # IT2 – prepare variables without prefix and run File Transform
                 - task: PowerShell@2
                   displayName: 'Prepare variables for transform - IT2'
@@ -633,19 +648,29 @@ stages:
                       Write-Host "[Diag IT3] Scanning Env: for prefixes SIT_IT3_API. and SIT_IT3_API_"
                       $found = @()
                       $remap = @{}
+                      $appPath = Join-Path "$(Stakeholder3.PhysicalPath)" 'appsettings.json'
+                      $jsonText = if (Test-Path $appPath) { Get-Content $appPath -Raw } else { $null }
                       foreach ($p in @('SIT_IT3_API.', 'SIT_IT3_API_')) {
                         Get-ChildItem Env: |
                           Where-Object { $_.Name -like "$p*" -and $_.Value -and $_.Value.Trim() -ne '' } |
                           ForEach-Object {
                             $suffix = $_.Name.Substring($p.Length)
                             $mapped = $suffix -replace '__','.'
-                            if ($mapped -notmatch '\\.' -and $remap.ContainsKey($mapped.ToUpper())) { $mapped = $remap[$mapped.ToUpper()] } elseif ($mapped -notmatch '\\.' -and $jsonText) { $hits = Find-LeafPaths $jsonText $mapped; if ($hits.Count -eq 1) { $mapped = $hits[0] } }
+                            $hits = @(); if ($mapped -notmatch '\\.' -and $jsonText) { $hits = Find-LeafPaths $jsonText $mapped; if ($hits.Count -eq 1) { $mapped = $hits[0] } }
+                            $mapType = if ($suffix -match '__' -or $mapped -match '\\.') { 'ExactPath' } elseif ($hits.Count -eq 1) { 'AutoLeafUnique' } elseif ($hits.Count -gt 1) { 'Ambiguous' } else { 'NoMatch' }
                             $masked = if ($_.Value.Length -gt 4) { ($_.Value.Substring(0,2) + '***' + $_.Value.Substring($_.Value.Length-2)) } else { '***' }
-                            $found += [PSCustomObject]@{ EnvName = $_.Name; Mapped = $mapped; ValueSample = $masked }
+                            $found += [PSCustomObject]@{ EnvName = $_.Name; Mapped = $mapped; MapType=$mapType; Hits=$hits.Count; ValueSample = $masked }
                           }
                       }
                       Write-Host ("[Diag IT3] VarsFound={0}" -f $found.Count)
-                      $found | Sort-Object Mapped | Format-Table -AutoSize | Out-String -Width 200 | Write-Host
+                      $found | Sort-Object MapType, Mapped | Format-Table EnvName,MapType,Hits,Mapped,ValueSample -AutoSize | Out-String -Width 200 | Write-Host
+                      $amb = @($found | Where-Object { $_.MapType -eq 'Ambiguous' })
+                      $miss = @($found | Where-Object { $_.MapType -eq 'NoMatch' })
+                      $auto = @($found | Where-Object { $_.MapType -eq 'AutoLeafUnique' })
+                      $exact = @($found | Where-Object { $_.MapType -eq 'ExactPath' })
+                      Write-Host ("[Diag IT3] Summary: Exact={0} Auto={1} Ambiguous={2} NoMatch={3}" -f $exact.Count,$auto.Count,$amb.Count,$miss.Count)
+                      if ($amb.Count -gt 0) { Write-Host "##vso[task.logissue type=warning][Diag IT3] Ambiguous leaf names:"; $amb | ForEach-Object { Write-Host ("  - {0} → {1} (hits={2})" -f $_.EnvName,$_.Mapped,$_.Hits) } }
+                      if ($miss.Count -gt 0) { Write-Host "##vso[task.logissue type=warning][Diag IT3] NoMatch leaf names:"; $miss | ForEach-Object { Write-Host ("  - {0} (leaf='{1}')" -f $_.EnvName, ($_.EnvName -replace '^SIT_IT3_API[._]','')) } }
                 # IT3 – prepare variables without prefix and run File Transform
                 - task: PowerShell@2
                   displayName: 'Prepare variables for transform - IT3'
@@ -730,27 +755,30 @@ stages:
                     script: |
                       Write-Host "[Diag IT4] Scanning Env: for prefixes SIT_IT4_API. and SIT_IT4_API_"
                       $found = @()
-                      $remap = @{
-                        'CONNECTIONSTRING'  = 'MongoDatabaseSettings.ConnectionString'
-                        'DATABASENAME'      = 'MongoDatabaseSettings.DatabaseName'
-                        'INCLUDETESTSTORES' = 'MasterDataSettings.includeTestStores'
-                        'MASTERDATAKEY'     = 'MasterDataSettings.MasterDataKey'
-                        'MD_DBCON'          = 'MasterDataSettings.MD_DBCon'
-                        'MDIS_DBCON'        = 'MasterDataSettings.MDIS_DBCon'
-                      }
+                      $remap = @{}
+                      $appPath = Join-Path "$(Stakeholder4.PhysicalPath)" 'appsettings.json'
+                      $jsonText = if (Test-Path $appPath) { Get-Content $appPath -Raw } else { $null }
                       foreach ($p in @('SIT_IT4_API.', 'SIT_IT4_API_')) {
                         Get-ChildItem Env: |
                           Where-Object { $_.Name -like "$p*" -and $_.Value -and $_.Value.Trim() -ne '' } |
                           ForEach-Object {
                             $suffix = $_.Name.Substring($p.Length)
                             $mapped = $suffix -replace '__','.'
-                            if ($mapped -notmatch '\\.' -and $remap.ContainsKey($mapped.ToUpper())) { $mapped = $remap[$mapped.ToUpper()] } elseif ($mapped -notmatch '\\.' -and $jsonText) { $hits = Find-LeafPaths $jsonText $mapped; if ($hits.Count -eq 1) { $mapped = $hits[0] } }
+                            $hits = @(); if ($mapped -notmatch '\\.' -and $jsonText) { $hits = Find-LeafPaths $jsonText $mapped; if ($hits.Count -eq 1) { $mapped = $hits[0] } }
+                            $mapType = if ($suffix -match '__' -or $mapped -match '\\.') { 'ExactPath' } elseif ($hits.Count -eq 1) { 'AutoLeafUnique' } elseif ($hits.Count -gt 1) { 'Ambiguous' } else { 'NoMatch' }
                             $masked = if ($_.Value.Length -gt 4) { ($_.Value.Substring(0,2) + '***' + $_.Value.Substring($_.Value.Length-2)) } else { '***' }
-                            $found += [PSCustomObject]@{ EnvName = $_.Name; Mapped = $mapped; ValueSample = $masked }
+                            $found += [PSCustomObject]@{ EnvName = $_.Name; Mapped = $mapped; MapType=$mapType; Hits=$hits.Count; ValueSample = $masked }
                           }
                       }
                       Write-Host ("[Diag IT4] VarsFound={0}" -f $found.Count)
-                      $found | Sort-Object Mapped | Format-Table -AutoSize | Out-String -Width 200 | Write-Host
+                      $found | Sort-Object MapType, Mapped | Format-Table EnvName,MapType,Hits,Mapped,ValueSample -AutoSize | Out-String -Width 200 | Write-Host
+                      $amb = @($found | Where-Object { $_.MapType -eq 'Ambiguous' })
+                      $miss = @($found | Where-Object { $_.MapType -eq 'NoMatch' })
+                      $auto = @($found | Where-Object { $_.MapType -eq 'AutoLeafUnique' })
+                      $exact = @($found | Where-Object { $_.MapType -eq 'ExactPath' })
+                      Write-Host ("[Diag IT4] Summary: Exact={0} Auto={1} Ambiguous={2} NoMatch={3}" -f $exact.Count,$auto.Count,$amb.Count,$miss.Count)
+                      if ($amb.Count -gt 0) { Write-Host "##vso[task.logissue type=warning][Diag IT4] Ambiguous leaf names:"; $amb | ForEach-Object { Write-Host ("  - {0} → {1} (hits={2})" -f $_.EnvName,$_.Mapped,$_.Hits) } }
+                      if ($miss.Count -gt 0) { Write-Host "##vso[task.logissue type=warning][Diag IT4] NoMatch leaf names:"; $miss | ForEach-Object { Write-Host ("  - {0} (leaf='{1}')" -f $_.EnvName, ($_.EnvName -replace '^SIT_IT4_API[._]','')) } }
                 # IT4 – prepare variables without prefix and run File Transform
                 - task: PowerShell@2
                   displayName: 'Prepare variables for transform - IT4'
@@ -759,14 +787,7 @@ stages:
                     targetType: 'inline'
                     script: |
                       $prefixes = @('SIT_IT4_API.', 'SIT_IT4_API_')
-                      $remap = @{
-                        'CONNECTIONSTRING'  = 'MongoDatabaseSettings.ConnectionString'
-                        'DATABASENAME'      = 'MongoDatabaseSettings.DatabaseName'
-                        'INCLUDETESTSTORES' = 'MasterDataSettings.includeTestStores'
-                        'MASTERDATAKEY'     = 'MasterDataSettings.MasterDataKey'
-                        'MD_DBCON'          = 'MasterDataSettings.MD_DBCon'
-                        'MDIS_DBCON'        = 'MasterDataSettings.MDIS_DBCon'
-                      }
+                      $remap = @{}
                       foreach ($p in $prefixes) {
                         Get-ChildItem Env: |
                           Where-Object { $_.Name -like "$p*" -and $_.Value -and $_.Value.Trim() -ne '' } |
