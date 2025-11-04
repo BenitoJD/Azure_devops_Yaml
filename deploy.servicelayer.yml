@@ -118,6 +118,11 @@ stages:
     displayName: 'Diagnose environment variables'
     dependsOn: Initialize
     condition: succeeded()
+    variables:
+      - group: SIT_IT1_API
+      - group: SIT_IT2_API
+      - group: SIT_IT3_API
+      - group: SIT_IT4_API
     jobs:
       - deployment: Diagnose_Env
         displayName: 'Dump env and check variable'
@@ -134,6 +139,7 @@ stages:
                   inputs:
                     targetType: 'inline'
                     script: |
+                      Write-Host "Loaded variable groups: SIT_IT1_API, SIT_IT2_API, SIT_IT3_API, SIT_IT4_API"
                       Write-Host "Agent: $env:AGENT_NAME | Machine: $env:COMPUTERNAME | OS: $env:OS"
                       Write-Host "Build: $env:BUILD_BUILDNUMBER | Definition: $env:BUILD_DEFINITIONNAME | Branch: $env:BUILD_SOURCEBRANCHNAME"
                       Write-Host "--- BEGIN ENV ---"
@@ -304,6 +310,62 @@ stages:
                         Copy-Item -Path "$($s.Source)\*" -Destination $s.Dest -Recurse -Force
                       }
 
+  - stage: DiagnoseTokens
+    displayName: 'Diagnose token availability before injection'
+    dependsOn: DeployFiles
+    condition: succeeded()
+    variables:
+      - group: SIT_IT1_API
+      - group: SIT_IT2_API
+      - group: SIT_IT3_API
+      - group: SIT_IT4_API
+    jobs:
+      - deployment: Diagnose_Tokens_Before
+        displayName: 'List tokens in appsettings.json and map to env vars'
+        environment:
+          name: SIT
+          resourceType: virtualMachine
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: none
+                - task: PowerShell@2
+                  displayName: 'Scan tokens and check variable presence'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      $stakeholders = @(
+                        @{Label='IT1'; Path="$(Stakeholder1.PhysicalPath)"; Deploy="$(Deploy.IT1)"},
+                        @{Label='IT2'; Path="$(Stakeholder2.PhysicalPath)"; Deploy="$(Deploy.IT2)"},
+                        @{Label='IT3'; Path="$(Stakeholder3.PhysicalPath)"; Deploy="$(Deploy.IT3)"},
+                        @{Label='IT4'; Path="$(Stakeholder4.PhysicalPath)"; Deploy="$(Deploy.IT4)"}
+                      )
+                      foreach ($s in $stakeholders) {
+                        if ($s.Deploy -ne 'true') { continue }
+                        $file = Join-Path $s.Path 'appsettings.json'
+                        Write-Host "--- [$($s.Label)] Checking $file ---"
+                        if (-not (Test-Path $file)) { Write-Host "File not found"; continue }
+                        $content = Get-Content -LiteralPath $file -Raw
+                        $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
+                        $tokens = @{}
+                        foreach ($m in $matches) { $tokens[$m.Groups[1].Value] = $true }
+                        if ($tokens.Count -eq 0) { Write-Host 'No ${...} tokens found.'; continue }
+                        Write-Host "Found tokens (prefix ${ and suffix }):"
+                        foreach ($t in $tokens.Keys | Sort-Object) { Write-Host "  - $t" }
+                        Write-Host "Mapping tokens to environment variable keys (UPPERCASE, non-alphanumerics -> '_')"
+                        foreach ($t in $tokens.Keys | Sort-Object) {
+                          $envKey = ($t -replace '[^A-Za-z0-9_]', '_').ToUpper()
+                          $exists = Test-Path "Env:$envKey"
+                          if ($exists) {
+                            $val = (Get-Item "Env:$envKey").Value
+                            Write-Host ("OK: {0} -> Env:{1} = {2}" -f $t, $envKey, $val)
+                          } else {
+                            Write-Host ("MISSING: {0} -> Env:{1} not found" -f $t, $envKey)
+                          }
+                        }
+                      }
+
   - stage: InjectConfiguration
     displayName: 'Inject appsettings.json Configuration'
     dependsOn: DeployFiles
@@ -374,6 +436,46 @@ stages:
                     keepToken: true
                     tokenPrefix: '${'
                     tokenSuffix: '}'
+
+  - stage: DiagnosePostInject
+    displayName: 'Diagnose after injection (unresolved tokens)'
+    dependsOn: InjectConfiguration
+    condition: succeeded()
+    jobs:
+      - deployment: Diagnose_Tokens_After
+        displayName: 'Verify tokens are replaced in appsettings.json'
+        environment:
+          name: SIT
+          resourceType: virtualMachine
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: none
+                - task: PowerShell@2
+                  displayName: 'Report unresolved tokens'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      $stakeholders = @(
+                        @{Label='IT1'; Path="$(Stakeholder1.PhysicalPath)"; Deploy="$(Deploy.IT1)"},
+                        @{Label='IT2'; Path="$(Stakeholder2.PhysicalPath)"; Deploy="$(Deploy.IT2)"},
+                        @{Label='IT3'; Path="$(Stakeholder3.PhysicalPath)"; Deploy="$(Deploy.IT3)"},
+                        @{Label='IT4'; Path="$(Stakeholder4.PhysicalPath)"; Deploy="$(Deploy.IT4)"}
+                      )
+                      foreach ($s in $stakeholders) {
+                        if ($s.Deploy -ne 'true') { continue }
+                        $file = Join-Path $s.Path 'appsettings.json'
+                        Write-Host "--- [$($s.Label)] Verifying $file ---"
+                        if (-not (Test-Path $file)) { Write-Host "File not found"; continue }
+                        $content = Get-Content -LiteralPath $file -Raw
+                        $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
+                        if ($matches.Count -eq 0) { Write-Host 'All tokens appear replaced (no ${...} found).'; continue }
+                        $unresolved = @{}
+                        foreach ($m in $matches) { $unresolved[$m.Groups[1].Value] = $true }
+                        Write-Host 'Unresolved tokens found:'
+                        foreach ($t in $unresolved.Keys | Sort-Object) { Write-Host "  - ${$t}" }
+                      }
 
   - stage: Permissions
     displayName: 'Set Permissions'
