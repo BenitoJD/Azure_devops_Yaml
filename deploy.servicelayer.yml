@@ -403,7 +403,7 @@ stages:
                             if ([string]::IsNullOrWhiteSpace($entry.Value)) { $skipped++; continue }
                             $leaf = ($entry.Key -split ':')[-1]
                             $res = Replace-JsonLeafValueInText -jsonText $text -leafKey $leaf -newValue $entry.Value
-                            if ($res.Changed) { $text = $res.Text; $updated++ } else { $skipped++ }
+                            if ($res.Changed) { $text = $res.Text; $updated++; Write-Host "[InjectConfig] UpdatedKey=$leaf" } else { $skipped++; Write-Host "[InjectConfig] SkippedKey=$leaf (not found)" }
                           }
                           $backupPath = "$appSettingsPath.backup.$(Get-Date -Format 'yyyyMMdd_HHmmss')"; Copy-Item $appSettingsPath $backupPath -Force
                           try { $fi = Get-Item -LiteralPath $appSettingsPath -ErrorAction Stop; if ($fi.Attributes -band [IO.FileAttributes]::ReadOnly) { Attrib -R $appSettingsPath } } catch {}
