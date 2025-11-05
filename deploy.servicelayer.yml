@@ -554,6 +554,7 @@ stages:
                       foreach ($t in $tokenSet.Keys) {
                         if ([string]::IsNullOrWhiteSpace($t)) { continue }
                         $needle = "${$t}"
+                        if ([string]::IsNullOrEmpty($needle)) { continue }
                         $key = $t.ToUpperInvariant()
                         $val = $null
                         if ($exactMap.ContainsKey($key)) { $val = [string]$exactMap[$key] }
@@ -665,6 +666,7 @@ stages:
                       foreach ($t in $tokenSet.Keys) {
                         if ([string]::IsNullOrWhiteSpace($t)) { continue }
                         $needle = "${$t}"
+                        if ([string]::IsNullOrEmpty($needle)) { continue }
                         $key = $t.ToUpperInvariant()
                         $val = $null
                         if ($exactMap.ContainsKey($key)) { $val = [string]$exactMap[$key] }
@@ -776,6 +778,7 @@ stages:
                       foreach ($t in $tokenSet.Keys) {
                         if ([string]::IsNullOrWhiteSpace($t)) { continue }
                         $needle = "${$t}"
+                        if ([string]::IsNullOrEmpty($needle)) { continue }
                         $key = $t.ToUpperInvariant()
                         $val = $null
                         if ($exactMap.ContainsKey($key)) { $val = [string]$exactMap[$key] }
@@ -888,6 +891,7 @@ stages:
                       foreach ($t in $tokenSet.Keys) {
                         if ([string]::IsNullOrWhiteSpace($t)) { continue }
                         $needle = "${$t}"
+                        if ([string]::IsNullOrEmpty($needle)) { continue }
                         $key = $t.ToUpperInvariant()
                         $val = $null
                         if ($exactMap.ContainsKey($key)) { $val = [string]$exactMap[$key] }
