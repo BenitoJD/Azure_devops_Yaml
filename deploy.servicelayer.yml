@@ -499,39 +499,50 @@ stages:
                       $suffixMap = @{}
                       foreach ($e in $envVars) {
                         $nameUpper = $e.Name.ToUpperInvariant()
-                        $exactMap[$nameUpper] = @{ Name = $e.Name; Value = $e.Value }
+                        $exactMap[$nameUpper] = $e.Value
                         $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
-                        $suffixMap[$normalized] = @{ Name = $e.Name; Value = $e.Value }
+                        $suffixMap[$normalized] = $e.Value
                       }
-                      $replaced = 0; $unresolved = @(); $matchedLog = @()
+                      $setCount = 0; $unresolved = @(); $matchedLog = @()
                       $tokenSet = @{}
                       foreach ($m in $matches) { $tokenSet[$m.Groups[1].Value] = $true }
                       Write-Host ("Tokens found: {0}" -f (($tokenSet.Keys) -join ', '))
                       foreach ($t in $tokenSet.Keys) {
                         if ([string]::IsNullOrWhiteSpace($t)) { continue }
-                        $needle = "${$t}"
-                        if ([string]::IsNullOrEmpty($needle)) { continue }
                         $tUpper = $t.ToUpperInvariant()
                         $val = $null
-                        $srcName = $null
-                        if ($exactMap.ContainsKey($tUpper)) { $val = $exactMap[$tUpper].Value; $srcName = $exactMap[$tUpper].Name }
-                        elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper].Value; $srcName = $suffixMap[$tUpper].Name }
+                        if ($exactMap.ContainsKey($tUpper)) { $val = $exactMap[$tUpper] }
+                        elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper] }
                         if ($null -ne $val) {
-                          if ($content.Contains($needle)) { $content = $content.Replace($needle, $val) }
-                          $replaced++
+                          Write-Host ("##vso[task.setvariable variable={0}]{1}" -f $t, $val)
+                          $setCount++
                           $disp = $val; if ($disp -is [string] -and $disp.Length -gt 60) { $disp = $disp.Substring(0,60) + '...' }
-                          $matchedLog += ("  {0} <- {1} = {2}" -f $needle, $srcName, $disp)
+                          $matchedLog += ("  ${$t} <= {0}" -f $disp)
                         } else {
                           $unresolved += $t
                         }
                       }
-                      Set-Content -LiteralPath $file -Value $content -Encoding UTF8
-                      if ($matchedLog.Count -gt 0) { Write-Host 'Matches:'; $matchedLog | ForEach-Object { Write-Host $_ } }
-                      Write-Host ("Total tokens replaced: {0}" -f $replaced)
+                      if ($matchedLog.Count -gt 0) { Write-Host 'Will replace:'; $matchedLog | ForEach-Object { Write-Host $_ } }
+                      Write-Host ("Variables set for tokens: {0}" -f $setCount)
                       if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
 
+                - task: qetza.replacetokens.replacetokens-task.replacetokens@5
+                  displayName: 'Replace tokens (IT1)'
+                  condition: and(succeeded(), eq(variables['Deploy.IT1'], 'true'))
+                  inputs:
+                    rootDirectory: '$(Stakeholder1.PhysicalPath)'
+                    targetFiles: 'appsettings.json'
+                    encoding: 'auto'
+                    writeBOM: true
+                    actionOnMissing: 'keep'
+                    keepToken: true
+                    tokenPrefix: '${'
+                    tokenSuffix: '}'
+                    useEnvironmentVariables: true
+                    verbosity: 'detailed'
+
                 - task: PowerShell@2
-                  displayName: 'Inject tokens from env (strip any prefix) - IT2'
+                  displayName: 'Map env -> token variables (IT2)'
                   condition: and(succeeded(), eq(variables['Deploy.IT2'], 'true'))
                   inputs:
                     targetType: 'inline'
@@ -551,35 +562,46 @@ stages:
                         $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
                         $suffixMap[$normalized] = @{ Name = $e.Name; Value = $e.Value }
                       }
-                      $replaced = 0; $unresolved = @(); $matchedLog = @()
+                      $setCount = 0; $unresolved = @(); $matchedLog = @()
                       $tokenSet = @{}
                       foreach ($m in $matches) { $tokenSet[$m.Groups[1].Value] = $true }
                       Write-Host ("Tokens found: {0}" -f (($tokenSet.Keys) -join ', '))
                       foreach ($t in $tokenSet.Keys) {
                         if ([string]::IsNullOrWhiteSpace($t)) { continue }
-                        $needle = "${$t}"
-                        if ([string]::IsNullOrEmpty($needle)) { continue }
                         $tUpper = $t.ToUpperInvariant()
                         $val = $null
-                        $srcName = $null
-                        if ($exactMap.ContainsKey($tUpper)) { $val = $exactMap[$tUpper].Value; $srcName = $exactMap[$tUpper].Name }
-                        elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper].Value; $srcName = $suffixMap[$tUpper].Name }
+                        if ($exactMap.ContainsKey($tUpper)) { $val = $exactMap[$tUpper] }
+                        elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper] }
                         if ($null -ne $val) {
-                          if ($content.Contains($needle)) { $content = $content.Replace($needle, $val) }
-                          $replaced++
+                          Write-Host ("##vso[task.setvariable variable={0}]{1}" -f $t, $val)
+                          $setCount++
                           $disp = $val; if ($disp -is [string] -and $disp.Length -gt 60) { $disp = $disp.Substring(0,60) + '...' }
-                          $matchedLog += ("  {0} <- {1} = {2}" -f $needle, $srcName, $disp)
+                          $matchedLog += ("  ${$t} <= {0}" -f $disp)
                         } else {
                           $unresolved += $t
                         }
                       }
-                      Set-Content -LiteralPath $file -Value $content -Encoding UTF8
-                      if ($matchedLog.Count -gt 0) { Write-Host 'Matches:'; $matchedLog | ForEach-Object { Write-Host $_ } }
-                      Write-Host ("Total tokens replaced: {0}" -f $replaced)
+                      if ($matchedLog.Count -gt 0) { Write-Host 'Will replace:'; $matchedLog | ForEach-Object { Write-Host $_ } }
+                      Write-Host ("Variables set for tokens: {0}" -f $setCount)
                       if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
 
+                - task: qetza.replacetokens.replacetokens-task.replacetokens@5
+                  displayName: 'Replace tokens (IT2)'
+                  condition: and(succeeded(), eq(variables['Deploy.IT2'], 'true'))
+                  inputs:
+                    rootDirectory: '$(Stakeholder2.PhysicalPath)'
+                    targetFiles: 'appsettings.json'
+                    encoding: 'auto'
+                    writeBOM: true
+                    actionOnMissing: 'keep'
+                    keepToken: true
+                    tokenPrefix: '${'
+                    tokenSuffix: '}'
+                    useEnvironmentVariables: true
+                    verbosity: 'detailed'
+
                 - task: PowerShell@2
-                  displayName: 'Inject tokens from env (strip any prefix) - IT3'
+                  displayName: 'Map env -> token variables (IT3)'
                   condition: and(succeeded(), eq(variables['Deploy.IT3'], 'true'))
                   inputs:
                     targetType: 'inline'
@@ -599,35 +621,46 @@ stages:
                         $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
                         $suffixMap[$normalized] = @{ Name = $e.Name; Value = $e.Value }
                       }
-                      $replaced = 0; $unresolved = @(); $matchedLog = @()
+                      $setCount = 0; $unresolved = @(); $matchedLog = @()
                       $tokenSet = @{}
                       foreach ($m in $matches) { $tokenSet[$m.Groups[1].Value] = $true }
                       Write-Host ("Tokens found: {0}" -f (($tokenSet.Keys) -join ', '))
                       foreach ($t in $tokenSet.Keys) {
                         if ([string]::IsNullOrWhiteSpace($t)) { continue }
-                        $needle = "${$t}"
-                        if ([string]::IsNullOrEmpty($needle)) { continue }
                         $tUpper = $t.ToUpperInvariant()
                         $val = $null
-                        $srcName = $null
-                        if ($exactMap.ContainsKey($tUpper)) { $val = $exactMap[$tUpper].Value; $srcName = $exactMap[$tUpper].Name }
-                        elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper].Value; $srcName = $suffixMap[$tUpper].Name }
+                        if ($exactMap.ContainsKey($tUpper)) { $val = $exactMap[$tUpper] }
+                        elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper] }
                         if ($null -ne $val) {
-                          if ($content.Contains($needle)) { $content = $content.Replace($needle, $val) }
-                          $replaced++
+                          Write-Host ("##vso[task.setvariable variable={0}]{1}" -f $t, $val)
+                          $setCount++
                           $disp = $val; if ($disp -is [string] -and $disp.Length -gt 60) { $disp = $disp.Substring(0,60) + '...' }
-                          $matchedLog += ("  {0} <- {1} = {2}" -f $needle, $srcName, $disp)
+                          $matchedLog += ("  ${$t} <= {0}" -f $disp)
                         } else {
                           $unresolved += $t
                         }
                       }
-                      Set-Content -LiteralPath $file -Value $content -Encoding UTF8
-                      if ($matchedLog.Count -gt 0) { Write-Host 'Matches:'; $matchedLog | ForEach-Object { Write-Host $_ } }
-                      Write-Host ("Total tokens replaced: {0}" -f $replaced)
+                      if ($matchedLog.Count -gt 0) { Write-Host 'Will replace:'; $matchedLog | ForEach-Object { Write-Host $_ } }
+                      Write-Host ("Variables set for tokens: {0}" -f $setCount)
                       if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
 
+                - task: qetza.replacetokens.replacetokens-task.replacetokens@5
+                  displayName: 'Replace tokens (IT3)'
+                  condition: and(succeeded(), eq(variables['Deploy.IT3'], 'true'))
+                  inputs:
+                    rootDirectory: '$(Stakeholder3.PhysicalPath)'
+                    targetFiles: 'appsettings.json'
+                    encoding: 'auto'
+                    writeBOM: true
+                    actionOnMissing: 'keep'
+                    keepToken: true
+                    tokenPrefix: '${'
+                    tokenSuffix: '}'
+                    useEnvironmentVariables: true
+                    verbosity: 'detailed'
+
                 - task: PowerShell@2
-                  displayName: 'Inject tokens from env (strip any prefix) - IT4'
+                  displayName: 'Map env -> token variables (IT4)'
                   condition: and(succeeded(), eq(variables['Deploy.IT4'], 'true'))
                   inputs:
                     targetType: 'inline'
@@ -643,36 +676,48 @@ stages:
                       $suffixMap = @{}
                       foreach ($e in $envVars) {
                         $nameUpper = $e.Name.ToUpperInvariant()
-                        $exactMap[$nameUpper] = @{ Name = $e.Name; Value = $e.Value }
+                        $exactMap[$nameUpper] = $e.Value
                         $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
-                        $suffixMap[$normalized] = @{ Name = $e.Name; Value = $e.Value }
+                        $suffixMap[$normalized] = $e.Value
                       }
-                      $replaced = 0; $unresolved = @(); $matchedLog = @()
+                      $setCount = 0; $unresolved = @(); $matchedLog = @()
                       $tokenSet = @{}
                       foreach ($m in $matches) { $tokenSet[$m.Groups[1].Value] = $true }
                       Write-Host ("Tokens found: {0}" -f (($tokenSet.Keys) -join ', '))
+                      Write-Host ("Tokens found: {0}" -f (($tokenSet.Keys) -join ', '))
                       foreach ($t in $tokenSet.Keys) {
                         if ([string]::IsNullOrWhiteSpace($t)) { continue }
-                        $needle = "${$t}"
-                        if ([string]::IsNullOrEmpty($needle)) { continue }
                         $tUpper = $t.ToUpperInvariant()
                         $val = $null
-                        $srcName = $null
-                        if ($exactMap.ContainsKey($tUpper)) { $val = $exactMap[$tUpper].Value; $srcName = $exactMap[$tUpper].Name }
-                        elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper].Value; $srcName = $suffixMap[$tUpper].Name }
+                        if ($exactMap.ContainsKey($tUpper)) { $val = $exactMap[$tUpper] }
+                        elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper] }
                         if ($null -ne $val) {
-                          if ($content.Contains($needle)) { $content = $content.Replace($needle, $val) }
-                          $replaced++
+                          Write-Host ("##vso[task.setvariable variable={0}]{1}" -f $t, $val)
+                          $setCount++
                           $disp = $val; if ($disp -is [string] -and $disp.Length -gt 60) { $disp = $disp.Substring(0,60) + '...' }
-                          $matchedLog += ("  {0} <- {1} = {2}" -f $needle, $srcName, $disp)
+                          $matchedLog += ("  ${$t} <= {0}" -f $disp)
                         } else {
                           $unresolved += $t
                         }
                       }
-                      Set-Content -LiteralPath $file -Value $content -Encoding UTF8
-                      if ($matchedLog.Count -gt 0) { Write-Host 'Matches:'; $matchedLog | ForEach-Object { Write-Host $_ } }
-                      Write-Host ("Total tokens replaced: {0}" -f $replaced)
+                      if ($matchedLog.Count -gt 0) { Write-Host 'Will replace:'; $matchedLog | ForEach-Object { Write-Host $_ } }
+                      Write-Host ("Variables set for tokens: {0}" -f $setCount)
                       if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
+
+                - task: qetza.replacetokens.replacetokens-task.replacetokens@5
+                  displayName: 'Replace tokens (IT4)'
+                  condition: and(succeeded(), eq(variables['Deploy.IT4'], 'true'))
+                  inputs:
+                    rootDirectory: '$(Stakeholder4.PhysicalPath)'
+                    targetFiles: 'appsettings.json'
+                    encoding: 'auto'
+                    writeBOM: true
+                    actionOnMissing: 'keep'
+                    keepToken: true
+                    tokenPrefix: '${'
+                    tokenSuffix: '}'
+                    useEnvironmentVariables: true
+                    verbosity: 'detailed'
 
   - stage: DiagnosePostInject
     displayName: 'Diagnose after injection (unresolved tokens)'
