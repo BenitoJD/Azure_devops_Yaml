@@ -499,29 +499,33 @@ stages:
                       $suffixMap = @{}
                       foreach ($e in $envVars) {
                         $nameUpper = $e.Name.ToUpperInvariant()
-                        $exactMap[$nameUpper] = $e.Value
+                        $exactMap[$nameUpper] = @{ Name = $e.Name; Value = $e.Value }
                         $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
-                        $suffixMap[$normalized] = $e.Value
+                        $suffixMap[$normalized] = @{ Name = $e.Name; Value = $e.Value }
                       }
-                      $replaced = 0; $unresolved = @()
+                      $replaced = 0; $unresolved = @(); $matchedLog = @()
                       $tokenSet = @{}
                       foreach ($m in $matches) { $tokenSet[$m.Groups[1].Value] = $true }
+                      Write-Host ("Tokens found: {0}" -f (($tokenSet.Keys) -join ', '))
                       foreach ($t in $tokenSet.Keys) {
+                        if ([string]::IsNullOrWhiteSpace($t)) { continue }
                         $needle = "${$t}"
-                        $pattern = [Regex]::Escape($needle)
                         $tUpper = $t.ToUpperInvariant()
                         $val = $null
-                        if ($exactMap.ContainsKey($tUpper)) { $val = $exactMap[$tUpper] }
-                        elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper] }
+                        $srcName = $null
+                        if ($exactMap.ContainsKey($tUpper)) { $val = $exactMap[$tUpper].Value; $srcName = $exactMap[$tUpper].Name }
+                        elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper].Value; $srcName = $suffixMap[$tUpper].Name }
                         if ($null -ne $val) {
-                          $content = [Regex]::Replace($content, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($x) $val })
+                          if ($content.Contains($needle)) { $content = $content.Replace($needle, $val) }
                           $replaced++
-                          Write-Host ("Replaced '{0}'" -f $needle)
+                          $disp = $val; if ($disp -is [string] -and $disp.Length -gt 60) { $disp = $disp.Substring(0,60) + '...' }
+                          $matchedLog += ("  {0} <- {1} = {2}" -f $needle, $srcName, $disp)
                         } else {
                           $unresolved += $t
                         }
                       }
                       Set-Content -LiteralPath $file -Value $content -Encoding UTF8
+                      if ($matchedLog.Count -gt 0) { Write-Host 'Matches:'; $matchedLog | ForEach-Object { Write-Host $_ } }
                       Write-Host ("Total tokens replaced: {0}" -f $replaced)
                       if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
 
@@ -542,29 +546,33 @@ stages:
                       $suffixMap = @{}
                       foreach ($e in $envVars) {
                         $nameUpper = $e.Name.ToUpperInvariant()
-                        $exactMap[$nameUpper] = $e.Value
+                        $exactMap[$nameUpper] = @{ Name = $e.Name; Value = $e.Value }
                         $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
-                        $suffixMap[$normalized] = $e.Value
+                        $suffixMap[$normalized] = @{ Name = $e.Name; Value = $e.Value }
                       }
-                      $replaced = 0; $unresolved = @()
+                      $replaced = 0; $unresolved = @(); $matchedLog = @()
                       $tokenSet = @{}
                       foreach ($m in $matches) { $tokenSet[$m.Groups[1].Value] = $true }
+                      Write-Host ("Tokens found: {0}" -f (($tokenSet.Keys) -join ', '))
                       foreach ($t in $tokenSet.Keys) {
+                        if ([string]::IsNullOrWhiteSpace($t)) { continue }
                         $needle = "${$t}"
-                        $pattern = [Regex]::Escape($needle)
                         $tUpper = $t.ToUpperInvariant()
                         $val = $null
-                        if ($exactMap.ContainsKey($tUpper)) { $val = $exactMap[$tUpper] }
-                        elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper] }
+                        $srcName = $null
+                        if ($exactMap.ContainsKey($tUpper)) { $val = $exactMap[$tUpper].Value; $srcName = $exactMap[$tUpper].Name }
+                        elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper].Value; $srcName = $suffixMap[$tUpper].Name }
                         if ($null -ne $val) {
-                          $content = [Regex]::Replace($content, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($x) $val })
+                          if ($content.Contains($needle)) { $content = $content.Replace($needle, $val) }
                           $replaced++
-                          Write-Host ("Replaced '{0}'" -f $needle)
+                          $disp = $val; if ($disp -is [string] -and $disp.Length -gt 60) { $disp = $disp.Substring(0,60) + '...' }
+                          $matchedLog += ("  {0} <- {1} = {2}" -f $needle, $srcName, $disp)
                         } else {
                           $unresolved += $t
                         }
                       }
                       Set-Content -LiteralPath $file -Value $content -Encoding UTF8
+                      if ($matchedLog.Count -gt 0) { Write-Host 'Matches:'; $matchedLog | ForEach-Object { Write-Host $_ } }
                       Write-Host ("Total tokens replaced: {0}" -f $replaced)
                       if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
 
@@ -585,29 +593,33 @@ stages:
                       $suffixMap = @{}
                       foreach ($e in $envVars) {
                         $nameUpper = $e.Name.ToUpperInvariant()
-                        $exactMap[$nameUpper] = $e.Value
+                        $exactMap[$nameUpper] = @{ Name = $e.Name; Value = $e.Value }
                         $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
-                        $suffixMap[$normalized] = $e.Value
+                        $suffixMap[$normalized] = @{ Name = $e.Name; Value = $e.Value }
                       }
-                      $replaced = 0; $unresolved = @()
+                      $replaced = 0; $unresolved = @(); $matchedLog = @()
                       $tokenSet = @{}
                       foreach ($m in $matches) { $tokenSet[$m.Groups[1].Value] = $true }
+                      Write-Host ("Tokens found: {0}" -f (($tokenSet.Keys) -join ', '))
                       foreach ($t in $tokenSet.Keys) {
+                        if ([string]::IsNullOrWhiteSpace($t)) { continue }
                         $needle = "${$t}"
-                        $pattern = [Regex]::Escape($needle)
                         $tUpper = $t.ToUpperInvariant()
                         $val = $null
-                        if ($exactMap.ContainsKey($tUpper)) { $val = $exactMap[$tUpper] }
-                        elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper] }
+                        $srcName = $null
+                        if ($exactMap.ContainsKey($tUpper)) { $val = $exactMap[$tUpper].Value; $srcName = $exactMap[$tUpper].Name }
+                        elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper].Value; $srcName = $suffixMap[$tUpper].Name }
                         if ($null -ne $val) {
-                          $content = [Regex]::Replace($content, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($x) $val })
+                          if ($content.Contains($needle)) { $content = $content.Replace($needle, $val) }
                           $replaced++
-                          Write-Host ("Replaced '{0}'" -f $needle)
+                          $disp = $val; if ($disp -is [string] -and $disp.Length -gt 60) { $disp = $disp.Substring(0,60) + '...' }
+                          $matchedLog += ("  {0} <- {1} = {2}" -f $needle, $srcName, $disp)
                         } else {
                           $unresolved += $t
                         }
                       }
                       Set-Content -LiteralPath $file -Value $content -Encoding UTF8
+                      if ($matchedLog.Count -gt 0) { Write-Host 'Matches:'; $matchedLog | ForEach-Object { Write-Host $_ } }
                       Write-Host ("Total tokens replaced: {0}" -f $replaced)
                       if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
 
@@ -628,29 +640,33 @@ stages:
                       $suffixMap = @{}
                       foreach ($e in $envVars) {
                         $nameUpper = $e.Name.ToUpperInvariant()
-                        $exactMap[$nameUpper] = $e.Value
+                        $exactMap[$nameUpper] = @{ Name = $e.Name; Value = $e.Value }
                         $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
-                        $suffixMap[$normalized] = $e.Value
+                        $suffixMap[$normalized] = @{ Name = $e.Name; Value = $e.Value }
                       }
-                      $replaced = 0; $unresolved = @()
+                      $replaced = 0; $unresolved = @(); $matchedLog = @()
                       $tokenSet = @{}
                       foreach ($m in $matches) { $tokenSet[$m.Groups[1].Value] = $true }
+                      Write-Host ("Tokens found: {0}" -f (($tokenSet.Keys) -join ', '))
                       foreach ($t in $tokenSet.Keys) {
+                        if ([string]::IsNullOrWhiteSpace($t)) { continue }
                         $needle = "${$t}"
-                        $pattern = [Regex]::Escape($needle)
                         $tUpper = $t.ToUpperInvariant()
                         $val = $null
-                        if ($exactMap.ContainsKey($tUpper)) { $val = $exactMap[$tUpper] }
-                        elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper] }
+                        $srcName = $null
+                        if ($exactMap.ContainsKey($tUpper)) { $val = $exactMap[$tUpper].Value; $srcName = $exactMap[$tUpper].Name }
+                        elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper].Value; $srcName = $suffixMap[$tUpper].Name }
                         if ($null -ne $val) {
-                          $content = [Regex]::Replace($content, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($x) $val })
+                          if ($content.Contains($needle)) { $content = $content.Replace($needle, $val) }
                           $replaced++
-                          Write-Host ("Replaced '{0}'" -f $needle)
+                          $disp = $val; if ($disp -is [string] -and $disp.Length -gt 60) { $disp = $disp.Substring(0,60) + '...' }
+                          $matchedLog += ("  {0} <- {1} = {2}" -f $needle, $srcName, $disp)
                         } else {
                           $unresolved += $t
                         }
                       }
                       Set-Content -LiteralPath $file -Value $content -Encoding UTF8
+                      if ($matchedLog.Count -gt 0) { Write-Host 'Matches:'; $matchedLog | ForEach-Object { Write-Host $_ } }
                       Write-Host ("Total tokens replaced: {0}" -f $replaced)
                       if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
 
