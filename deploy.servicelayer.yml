@@ -483,328 +483,160 @@ stages:
             deploy:
               steps:
                 - task: PowerShell@2
-                  displayName: 'Prepare variables for tokens (case-insensitive) - IT1'
+                  displayName: 'Inject tokens from env (simple, case-insensitive) - IT1'
                   condition: and(succeeded(), eq(variables['Deploy.IT1'], 'true'))
                   inputs:
                     targetType: 'inline'
                     script: |
                       $sitePath = "$(Stakeholder1.PhysicalPath)"
-                      $prefix = 'SIT_IT1_API_'
+                      $groupPrefix = 'SIT_IT1_API_'
                       $file = Join-Path $sitePath 'appsettings.json'
-                      Write-Host "Preparing variables for tokens in $file (prefix '$prefix')"
-                      if (-not (Test-Path $file)) { Write-Host "File not found: $file"; exit 0 }
+                      if (-not (Test-Path $file)) { Write-Error "File not found: $file"; exit 1 }
                       $content = Get-Content -LiteralPath $file -Raw
                       $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
                       if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; exit 0 }
-                      # Build case-insensitive map of environment vars
                       $envMap = @{}
                       Get-ChildItem Env: | ForEach-Object { $envMap[$_.Name.ToUpperInvariant()] = $_.Value }
-                      foreach ($m in $matches) {
-                        $token = $m.Groups[1].Value
-                        $u = ($token -replace '[^A-Za-z0-9_]', '_').ToUpperInvariant()
-                        $candidates = @(
-                          $u,
-                          ($prefix + $u)
-                        )
-                        $found = $false
-                        foreach ($cand in $candidates) {
-                          if ($envMap.ContainsKey($cand)) {
-                            $val = $envMap[$cand]
-                            Write-Host ("Setting pipeline/env variable for token '{0}' from '{1}'" -f $token, $cand)
-                            Write-Host "##vso[task.setvariable variable=$token]$val"
-                            Set-Item "Env:$token" $val
-                            $found = $true
-                            break
-                          }
-                        }
-                        if (-not $found) { Write-Host ("No env var found (case-insensitive) for token '{0}' (looked for '{1}', '{2}')" -f $token, $u, ($prefix + $u)) }
-                      }
-                - task: qetza.replacetokens.replacetokens-task.replacetokens@5
-                  displayName: 'Replace tokens in appsettings.json - IT1'
-                  condition: and(succeeded(), eq(variables['Deploy.IT1'], 'true'))
-                  inputs:
-                    rootDirectory: '$(Stakeholder1.PhysicalPath)'
-                    targetFiles: 'appsettings.json'
-                    encoding: 'auto'
-                    writeBOM: true
-                    actionOnMissing: 'keep'
-                    keepToken: true
-                    tokenPrefix: '${'
-                    tokenSuffix: '}'
-                    useEnvironmentVariables: true
-                    verbosity: 'detailed'
-
-                - task: PowerShell@2
-                  displayName: 'Fallback: manual token replacement if unresolved - IT1'
-                  condition: and(succeeded(), eq(variables['Deploy.IT1'], 'true'))
-                  inputs:
-                    targetType: 'inline'
-                    script: |
-                      $sitePath = "$(Stakeholder1.PhysicalPath)"
-                      $prefix = 'SIT_IT1_API_'
-                      $file = Join-Path $sitePath 'appsettings.json'
-                      if (-not (Test-Path $file)) { Write-Host "File not found: $file"; exit 0 }
-                      $content = Get-Content -LiteralPath $file -Raw
-                      $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
-                      if ($matches.Count -eq 0) { Write-Host 'No unresolved tokens after task.'; exit 0 }
-                      $envMap = @{}
-                      Get-ChildItem Env: | ForEach-Object { $envMap[$_.Name.ToUpperInvariant()] = $_.Value }
-                      $replaced = 0
+                      $replaced = 0; $unresolved = @()
                       foreach ($m in $matches) {
                         $token = $m.Groups[1].Value
                         $needle = "${$token}"
                         $pattern = [Regex]::Escape($needle)
                         $u = ($token -replace '[^A-Za-z0-9_]', '_').ToUpperInvariant()
-                        $candidates = @($token.ToUpperInvariant(), $u, ($prefix + $u))
+                        $candidates = @(($groupPrefix + $u), $u)
                         $val = $null
                         foreach ($cand in $candidates) { if ($envMap.ContainsKey($cand)) { $val = $envMap[$cand]; break } }
                         if ($null -ne $val) {
                           $content = [Regex]::Replace($content, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($x) $val })
                           $replaced++
-                          Write-Host ("Replaced '{0}' from candidate list ({1})" -f $needle, ($candidates -join ', '))
+                          Write-Host ("Replaced '{0}' from '{1}'" -f $needle, ($cand))
+                        } else {
+                          $unresolved += $token
                         }
                       }
-                      if ($replaced -gt 0) { Set-Content -LiteralPath $file -Value $content -Encoding UTF8; Write-Host "Manual replacements applied: $replaced" } else { Write-Host 'No manual replacements applied.' }
+                      Set-Content -LiteralPath $file -Value $content -Encoding UTF8
+                      Write-Host ("Total tokens replaced: {0}" -f $replaced)
+                      if ($unresolved.Count -gt 0) {
+                        Write-Error ("Unresolved tokens: {0}" -f ($unresolved -join ', '))
+                        exit 1
+                      }
 
                 - task: PowerShell@2
-                  displayName: 'Prepare variables for tokens (case-insensitive) - IT2'
+                  displayName: 'Inject tokens from env (simple, case-insensitive) - IT2'
                   condition: and(succeeded(), eq(variables['Deploy.IT2'], 'true'))
                   inputs:
                     targetType: 'inline'
                     script: |
                       $sitePath = "$(Stakeholder2.PhysicalPath)"
-                      $prefix = 'SIT_IT2_API_'
+                      $groupPrefix = 'SIT_IT2_API_'
                       $file = Join-Path $sitePath 'appsettings.json'
-                      Write-Host "Preparing variables for tokens in $file (prefix '$prefix')"
-                      if (-not (Test-Path $file)) { Write-Host "File not found: $file"; exit 0 }
+                      if (-not (Test-Path $file)) { Write-Error "File not found: $file"; exit 1 }
                       $content = Get-Content -LiteralPath $file -Raw
                       $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
                       if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; exit 0 }
                       $envMap = @{}
                       Get-ChildItem Env: | ForEach-Object { $envMap[$_.Name.ToUpperInvariant()] = $_.Value }
-                      foreach ($m in $matches) {
-                        $token = $m.Groups[1].Value
-                        $u = ($token -replace '[^A-Za-z0-9_]', '_').ToUpperInvariant()
-                        $candidates = @($u, ($prefix + $u))
-                        $found = $false
-                        foreach ($cand in $candidates) {
-                          if ($envMap.ContainsKey($cand)) {
-                            $val = $envMap[$cand]
-                            Write-Host ("Setting pipeline/env variable for token '{0}' from '{1}'" -f $token, $cand)
-                            Write-Host "##vso[task.setvariable variable=$token]$val"
-                            Set-Item "Env:$token" $val
-                            $found = $true
-                            break
-                          }
-                        }
-                        if (-not $found) { Write-Host ("No env var found (case-insensitive) for token '{0}' (looked for '{1}', '{2}')" -f $token, $u, ($prefix + $u)) }
-                      }
-                - task: qetza.replacetokens.replacetokens-task.replacetokens@5
-                  displayName: 'Replace tokens in appsettings.json - IT2'
-                  condition: and(succeeded(), eq(variables['Deploy.IT2'], 'true'))
-                  inputs:
-                    rootDirectory: '$(Stakeholder2.PhysicalPath)'
-                    targetFiles: 'appsettings.json'
-                    encoding: 'auto'
-                    writeBOM: true
-                    actionOnMissing: 'keep'
-                    keepToken: true
-                    tokenPrefix: '${'
-                    tokenSuffix: '}'
-                    useEnvironmentVariables: true
-                    verbosity: 'detailed'
-
-                - task: PowerShell@2
-                  displayName: 'Fallback: manual token replacement if unresolved - IT2'
-                  condition: and(succeeded(), eq(variables['Deploy.IT2'], 'true'))
-                  inputs:
-                    targetType: 'inline'
-                    script: |
-                      $sitePath = "$(Stakeholder2.PhysicalPath)"
-                      $prefix = 'SIT_IT2_API_'
-                      $file = Join-Path $sitePath 'appsettings.json'
-                      if (-not (Test-Path $file)) { Write-Host "File not found: $file"; exit 0 }
-                      $content = Get-Content -LiteralPath $file -Raw
-                      $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
-                      if ($matches.Count -eq 0) { Write-Host 'No unresolved tokens after task.'; exit 0 }
-                      $envMap = @{}
-                      Get-ChildItem Env: | ForEach-Object { $envMap[$_.Name.ToUpperInvariant()] = $_.Value }
-                      $replaced = 0
+                      $replaced = 0; $unresolved = @()
                       foreach ($m in $matches) {
                         $token = $m.Groups[1].Value
                         $needle = "${$token}"
                         $pattern = [Regex]::Escape($needle)
                         $u = ($token -replace '[^A-Za-z0-9_]', '_').ToUpperInvariant()
-                        $candidates = @($token.ToUpperInvariant(), $u, ($prefix + $u))
+                        $candidates = @(($groupPrefix + $u), $u)
                         $val = $null
                         foreach ($cand in $candidates) { if ($envMap.ContainsKey($cand)) { $val = $envMap[$cand]; break } }
                         if ($null -ne $val) {
                           $content = [Regex]::Replace($content, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($x) $val })
                           $replaced++
-                          Write-Host ("Replaced '{0}' from candidate list ({1})" -f $needle, ($candidates -join ', '))
+                          Write-Host ("Replaced '{0}' from '{1}'" -f $needle, ($cand))
+                        } else {
+                          $unresolved += $token
                         }
                       }
-                      if ($replaced -gt 0) { Set-Content -LiteralPath $file -Value $content -Encoding UTF8; Write-Host "Manual replacements applied: $replaced" } else { Write-Host 'No manual replacements applied.' }
+                      Set-Content -LiteralPath $file -Value $content -Encoding UTF8
+                      Write-Host ("Total tokens replaced: {0}" -f $replaced)
+                      if ($unresolved.Count -gt 0) {
+                        Write-Error ("Unresolved tokens: {0}" -f ($unresolved -join ', '))
+                        exit 1
+                      }
 
                 - task: PowerShell@2
-                  displayName: 'Prepare variables for tokens (case-insensitive) - IT3'
+                  displayName: 'Inject tokens from env (simple, case-insensitive) - IT3'
                   condition: and(succeeded(), eq(variables['Deploy.IT3'], 'true'))
                   inputs:
                     targetType: 'inline'
                     script: |
                       $sitePath = "$(Stakeholder3.PhysicalPath)"
-                      $prefix = 'SIT_IT3_API_'
+                      $groupPrefix = 'SIT_IT3_API_'
                       $file = Join-Path $sitePath 'appsettings.json'
-                      Write-Host "Preparing variables for tokens in $file (prefix '$prefix')"
-                      if (-not (Test-Path $file)) { Write-Host "File not found: $file"; exit 0 }
+                      if (-not (Test-Path $file)) { Write-Error "File not found: $file"; exit 1 }
                       $content = Get-Content -LiteralPath $file -Raw
                       $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
                       if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; exit 0 }
                       $envMap = @{}
                       Get-ChildItem Env: | ForEach-Object { $envMap[$_.Name.ToUpperInvariant()] = $_.Value }
-                      foreach ($m in $matches) {
-                        $token = $m.Groups[1].Value
-                        $u = ($token -replace '[^A-Za-z0-9_]', '_').ToUpperInvariant()
-                        $candidates = @($u, ($prefix + $u))
-                        $found = $false
-                        foreach ($cand in $candidates) {
-                          if ($envMap.ContainsKey($cand)) {
-                            $val = $envMap[$cand]
-                            Write-Host ("Setting pipeline/env variable for token '{0}' from '{1}'" -f $token, $cand)
-                            Write-Host "##vso[task.setvariable variable=$token]$val"
-                            Set-Item "Env:$token" $val
-                            $found = $true
-                            break
-                          }
-                        }
-                        if (-not $found) { Write-Host ("No env var found (case-insensitive) for token '{0}' (looked for '{1}', '{2}')" -f $token, $u, ($prefix + $u)) }
-                      }
-                - task: qetza.replacetokens.replacetokens-task.replacetokens@5
-                  displayName: 'Replace tokens in appsettings.json - IT3'
-                  condition: and(succeeded(), eq(variables['Deploy.IT3'], 'true'))
-                  inputs:
-                    rootDirectory: '$(Stakeholder3.PhysicalPath)'
-                    targetFiles: 'appsettings.json'
-                    encoding: 'auto'
-                    writeBOM: true
-                    actionOnMissing: 'keep'
-                    keepToken: true
-                    tokenPrefix: '${'
-                    tokenSuffix: '}'
-                    useEnvironmentVariables: true
-                    verbosity: 'detailed'
-
-                - task: PowerShell@2
-                  displayName: 'Fallback: manual token replacement if unresolved - IT3'
-                  condition: and(succeeded(), eq(variables['Deploy.IT3'], 'true'))
-                  inputs:
-                    targetType: 'inline'
-                    script: |
-                      $sitePath = "$(Stakeholder3.PhysicalPath)"
-                      $prefix = 'SIT_IT3_API_'
-                      $file = Join-Path $sitePath 'appsettings.json'
-                      if (-not (Test-Path $file)) { Write-Host "File not found: $file"; exit 0 }
-                      $content = Get-Content -LiteralPath $file -Raw
-                      $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
-                      if ($matches.Count -eq 0) { Write-Host 'No unresolved tokens after task.'; exit 0 }
-                      $envMap = @{}
-                      Get-ChildItem Env: | ForEach-Object { $envMap[$_.Name.ToUpperInvariant()] = $_.Value }
-                      $replaced = 0
+                      $replaced = 0; $unresolved = @()
                       foreach ($m in $matches) {
                         $token = $m.Groups[1].Value
                         $needle = "${$token}"
                         $pattern = [Regex]::Escape($needle)
                         $u = ($token -replace '[^A-Za-z0-9_]', '_').ToUpperInvariant()
-                        $candidates = @($token.ToUpperInvariant(), $u, ($prefix + $u))
+                        $candidates = @(($groupPrefix + $u), $u)
                         $val = $null
                         foreach ($cand in $candidates) { if ($envMap.ContainsKey($cand)) { $val = $envMap[$cand]; break } }
                         if ($null -ne $val) {
                           $content = [Regex]::Replace($content, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($x) $val })
                           $replaced++
-                          Write-Host ("Replaced '{0}' from candidate list ({1})" -f $needle, ($candidates -join ', '))
+                          Write-Host ("Replaced '{0}' from '{1}'" -f $needle, ($cand))
+                        } else {
+                          $unresolved += $token
                         }
                       }
-                      if ($replaced -gt 0) { Set-Content -LiteralPath $file -Value $content -Encoding UTF8; Write-Host "Manual replacements applied: $replaced" } else { Write-Host 'No manual replacements applied.' }
+                      Set-Content -LiteralPath $file -Value $content -Encoding UTF8
+                      Write-Host ("Total tokens replaced: {0}" -f $replaced)
+                      if ($unresolved.Count -gt 0) {
+                        Write-Error ("Unresolved tokens: {0}" -f ($unresolved -join ', '))
+                        exit 1
+                      }
 
                 - task: PowerShell@2
-                  displayName: 'Prepare variables for tokens (case-insensitive) - IT4'
+                  displayName: 'Inject tokens from env (simple, case-insensitive) - IT4'
                   condition: and(succeeded(), eq(variables['Deploy.IT4'], 'true'))
                   inputs:
                     targetType: 'inline'
                     script: |
                       $sitePath = "$(Stakeholder4.PhysicalPath)"
-                      $prefix = 'SIT_IT4_API_'
+                      $groupPrefix = 'SIT_IT4_API_'
                       $file = Join-Path $sitePath 'appsettings.json'
-                      Write-Host "Preparing variables for tokens in $file (prefix '$prefix')"
-                      if (-not (Test-Path $file)) { Write-Host "File not found: $file"; exit 0 }
+                      if (-not (Test-Path $file)) { Write-Error "File not found: $file"; exit 1 }
                       $content = Get-Content -LiteralPath $file -Raw
                       $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
                       if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; exit 0 }
                       $envMap = @{}
                       Get-ChildItem Env: | ForEach-Object { $envMap[$_.Name.ToUpperInvariant()] = $_.Value }
-                      foreach ($m in $matches) {
-                        $token = $m.Groups[1].Value
-                        $u = ($token -replace '[^A-Za-z0-9_]', '_').ToUpperInvariant()
-                        $candidates = @($u, ($prefix + $u))
-                        $found = $false
-                        foreach ($cand in $candidates) {
-                          if ($envMap.ContainsKey($cand)) {
-                            $val = $envMap[$cand]
-                            Write-Host ("Setting pipeline/env variable for token '{0}' from '{1}'" -f $token, $cand)
-                            Write-Host "##vso[task.setvariable variable=$token]$val"
-                            Set-Item "Env:$token" $val
-                            $found = $true
-                            break
-                          }
-                        }
-                        if (-not $found) { Write-Host ("No env var found (case-insensitive) for token '{0}' (looked for '{1}', '{2}')" -f $token, $u, ($prefix + $u)) }
-                      }
-                - task: qetza.replacetokens.replacetokens-task.replacetokens@5
-                  displayName: 'Replace tokens in appsettings.json - IT4'
-                  condition: and(succeeded(), eq(variables['Deploy.IT4'], 'true'))
-                  inputs:
-                    rootDirectory: '$(Stakeholder4.PhysicalPath)'
-                    targetFiles: 'appsettings.json'
-                    encoding: 'auto'
-                    writeBOM: true
-                    actionOnMissing: 'keep'
-                    keepToken: true
-                    tokenPrefix: '${'
-                    tokenSuffix: '}'
-                    useEnvironmentVariables: true
-                    verbosity: 'detailed'
-
-                - task: PowerShell@2
-                  displayName: 'Fallback: manual token replacement if unresolved - IT4'
-                  condition: and(succeeded(), eq(variables['Deploy.IT4'], 'true'))
-                  inputs:
-                    targetType: 'inline'
-                    script: |
-                      $sitePath = "$(Stakeholder4.PhysicalPath)"
-                      $prefix = 'SIT_IT4_API_'
-                      $file = Join-Path $sitePath 'appsettings.json'
-                      if (-not (Test-Path $file)) { Write-Host "File not found: $file"; exit 0 }
-                      $content = Get-Content -LiteralPath $file -Raw
-                      $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
-                      if ($matches.Count -eq 0) { Write-Host 'No unresolved tokens after task.'; exit 0 }
-                      $envMap = @{}
-                      Get-ChildItem Env: | ForEach-Object { $envMap[$_.Name.ToUpperInvariant()] = $_.Value }
-                      $replaced = 0
+                      $replaced = 0; $unresolved = @()
                       foreach ($m in $matches) {
                         $token = $m.Groups[1].Value
                         $needle = "${$token}"
                         $pattern = [Regex]::Escape($needle)
                         $u = ($token -replace '[^A-Za-z0-9_]', '_').ToUpperInvariant()
-                        $candidates = @($token.ToUpperInvariant(), $u, ($prefix + $u))
+                        $candidates = @(($groupPrefix + $u), $u)
                         $val = $null
                         foreach ($cand in $candidates) { if ($envMap.ContainsKey($cand)) { $val = $envMap[$cand]; break } }
                         if ($null -ne $val) {
                           $content = [Regex]::Replace($content, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($x) $val })
                           $replaced++
-                          Write-Host ("Replaced '{0}' from candidate list ({1})" -f $needle, ($candidates -join ', '))
+                          Write-Host ("Replaced '{0}' from '{1}'" -f $needle, ($cand))
+                        } else {
+                          $unresolved += $token
                         }
                       }
-                      if ($replaced -gt 0) { Set-Content -LiteralPath $file -Value $content -Encoding UTF8; Write-Host "Manual replacements applied: $replaced" } else { Write-Host 'No manual replacements applied.' }
+                      Set-Content -LiteralPath $file -Value $content -Encoding UTF8
+                      Write-Host ("Total tokens replaced: {0}" -f $replaced)
+                      if ($unresolved.Count -gt 0) {
+                        Write-Error ("Unresolved tokens: {0}" -f ($unresolved -join ', '))
+                        exit 1
+                      }
 
   - stage: DiagnosePostInject
     displayName: 'Diagnose after injection (unresolved tokens)'
