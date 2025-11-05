@@ -505,7 +505,9 @@ stages:
                         $tUpper = $t.ToUpperInvariant()
                         foreach ($e in $envVars) {
                           $nameUpper = $e.Name.ToUpperInvariant()
+                          $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
                           if ($nameUpper -eq $tUpper) { $matchedVar = $e; break }
+                          if ($normalized -eq $tUpper) { $matchedVar = $e; break }
                           if ($nameUpper.EndsWith('_' + $tUpper)) { $matchedVar = $e; break }
                         }
                         if ($matchedVar -ne $null) {
@@ -544,7 +546,9 @@ stages:
                         $tUpper = $t.ToUpperInvariant()
                         foreach ($e in $envVars) {
                           $nameUpper = $e.Name.ToUpperInvariant()
+                          $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
                           if ($nameUpper -eq $tUpper) { $matchedVar = $e; break }
+                          if ($normalized -eq $tUpper) { $matchedVar = $e; break }
                           if ($nameUpper.EndsWith('_' + $tUpper)) { $matchedVar = $e; break }
                         }
                         if ($matchedVar -ne $null) {
@@ -583,7 +587,9 @@ stages:
                         $tUpper = $t.ToUpperInvariant()
                         foreach ($e in $envVars) {
                           $nameUpper = $e.Name.ToUpperInvariant()
+                          $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
                           if ($nameUpper -eq $tUpper) { $matchedVar = $e; break }
+                          if ($normalized -eq $tUpper) { $matchedVar = $e; break }
                           if ($nameUpper.EndsWith('_' + $tUpper)) { $matchedVar = $e; break }
                         }
                         if ($matchedVar -ne $null) {
