@@ -510,6 +510,7 @@ stages:
                       foreach ($t in $tokenSet.Keys) {
                         if ([string]::IsNullOrWhiteSpace($t)) { continue }
                         $needle = "${$t}"
+                        if ([string]::IsNullOrEmpty($needle)) { continue }
                         $tUpper = $t.ToUpperInvariant()
                         $val = $null
                         $srcName = $null
@@ -557,6 +558,7 @@ stages:
                       foreach ($t in $tokenSet.Keys) {
                         if ([string]::IsNullOrWhiteSpace($t)) { continue }
                         $needle = "${$t}"
+                        if ([string]::IsNullOrEmpty($needle)) { continue }
                         $tUpper = $t.ToUpperInvariant()
                         $val = $null
                         $srcName = $null
@@ -604,6 +606,7 @@ stages:
                       foreach ($t in $tokenSet.Keys) {
                         if ([string]::IsNullOrWhiteSpace($t)) { continue }
                         $needle = "${$t}"
+                        if ([string]::IsNullOrEmpty($needle)) { continue }
                         $tUpper = $t.ToUpperInvariant()
                         $val = $null
                         $srcName = $null
@@ -651,6 +654,7 @@ stages:
                       foreach ($t in $tokenSet.Keys) {
                         if ([string]::IsNullOrWhiteSpace($t)) { continue }
                         $needle = "${$t}"
+                        if ([string]::IsNullOrEmpty($needle)) { continue }
                         $tUpper = $t.ToUpperInvariant()
                         $val = $null
                         $srcName = $null
