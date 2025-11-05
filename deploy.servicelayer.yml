@@ -495,26 +495,28 @@ stages:
                       $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
                       if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; exit 0 }
                       $envVars = Get-ChildItem Env:
+                      $exactMap = @{}
+                      $suffixMap = @{}
+                      foreach ($e in $envVars) {
+                        $nameUpper = $e.Name.ToUpperInvariant()
+                        $exactMap[$nameUpper] = $e.Value
+                        $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
+                        $suffixMap[$normalized] = $e.Value
+                      }
                       $replaced = 0; $unresolved = @()
                       $tokenSet = @{}
                       foreach ($m in $matches) { $tokenSet[$m.Groups[1].Value] = $true }
                       foreach ($t in $tokenSet.Keys) {
                         $needle = "${$t}"
                         $pattern = [Regex]::Escape($needle)
-                        $matchedVar = $null
                         $tUpper = $t.ToUpperInvariant()
-                        foreach ($e in $envVars) {
-                          $nameUpper = $e.Name.ToUpperInvariant()
-                          $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
-                          if ($nameUpper -eq $tUpper) { $matchedVar = $e; break }
-                          if ($normalized -eq $tUpper) { $matchedVar = $e; break }
-                          if ($nameUpper.EndsWith('_' + $tUpper)) { $matchedVar = $e; break }
-                        }
-                        if ($matchedVar -ne $null) {
-                          $val = $matchedVar.Value
+                        $val = $null
+                        if ($exactMap.ContainsKey($tUpper)) { $val = $exactMap[$tUpper] }
+                        elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper] }
+                        if ($null -ne $val) {
                           $content = [Regex]::Replace($content, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($x) $val })
                           $replaced++
-                          Write-Host ("Replaced '{0}' with env '{1}'" -f $needle, $matchedVar.Name)
+                          Write-Host ("Replaced '{0}'" -f $needle)
                         } else {
                           $unresolved += $t
                         }
@@ -536,26 +538,28 @@ stages:
                       $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
                       if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; exit 0 }
                       $envVars = Get-ChildItem Env:
+                      $exactMap = @{}
+                      $suffixMap = @{}
+                      foreach ($e in $envVars) {
+                        $nameUpper = $e.Name.ToUpperInvariant()
+                        $exactMap[$nameUpper] = $e.Value
+                        $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
+                        $suffixMap[$normalized] = $e.Value
+                      }
                       $replaced = 0; $unresolved = @()
                       $tokenSet = @{}
                       foreach ($m in $matches) { $tokenSet[$m.Groups[1].Value] = $true }
                       foreach ($t in $tokenSet.Keys) {
                         $needle = "${$t}"
                         $pattern = [Regex]::Escape($needle)
-                        $matchedVar = $null
                         $tUpper = $t.ToUpperInvariant()
-                        foreach ($e in $envVars) {
-                          $nameUpper = $e.Name.ToUpperInvariant()
-                          $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
-                          if ($nameUpper -eq $tUpper) { $matchedVar = $e; break }
-                          if ($normalized -eq $tUpper) { $matchedVar = $e; break }
-                          if ($nameUpper.EndsWith('_' + $tUpper)) { $matchedVar = $e; break }
-                        }
-                        if ($matchedVar -ne $null) {
-                          $val = $matchedVar.Value
+                        $val = $null
+                        if ($exactMap.ContainsKey($tUpper)) { $val = $exactMap[$tUpper] }
+                        elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper] }
+                        if ($null -ne $val) {
                           $content = [Regex]::Replace($content, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($x) $val })
                           $replaced++
-                          Write-Host ("Replaced '{0}' with env '{1}'" -f $needle, $matchedVar.Name)
+                          Write-Host ("Replaced '{0}'" -f $needle)
                         } else {
                           $unresolved += $t
                         }
@@ -577,26 +581,28 @@ stages:
                       $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
                       if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; exit 0 }
                       $envVars = Get-ChildItem Env:
+                      $exactMap = @{}
+                      $suffixMap = @{}
+                      foreach ($e in $envVars) {
+                        $nameUpper = $e.Name.ToUpperInvariant()
+                        $exactMap[$nameUpper] = $e.Value
+                        $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
+                        $suffixMap[$normalized] = $e.Value
+                      }
                       $replaced = 0; $unresolved = @()
                       $tokenSet = @{}
                       foreach ($m in $matches) { $tokenSet[$m.Groups[1].Value] = $true }
                       foreach ($t in $tokenSet.Keys) {
                         $needle = "${$t}"
                         $pattern = [Regex]::Escape($needle)
-                        $matchedVar = $null
                         $tUpper = $t.ToUpperInvariant()
-                        foreach ($e in $envVars) {
-                          $nameUpper = $e.Name.ToUpperInvariant()
-                          $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
-                          if ($nameUpper -eq $tUpper) { $matchedVar = $e; break }
-                          if ($normalized -eq $tUpper) { $matchedVar = $e; break }
-                          if ($nameUpper.EndsWith('_' + $tUpper)) { $matchedVar = $e; break }
-                        }
-                        if ($matchedVar -ne $null) {
-                          $val = $matchedVar.Value
+                        $val = $null
+                        if ($exactMap.ContainsKey($tUpper)) { $val = $exactMap[$tUpper] }
+                        elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper] }
+                        if ($null -ne $val) {
                           $content = [Regex]::Replace($content, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($x) $val })
                           $replaced++
-                          Write-Host ("Replaced '{0}' with env '{1}'" -f $needle, $matchedVar.Name)
+                          Write-Host ("Replaced '{0}'" -f $needle)
                         } else {
                           $unresolved += $t
                         }
@@ -618,25 +624,28 @@ stages:
                       $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
                       if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; exit 0 }
                       $envVars = Get-ChildItem Env:
+                      $exactMap = @{}
+                      $suffixMap = @{}
+                      foreach ($e in $envVars) {
+                        $nameUpper = $e.Name.ToUpperInvariant()
+                        $exactMap[$nameUpper] = $e.Value
+                        $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
+                        $suffixMap[$normalized] = $e.Value
+                      }
                       $replaced = 0; $unresolved = @()
                       $tokenSet = @{}
                       foreach ($m in $matches) { $tokenSet[$m.Groups[1].Value] = $true }
                       foreach ($t in $tokenSet.Keys) {
                         $needle = "${$t}"
                         $pattern = [Regex]::Escape($needle)
-                        $matchedVar = $null
-                        foreach ($e in $envVars) {
-                          if ($e.Name -ieq $t) { $matchedVar = $e; break }
-                          if ($e.Name.Length -gt $t.Length -and $e.Name.Substring($e.Name.Length - $t.Length) -ieq $t) {
-                            $sepIdx = $e.Name.Length - $t.Length - 1
-                            if ($sepIdx -ge 0 -and $e.Name[$sepIdx] -eq '_') { $matchedVar = $e; break }
-                          }
-                        }
-                        if ($matchedVar -ne $null) {
-                          $val = $matchedVar.Value
+                        $tUpper = $t.ToUpperInvariant()
+                        $val = $null
+                        if ($exactMap.ContainsKey($tUpper)) { $val = $exactMap[$tUpper] }
+                        elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper] }
+                        if ($null -ne $val) {
                           $content = [Regex]::Replace($content, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($x) $val })
                           $replaced++
-                          Write-Host ("Replaced '{0}' with env '{1}'" -f $needle, $matchedVar.Name)
+                          Write-Host ("Replaced '{0}'" -f $needle)
                         } else {
                           $unresolved += $t
                         }
