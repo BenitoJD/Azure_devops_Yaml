@@ -84,48 +84,6 @@ stages:
           runOnce:
             deploy:
               steps:
-                - task: PowerShell@2
-                  displayName: 'Define token injection function'
-                  inputs:
-                    targetType: 'inline'
-                    script: |
-                      function Invoke-TokenInjection([string]$filePath) {
-                        if (-not (Test-Path $filePath)) { Write-Error "File not found: $filePath"; exit 1 }
-                        $content = Get-Content -LiteralPath $filePath -Raw
-                        $matches = [regex]::Matches($content, '\$\{([^}]+)\}')
-                        if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; return }
-
-                        $envVars = Get-ChildItem Env:
-                        $exact = @{}
-                        $stripped = @{}
-                        foreach ($e in $envVars) {
-                          $U = $e.Name.ToUpperInvariant()
-                          $V = [string]$e.Value
-                          $exact[$U] = $V
-                          $S = ($U -replace '^(SIT|UAT|PRD)?_?IT[1-4]_API_+', '')
-                          $stripped[$S] = $V
-                        }
-
-                        $tokens = @{}
-                        foreach ($m in $matches) { $tokens[$m.Groups[1].Value] = $true }
-
-                        $replaced = 0; $unresolved = @()
-                        foreach ($t in $tokens.Keys) {
-                          if ([string]::IsNullOrWhiteSpace($t)) { continue }
-                          $needle = "${$t}"
-                          $key = $t.ToUpperInvariant()
-                          $val = $null
-                          if ($exact.ContainsKey($key)) { $val = $exact[$key] }
-                          elseif ($stripped.ContainsKey($key)) { $val = $stripped[$key] }
-                          elseif ($exact.ContainsKey(($key -replace '_+', '__'))) { $val = $exact[($key -replace '_+', '__')] }
-                          if ($null -ne $val) { if ($content.Contains($needle)) { $content = $content.Replace($needle, $val); $replaced++ } }
-                          else { $unresolved += $t }
-                        }
-
-                        Set-Content -LiteralPath $filePath -Value $content -Encoding UTF8
-                        Write-Host ("Direct text replacements: {0}" -f $replaced)
-                        if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
-                      }
                 - checkout: none
                 - task: PowerShell@2
                   displayName: 'Build Information'
@@ -530,6 +488,50 @@ stages:
                   inputs:
                     targetType: 'inline'
                     script: |
+                      function Invoke-TokenInjection([string]$filePath) {
+                        if (-not (Test-Path $filePath)) { Write-Error "File not found: $filePath"; exit 1 }
+                        $content = Get-Content -LiteralPath $filePath -Raw
+                        $matches = [regex]::Matches($content, '\$\{([^}]+)\}')
+                        if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; return }
+
+                        $envVars = Get-ChildItem Env:
+                        $exact = @{}
+                        $stripped = @{}
+                        foreach ($e in $envVars) {
+                          $U = $e.Name.ToUpperInvariant()
+                          $V = [string]$e.Value
+                          $exact[$U] = $V
+                          $S = ($U -replace '^(SIT|UAT|PRD)?_?IT[1-4]_API_+', '')
+                          $stripped[$S] = $V
+                        }
+
+                        $tokens = @{}
+                        foreach ($m in $matches) { $tokens[$m.Groups[1].Value] = $true }
+
+                        $replaced = 0; $unresolved = @()
+                        foreach ($t in $tokens.Keys) {
+                          if ([string]::IsNullOrWhiteSpace($t)) { continue }
+                          $needle = "${$t}"
+                          if ([string]::IsNullOrEmpty($needle)) { continue }
+                          $key = $t.ToUpperInvariant()
+                          $val = $null
+                          if ($exact.ContainsKey($key)) { $val = $exact[$key] }
+                          elseif ($stripped.ContainsKey($key)) { $val = $stripped[$key] }
+                          elseif ($exact.ContainsKey(($key -replace '_+', '__'))) { $val = $exact[($key -replace '_+', '__')] }
+                          if ($null -ne $val) { 
+                            if ($content.Contains($needle)) { 
+                              $content = $content.Replace($needle, $val)
+                              $replaced++ 
+                            }
+                          } else { 
+                            $unresolved += $t 
+                          }
+                        }
+
+                        Set-Content -LiteralPath $filePath -Value $content -Encoding UTF8
+                        Write-Host ("Direct text replacements: {0}" -f $replaced)
+                        if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
+                      }
                       $file = Join-Path "$(Stakeholder1.PhysicalPath)" 'appsettings.json'
                       Invoke-TokenInjection -filePath $file
 
@@ -557,6 +559,50 @@ stages:
                   inputs:
                     targetType: 'inline'
                     script: |
+                      function Invoke-TokenInjection([string]$filePath) {
+                        if (-not (Test-Path $filePath)) { Write-Error "File not found: $filePath"; exit 1 }
+                        $content = Get-Content -LiteralPath $filePath -Raw
+                        $matches = [regex]::Matches($content, '\$\{([^}]+)\}')
+                        if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; return }
+
+                        $envVars = Get-ChildItem Env:
+                        $exact = @{}
+                        $stripped = @{}
+                        foreach ($e in $envVars) {
+                          $U = $e.Name.ToUpperInvariant()
+                          $V = [string]$e.Value
+                          $exact[$U] = $V
+                          $S = ($U -replace '^(SIT|UAT|PRD)?_?IT[1-4]_API_+', '')
+                          $stripped[$S] = $V
+                        }
+
+                        $tokens = @{}
+                        foreach ($m in $matches) { $tokens[$m.Groups[1].Value] = $true }
+
+                        $replaced = 0; $unresolved = @()
+                        foreach ($t in $tokens.Keys) {
+                          if ([string]::IsNullOrWhiteSpace($t)) { continue }
+                          $needle = "${$t}"
+                          if ([string]::IsNullOrEmpty($needle)) { continue }
+                          $key = $t.ToUpperInvariant()
+                          $val = $null
+                          if ($exact.ContainsKey($key)) { $val = $exact[$key] }
+                          elseif ($stripped.ContainsKey($key)) { $val = $stripped[$key] }
+                          elseif ($exact.ContainsKey(($key -replace '_+', '__'))) { $val = $exact[($key -replace '_+', '__')] }
+                          if ($null -ne $val) { 
+                            if ($content.Contains($needle)) { 
+                              $content = $content.Replace($needle, $val)
+                              $replaced++ 
+                            }
+                          } else { 
+                            $unresolved += $t 
+                          }
+                        }
+
+                        Set-Content -LiteralPath $filePath -Value $content -Encoding UTF8
+                        Write-Host ("Direct text replacements: {0}" -f $replaced)
+                        if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
+                      }
                       $file = Join-Path "$(Stakeholder2.PhysicalPath)" 'appsettings.json'
                       Invoke-TokenInjection -filePath $file
 
@@ -584,6 +630,50 @@ stages:
                   inputs:
                     targetType: 'inline'
                     script: |
+                      function Invoke-TokenInjection([string]$filePath) {
+                        if (-not (Test-Path $filePath)) { Write-Error "File not found: $filePath"; exit 1 }
+                        $content = Get-Content -LiteralPath $filePath -Raw
+                        $matches = [regex]::Matches($content, '\$\{([^}]+)\}')
+                        if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; return }
+
+                        $envVars = Get-ChildItem Env:
+                        $exact = @{}
+                        $stripped = @{}
+                        foreach ($e in $envVars) {
+                          $U = $e.Name.ToUpperInvariant()
+                          $V = [string]$e.Value
+                          $exact[$U] = $V
+                          $S = ($U -replace '^(SIT|UAT|PRD)?_?IT[1-4]_API_+', '')
+                          $stripped[$S] = $V
+                        }
+
+                        $tokens = @{}
+                        foreach ($m in $matches) { $tokens[$m.Groups[1].Value] = $true }
+
+                        $replaced = 0; $unresolved = @()
+                        foreach ($t in $tokens.Keys) {
+                          if ([string]::IsNullOrWhiteSpace($t)) { continue }
+                          $needle = "${$t}"
+                          if ([string]::IsNullOrEmpty($needle)) { continue }
+                          $key = $t.ToUpperInvariant()
+                          $val = $null
+                          if ($exact.ContainsKey($key)) { $val = $exact[$key] }
+                          elseif ($stripped.ContainsKey($key)) { $val = $stripped[$key] }
+                          elseif ($exact.ContainsKey(($key -replace '_+', '__'))) { $val = $exact[($key -replace '_+', '__')] }
+                          if ($null -ne $val) { 
+                            if ($content.Contains($needle)) { 
+                              $content = $content.Replace($needle, $val)
+                              $replaced++ 
+                            }
+                          } else { 
+                            $unresolved += $t 
+                          }
+                        }
+
+                        Set-Content -LiteralPath $filePath -Value $content -Encoding UTF8
+                        Write-Host ("Direct text replacements: {0}" -f $replaced)
+                        if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
+                      }
                       $file = Join-Path "$(Stakeholder3.PhysicalPath)" 'appsettings.json'
                       Invoke-TokenInjection -filePath $file
 
@@ -611,6 +701,50 @@ stages:
                   inputs:
                     targetType: 'inline'
                     script: |
+                      function Invoke-TokenInjection([string]$filePath) {
+                        if (-not (Test-Path $filePath)) { Write-Error "File not found: $filePath"; exit 1 }
+                        $content = Get-Content -LiteralPath $filePath -Raw
+                        $matches = [regex]::Matches($content, '\$\{([^}]+)\}')
+                        if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; return }
+
+                        $envVars = Get-ChildItem Env:
+                        $exact = @{}
+                        $stripped = @{}
+                        foreach ($e in $envVars) {
+                          $U = $e.Name.ToUpperInvariant()
+                          $V = [string]$e.Value
+                          $exact[$U] = $V
+                          $S = ($U -replace '^(SIT|UAT|PRD)?_?IT[1-4]_API_+', '')
+                          $stripped[$S] = $V
+                        }
+
+                        $tokens = @{}
+                        foreach ($m in $matches) { $tokens[$m.Groups[1].Value] = $true }
+
+                        $replaced = 0; $unresolved = @()
+                        foreach ($t in $tokens.Keys) {
+                          if ([string]::IsNullOrWhiteSpace($t)) { continue }
+                          $needle = "${$t}"
+                          if ([string]::IsNullOrEmpty($needle)) { continue }
+                          $key = $t.ToUpperInvariant()
+                          $val = $null
+                          if ($exact.ContainsKey($key)) { $val = $exact[$key] }
+                          elseif ($stripped.ContainsKey($key)) { $val = $stripped[$key] }
+                          elseif ($exact.ContainsKey(($key -replace '_+', '__'))) { $val = $exact[($key -replace '_+', '__')] }
+                          if ($null -ne $val) { 
+                            if ($content.Contains($needle)) { 
+                              $content = $content.Replace($needle, $val)
+                              $replaced++ 
+                            }
+                          } else { 
+                            $unresolved += $t 
+                          }
+                        }
+
+                        Set-Content -LiteralPath $filePath -Value $content -Encoding UTF8
+                        Write-Host ("Direct text replacements: {0}" -f $replaced)
+                        if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
+                      }
                       $file = Join-Path "$(Stakeholder4.PhysicalPath)" 'appsettings.json'
                       Invoke-TokenInjection -filePath $file
 
