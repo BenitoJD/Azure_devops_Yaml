@@ -488,52 +488,68 @@ stages:
                   inputs:
                     targetType: 'inline'
                     script: |
-                      function Invoke-TokenInjection([string]$filePath) {
+                      function Invoke-TokenInjection([string]$filePath, [string]$groupPrefix) {
                         if (-not (Test-Path $filePath)) { Write-Error "File not found: $filePath"; exit 1 }
                         $content = Get-Content -LiteralPath $filePath -Raw
                         $matches = [regex]::Matches($content, '\$\{([^}]+)\}')
                         if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; return }
 
-                        $envVars = Get-ChildItem Env:
-                        $exact = @{}
-                        $stripped = @{}
-                        foreach ($e in $envVars) {
-                          $U = $e.Name.ToUpperInvariant()
-                          $V = [string]$e.Value
-                          $exact[$U] = $V
-                          $S = ($U -replace '^(SIT|UAT|PRD)?_?IT[1-4]_API_+', '')
-                          $stripped[$S] = $V
-                        }
-
-                        $tokens = @{}
-                        foreach ($m in $matches) { $tokens[$m.Groups[1].Value] = $true }
-
-                        $replaced = 0; $unresolved = @()
-                        foreach ($t in $tokens.Keys) {
-                          if ([string]::IsNullOrWhiteSpace($t)) { continue }
-                          $key = $t.ToUpperInvariant()
-                          $val = $null
-                          if ($exact.ContainsKey($key)) { $val = $exact[$key] }
-                          elseif ($stripped.ContainsKey($key)) { $val = $stripped[$key] }
-                          elseif ($exact.ContainsKey(($key -replace '_+', '__'))) { $val = $exact[($key -replace '_+', '__')] }
-                          if ($null -ne $val) { 
-                            $escapedToken = [regex]::Escape($t)
-                            $pattern = '\$\{' + $escapedToken + '\}'
-                            if ([regex]::IsMatch($content, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)) { 
-                              $content = [regex]::Replace($content, $pattern, $val, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-                              $replaced++ 
-                            }
-                          } else { 
-                            $unresolved += $t 
+                        # Extract all tokens from JSON with original casing
+                        $tokens = @()
+                        foreach ($m in $matches) {
+                          $tokenName = $m.Groups[1].Value
+                          if ([string]::IsNullOrWhiteSpace($tokenName)) { continue }
+                          $tokenPattern = '${' + $tokenName + '}'
+                          $tokens += @{
+                            Name = $tokenName
+                            Pattern = $tokenPattern
+                            UpperName = $tokenName.ToUpperInvariant()
                           }
                         }
 
+                        # Filter environment variables by group prefix
+                        $groupPrefixUpper = $groupPrefix.ToUpperInvariant()
+                        $envVars = Get-ChildItem Env: | Where-Object { $_.Name.ToUpperInvariant().StartsWith($groupPrefixUpper) }
+                        
+                        $replaced = 0
+                        $unresolvedTokens = @{}
+                        foreach ($token in $tokens) {
+                          $unresolvedTokens[$token.Name] = $true
+                        }
+
+                        # Iterate through each filtered env var
+                        foreach ($envVar in $envVars) {
+                          $envVarNameUpper = $envVar.Name.ToUpperInvariant()
+                          # Strip the group prefix
+                          if ($envVarNameUpper.StartsWith($groupPrefixUpper)) {
+                            $strippedName = $envVarNameUpper.Substring($groupPrefixUpper.Length)
+                            if ([string]::IsNullOrWhiteSpace($strippedName)) { continue }
+                            
+                            # Match against tokens
+                            foreach ($token in $tokens) {
+                              if ($token.UpperName -eq $strippedName) {
+                                # Match found - inject immediately
+                                $escapedPattern = [regex]::Escape($token.Pattern)
+                                if ($content -match $escapedPattern) {
+                                  $content = $content -replace $escapedPattern, $envVar.Value
+                                  $replaced++
+                                  $unresolvedTokens.Remove($token.Name)
+                                  break
+                                }
+                              }
+                            }
+                          }
+                        }
+
+                        # Collect unresolved tokens
+                        $unresolved = $unresolvedTokens.Keys | Where-Object { $_ -ne $null }
+
                         Set-Content -LiteralPath $filePath -Value $content -Encoding UTF8
-                        Write-Host ("Direct text replacements: {0}" -f $replaced)
-                        if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
+                      Write-Host ("Direct text replacements: {0}" -f $replaced)
+                      if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
                       }
                       $file = Join-Path "$(Stakeholder1.PhysicalPath)" 'appsettings.json'
-                      Invoke-TokenInjection -filePath $file
+                      Invoke-TokenInjection -filePath $file -groupPrefix 'SIT_IT1_API_'
 
                 - task: PowerShell@2
                   displayName: 'Post-check after JSON injection (IT1)'
@@ -559,52 +575,68 @@ stages:
                   inputs:
                     targetType: 'inline'
                     script: |
-                      function Invoke-TokenInjection([string]$filePath) {
+                      function Invoke-TokenInjection([string]$filePath, [string]$groupPrefix) {
                         if (-not (Test-Path $filePath)) { Write-Error "File not found: $filePath"; exit 1 }
                         $content = Get-Content -LiteralPath $filePath -Raw
                         $matches = [regex]::Matches($content, '\$\{([^}]+)\}')
                         if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; return }
 
-                        $envVars = Get-ChildItem Env:
-                        $exact = @{}
-                        $stripped = @{}
-                        foreach ($e in $envVars) {
-                          $U = $e.Name.ToUpperInvariant()
-                          $V = [string]$e.Value
-                          $exact[$U] = $V
-                          $S = ($U -replace '^(SIT|UAT|PRD)?_?IT[1-4]_API_+', '')
-                          $stripped[$S] = $V
-                        }
-
-                        $tokens = @{}
-                        foreach ($m in $matches) { $tokens[$m.Groups[1].Value] = $true }
-
-                        $replaced = 0; $unresolved = @()
-                        foreach ($t in $tokens.Keys) {
-                          if ([string]::IsNullOrWhiteSpace($t)) { continue }
-                          $key = $t.ToUpperInvariant()
-                          $val = $null
-                          if ($exact.ContainsKey($key)) { $val = $exact[$key] }
-                          elseif ($stripped.ContainsKey($key)) { $val = $stripped[$key] }
-                          elseif ($exact.ContainsKey(($key -replace '_+', '__'))) { $val = $exact[($key -replace '_+', '__')] }
-                          if ($null -ne $val) { 
-                            $escapedToken = [regex]::Escape($t)
-                            $pattern = '\$\{' + $escapedToken + '\}'
-                            if ([regex]::IsMatch($content, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)) { 
-                              $content = [regex]::Replace($content, $pattern, $val, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-                              $replaced++ 
-                            }
-                          } else { 
-                            $unresolved += $t 
+                        # Extract all tokens from JSON with original casing
+                        $tokens = @()
+                        foreach ($m in $matches) {
+                          $tokenName = $m.Groups[1].Value
+                          if ([string]::IsNullOrWhiteSpace($tokenName)) { continue }
+                          $tokenPattern = '${' + $tokenName + '}'
+                          $tokens += @{
+                            Name = $tokenName
+                            Pattern = $tokenPattern
+                            UpperName = $tokenName.ToUpperInvariant()
                           }
                         }
 
+                        # Filter environment variables by group prefix
+                        $groupPrefixUpper = $groupPrefix.ToUpperInvariant()
+                        $envVars = Get-ChildItem Env: | Where-Object { $_.Name.ToUpperInvariant().StartsWith($groupPrefixUpper) }
+                        
+                        $replaced = 0
+                        $unresolvedTokens = @{}
+                        foreach ($token in $tokens) {
+                          $unresolvedTokens[$token.Name] = $true
+                        }
+
+                        # Iterate through each filtered env var
+                        foreach ($envVar in $envVars) {
+                          $envVarNameUpper = $envVar.Name.ToUpperInvariant()
+                          # Strip the group prefix
+                          if ($envVarNameUpper.StartsWith($groupPrefixUpper)) {
+                            $strippedName = $envVarNameUpper.Substring($groupPrefixUpper.Length)
+                            if ([string]::IsNullOrWhiteSpace($strippedName)) { continue }
+                            
+                            # Match against tokens
+                            foreach ($token in $tokens) {
+                              if ($token.UpperName -eq $strippedName) {
+                                # Match found - inject immediately
+                                $escapedPattern = [regex]::Escape($token.Pattern)
+                                if ($content -match $escapedPattern) {
+                                  $content = $content -replace $escapedPattern, $envVar.Value
+                                  $replaced++
+                                  $unresolvedTokens.Remove($token.Name)
+                                  break
+                                }
+                              }
+                            }
+                          }
+                        }
+
+                        # Collect unresolved tokens
+                        $unresolved = $unresolvedTokens.Keys | Where-Object { $_ -ne $null }
+
                         Set-Content -LiteralPath $filePath -Value $content -Encoding UTF8
-                        Write-Host ("Direct text replacements: {0}" -f $replaced)
-                        if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
+                      Write-Host ("Direct text replacements: {0}" -f $replaced)
+                      if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
                       }
                       $file = Join-Path "$(Stakeholder2.PhysicalPath)" 'appsettings.json'
-                      Invoke-TokenInjection -filePath $file
+                      Invoke-TokenInjection -filePath $file -groupPrefix 'SIT_IT2_API_'
 
                 - task: PowerShell@2
                   displayName: 'Post-check after JSON injection (IT2)'
@@ -630,52 +662,68 @@ stages:
                   inputs:
                     targetType: 'inline'
                     script: |
-                      function Invoke-TokenInjection([string]$filePath) {
+                      function Invoke-TokenInjection([string]$filePath, [string]$groupPrefix) {
                         if (-not (Test-Path $filePath)) { Write-Error "File not found: $filePath"; exit 1 }
                         $content = Get-Content -LiteralPath $filePath -Raw
                         $matches = [regex]::Matches($content, '\$\{([^}]+)\}')
                         if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; return }
 
-                        $envVars = Get-ChildItem Env:
-                        $exact = @{}
-                        $stripped = @{}
-                        foreach ($e in $envVars) {
-                          $U = $e.Name.ToUpperInvariant()
-                          $V = [string]$e.Value
-                          $exact[$U] = $V
-                          $S = ($U -replace '^(SIT|UAT|PRD)?_?IT[1-4]_API_+', '')
-                          $stripped[$S] = $V
-                        }
-
-                        $tokens = @{}
-                        foreach ($m in $matches) { $tokens[$m.Groups[1].Value] = $true }
-
-                        $replaced = 0; $unresolved = @()
-                        foreach ($t in $tokens.Keys) {
-                          if ([string]::IsNullOrWhiteSpace($t)) { continue }
-                          $key = $t.ToUpperInvariant()
-                          $val = $null
-                          if ($exact.ContainsKey($key)) { $val = $exact[$key] }
-                          elseif ($stripped.ContainsKey($key)) { $val = $stripped[$key] }
-                          elseif ($exact.ContainsKey(($key -replace '_+', '__'))) { $val = $exact[($key -replace '_+', '__')] }
-                          if ($null -ne $val) { 
-                            $escapedToken = [regex]::Escape($t)
-                            $pattern = '\$\{' + $escapedToken + '\}'
-                            if ([regex]::IsMatch($content, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)) { 
-                              $content = [regex]::Replace($content, $pattern, $val, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-                              $replaced++ 
-                            }
-                          } else { 
-                            $unresolved += $t 
+                        # Extract all tokens from JSON with original casing
+                        $tokens = @()
+                        foreach ($m in $matches) {
+                          $tokenName = $m.Groups[1].Value
+                          if ([string]::IsNullOrWhiteSpace($tokenName)) { continue }
+                          $tokenPattern = '${' + $tokenName + '}'
+                          $tokens += @{
+                            Name = $tokenName
+                            Pattern = $tokenPattern
+                            UpperName = $tokenName.ToUpperInvariant()
                           }
                         }
 
+                        # Filter environment variables by group prefix
+                        $groupPrefixUpper = $groupPrefix.ToUpperInvariant()
+                        $envVars = Get-ChildItem Env: | Where-Object { $_.Name.ToUpperInvariant().StartsWith($groupPrefixUpper) }
+                        
+                        $replaced = 0
+                        $unresolvedTokens = @{}
+                        foreach ($token in $tokens) {
+                          $unresolvedTokens[$token.Name] = $true
+                        }
+
+                        # Iterate through each filtered env var
+                        foreach ($envVar in $envVars) {
+                          $envVarNameUpper = $envVar.Name.ToUpperInvariant()
+                          # Strip the group prefix
+                          if ($envVarNameUpper.StartsWith($groupPrefixUpper)) {
+                            $strippedName = $envVarNameUpper.Substring($groupPrefixUpper.Length)
+                            if ([string]::IsNullOrWhiteSpace($strippedName)) { continue }
+                            
+                            # Match against tokens
+                            foreach ($token in $tokens) {
+                              if ($token.UpperName -eq $strippedName) {
+                                # Match found - inject immediately
+                                $escapedPattern = [regex]::Escape($token.Pattern)
+                                if ($content -match $escapedPattern) {
+                                  $content = $content -replace $escapedPattern, $envVar.Value
+                                  $replaced++
+                                  $unresolvedTokens.Remove($token.Name)
+                                  break
+                                }
+                              }
+                            }
+                          }
+                        }
+
+                        # Collect unresolved tokens
+                        $unresolved = $unresolvedTokens.Keys | Where-Object { $_ -ne $null }
+
                         Set-Content -LiteralPath $filePath -Value $content -Encoding UTF8
-                        Write-Host ("Direct text replacements: {0}" -f $replaced)
-                        if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
+                      Write-Host ("Direct text replacements: {0}" -f $replaced)
+                      if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
                       }
                       $file = Join-Path "$(Stakeholder3.PhysicalPath)" 'appsettings.json'
-                      Invoke-TokenInjection -filePath $file
+                      Invoke-TokenInjection -filePath $file -groupPrefix 'SIT_IT3_API_'
 
                 - task: PowerShell@2
                   displayName: 'Post-check after JSON injection (IT3)'
@@ -701,52 +749,68 @@ stages:
                   inputs:
                     targetType: 'inline'
                     script: |
-                      function Invoke-TokenInjection([string]$filePath) {
+                      function Invoke-TokenInjection([string]$filePath, [string]$groupPrefix) {
                         if (-not (Test-Path $filePath)) { Write-Error "File not found: $filePath"; exit 1 }
                         $content = Get-Content -LiteralPath $filePath -Raw
                         $matches = [regex]::Matches($content, '\$\{([^}]+)\}')
                         if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; return }
 
-                        $envVars = Get-ChildItem Env:
-                        $exact = @{}
-                        $stripped = @{}
-                        foreach ($e in $envVars) {
-                          $U = $e.Name.ToUpperInvariant()
-                          $V = [string]$e.Value
-                          $exact[$U] = $V
-                          $S = ($U -replace '^(SIT|UAT|PRD)?_?IT[1-4]_API_+', '')
-                          $stripped[$S] = $V
-                        }
-
-                        $tokens = @{}
-                        foreach ($m in $matches) { $tokens[$m.Groups[1].Value] = $true }
-
-                        $replaced = 0; $unresolved = @()
-                        foreach ($t in $tokens.Keys) {
-                          if ([string]::IsNullOrWhiteSpace($t)) { continue }
-                          $key = $t.ToUpperInvariant()
-                          $val = $null
-                          if ($exact.ContainsKey($key)) { $val = $exact[$key] }
-                          elseif ($stripped.ContainsKey($key)) { $val = $stripped[$key] }
-                          elseif ($exact.ContainsKey(($key -replace '_+', '__'))) { $val = $exact[($key -replace '_+', '__')] }
-                          if ($null -ne $val) { 
-                            $escapedToken = [regex]::Escape($t)
-                            $pattern = '\$\{' + $escapedToken + '\}'
-                            if ([regex]::IsMatch($content, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)) { 
-                              $content = [regex]::Replace($content, $pattern, $val, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-                              $replaced++ 
-                            }
-                          } else { 
-                            $unresolved += $t 
+                        # Extract all tokens from JSON with original casing
+                        $tokens = @()
+                        foreach ($m in $matches) {
+                          $tokenName = $m.Groups[1].Value
+                          if ([string]::IsNullOrWhiteSpace($tokenName)) { continue }
+                          $tokenPattern = '${' + $tokenName + '}'
+                          $tokens += @{
+                            Name = $tokenName
+                            Pattern = $tokenPattern
+                            UpperName = $tokenName.ToUpperInvariant()
                           }
                         }
+
+                        # Filter environment variables by group prefix
+                        $groupPrefixUpper = $groupPrefix.ToUpperInvariant()
+                        $envVars = Get-ChildItem Env: | Where-Object { $_.Name.ToUpperInvariant().StartsWith($groupPrefixUpper) }
+                        
+                        $replaced = 0
+                        $unresolvedTokens = @{}
+                        foreach ($token in $tokens) {
+                          $unresolvedTokens[$token.Name] = $true
+                        }
+
+                        # Iterate through each filtered env var
+                        foreach ($envVar in $envVars) {
+                          $envVarNameUpper = $envVar.Name.ToUpperInvariant()
+                          # Strip the group prefix
+                          if ($envVarNameUpper.StartsWith($groupPrefixUpper)) {
+                            $strippedName = $envVarNameUpper.Substring($groupPrefixUpper.Length)
+                            if ([string]::IsNullOrWhiteSpace($strippedName)) { continue }
+                            
+                            # Match against tokens
+                            foreach ($token in $tokens) {
+                              if ($token.UpperName -eq $strippedName) {
+                                # Match found - inject immediately
+                                $escapedPattern = [regex]::Escape($token.Pattern)
+                                if ($content -match $escapedPattern) {
+                                  $content = $content -replace $escapedPattern, $envVar.Value
+                                  $replaced++
+                                  $unresolvedTokens.Remove($token.Name)
+                                  break
+                                }
+                              }
+                            }
+                          }
+                        }
+
+                        # Collect unresolved tokens
+                        $unresolved = $unresolvedTokens.Keys | Where-Object { $_ -ne $null }
 
                         Set-Content -LiteralPath $filePath -Value $content -Encoding UTF8
                         Write-Host ("Direct text replacements: {0}" -f $replaced)
                         if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
                       }
                       $file = Join-Path "$(Stakeholder4.PhysicalPath)" 'appsettings.json'
-                      Invoke-TokenInjection -filePath $file
+                      Invoke-TokenInjection -filePath $file -groupPrefix 'SIT_IT4_API_'
 
                 - task: PowerShell@2
                   displayName: 'Post-check after JSON injection (IT4)'
