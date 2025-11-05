@@ -555,7 +555,7 @@ stages:
                       }
 
                       $jsonText = Get-Content -LiteralPath $file -Raw
-                      $json = $jsonText | ConvertFrom-Json -Depth 100
+                      $json = $jsonText | ConvertFrom-Json
                       $script:replacementCount = 0
                       $unresolved = New-Object System.Collections.Generic.HashSet[string]
 
@@ -680,7 +680,7 @@ stages:
                       }
 
                       $jsonText = Get-Content -LiteralPath $file -Raw
-                      $json = $jsonText | ConvertFrom-Json -Depth 100
+                      $json = $jsonText | ConvertFrom-Json
                       $script:replacementCount = 0
                       $unresolved = New-Object System.Collections.Generic.HashSet[string]
 
@@ -805,7 +805,7 @@ stages:
                       }
 
                       $jsonText = Get-Content -LiteralPath $file -Raw
-                      $json = $jsonText | ConvertFrom-Json -Depth 100
+                      $json = $jsonText | ConvertFrom-Json
                       $script:replacementCount = 0
                       $unresolved = New-Object System.Collections.Generic.HashSet[string]
 
@@ -931,7 +931,7 @@ stages:
                       }
 
                       $jsonText = Get-Content -LiteralPath $file -Raw
-                      $json = $jsonText | ConvertFrom-Json -Depth 100
+                      $json = $jsonText | ConvertFrom-Json
                       $script:replacementCount = 0
                       $unresolved = New-Object System.Collections.Generic.HashSet[string]
 
