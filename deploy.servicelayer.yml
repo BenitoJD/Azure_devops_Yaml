@@ -515,6 +515,7 @@ stages:
                         elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper] }
                         if ($null -ne $val) {
                           Write-Host ("##vso[task.setvariable variable={0}]{1}" -f $t, $val)
+                          try { Set-Item "Env:$t" $val } catch {}
                           $setCount++
                           $disp = $val; if ($disp -is [string] -and $disp.Length -gt 60) { $disp = $disp.Substring(0,60) + '...' }
                           $matchedLog += ("  ${$t} <= {0}" -f $disp)
@@ -574,6 +575,7 @@ stages:
                         elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper] }
                         if ($null -ne $val) {
                           Write-Host ("##vso[task.setvariable variable={0}]{1}" -f $t, $val)
+                          try { Set-Item "Env:$t" $val } catch {}
                           $setCount++
                           $disp = $val; if ($disp -is [string] -and $disp.Length -gt 60) { $disp = $disp.Substring(0,60) + '...' }
                           $matchedLog += ("  ${$t} <= {0}" -f $disp)
@@ -633,6 +635,7 @@ stages:
                         elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper] }
                         if ($null -ne $val) {
                           Write-Host ("##vso[task.setvariable variable={0}]{1}" -f $t, $val)
+                          try { Set-Item "Env:$t" $val } catch {}
                           $setCount++
                           $disp = $val; if ($disp -is [string] -and $disp.Length -gt 60) { $disp = $disp.Substring(0,60) + '...' }
                           $matchedLog += ("  ${$t} <= {0}" -f $disp)
@@ -693,6 +696,7 @@ stages:
                         elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper] }
                         if ($null -ne $val) {
                           Write-Host ("##vso[task.setvariable variable={0}]{1}" -f $t, $val)
+                          try { Set-Item "Env:$t" $val } catch {}
                           $setCount++
                           $disp = $val; if ($disp -is [string] -and $disp.Length -gt 60) { $disp = $disp.Substring(0,60) + '...' }
                           $matchedLog += ("  ${$t} <= {0}" -f $disp)
