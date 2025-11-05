@@ -511,16 +511,16 @@ stages:
                         $replaced = 0; $unresolved = @()
                         foreach ($t in $tokens.Keys) {
                           if ([string]::IsNullOrWhiteSpace($t)) { continue }
-                          $needle = "${$t}"
-                          if ([string]::IsNullOrEmpty($needle)) { continue }
                           $key = $t.ToUpperInvariant()
                           $val = $null
                           if ($exact.ContainsKey($key)) { $val = $exact[$key] }
                           elseif ($stripped.ContainsKey($key)) { $val = $stripped[$key] }
                           elseif ($exact.ContainsKey(($key -replace '_+', '__'))) { $val = $exact[($key -replace '_+', '__')] }
                           if ($null -ne $val) { 
-                            if ($content.Contains($needle)) { 
-                              $content = $content.Replace($needle, $val)
+                            $escapedToken = [regex]::Escape($t)
+                            $pattern = '\$\{' + $escapedToken + '\}'
+                            if ([regex]::IsMatch($content, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)) { 
+                              $content = [regex]::Replace($content, $pattern, $val, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
                               $replaced++ 
                             }
                           } else { 
@@ -582,16 +582,16 @@ stages:
                         $replaced = 0; $unresolved = @()
                         foreach ($t in $tokens.Keys) {
                           if ([string]::IsNullOrWhiteSpace($t)) { continue }
-                          $needle = "${$t}"
-                          if ([string]::IsNullOrEmpty($needle)) { continue }
                           $key = $t.ToUpperInvariant()
                           $val = $null
                           if ($exact.ContainsKey($key)) { $val = $exact[$key] }
                           elseif ($stripped.ContainsKey($key)) { $val = $stripped[$key] }
                           elseif ($exact.ContainsKey(($key -replace '_+', '__'))) { $val = $exact[($key -replace '_+', '__')] }
                           if ($null -ne $val) { 
-                            if ($content.Contains($needle)) { 
-                              $content = $content.Replace($needle, $val)
+                            $escapedToken = [regex]::Escape($t)
+                            $pattern = '\$\{' + $escapedToken + '\}'
+                            if ([regex]::IsMatch($content, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)) { 
+                              $content = [regex]::Replace($content, $pattern, $val, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
                               $replaced++ 
                             }
                           } else { 
@@ -653,16 +653,16 @@ stages:
                         $replaced = 0; $unresolved = @()
                         foreach ($t in $tokens.Keys) {
                           if ([string]::IsNullOrWhiteSpace($t)) { continue }
-                          $needle = "${$t}"
-                          if ([string]::IsNullOrEmpty($needle)) { continue }
                           $key = $t.ToUpperInvariant()
                           $val = $null
                           if ($exact.ContainsKey($key)) { $val = $exact[$key] }
                           elseif ($stripped.ContainsKey($key)) { $val = $stripped[$key] }
                           elseif ($exact.ContainsKey(($key -replace '_+', '__'))) { $val = $exact[($key -replace '_+', '__')] }
                           if ($null -ne $val) { 
-                            if ($content.Contains($needle)) { 
-                              $content = $content.Replace($needle, $val)
+                            $escapedToken = [regex]::Escape($t)
+                            $pattern = '\$\{' + $escapedToken + '\}'
+                            if ([regex]::IsMatch($content, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)) { 
+                              $content = [regex]::Replace($content, $pattern, $val, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
                               $replaced++ 
                             }
                           } else { 
@@ -724,16 +724,16 @@ stages:
                         $replaced = 0; $unresolved = @()
                         foreach ($t in $tokens.Keys) {
                           if ([string]::IsNullOrWhiteSpace($t)) { continue }
-                          $needle = "${$t}"
-                          if ([string]::IsNullOrEmpty($needle)) { continue }
                           $key = $t.ToUpperInvariant()
                           $val = $null
                           if ($exact.ContainsKey($key)) { $val = $exact[$key] }
                           elseif ($stripped.ContainsKey($key)) { $val = $stripped[$key] }
                           elseif ($exact.ContainsKey(($key -replace '_+', '__'))) { $val = $exact[($key -replace '_+', '__')] }
                           if ($null -ne $val) { 
-                            if ($content.Contains($needle)) { 
-                              $content = $content.Replace($needle, $val)
+                            $escapedToken = [regex]::Escape($t)
+                            $pattern = '\$\{' + $escapedToken + '\}'
+                            if ([regex]::IsMatch($content, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)) { 
+                              $content = [regex]::Replace($content, $pattern, $val, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
                               $replaced++ 
                             }
                           } else { 
