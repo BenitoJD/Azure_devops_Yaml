@@ -543,6 +543,24 @@ stages:
                     verbosity: 'detailed'
 
                 - task: PowerShell@2
+                  displayName: 'Post-check after Replace Tokens (IT1)'
+                  condition: and(succeeded(), eq(variables['Deploy.IT1'], 'true'))
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      $file = Join-Path "$(Stakeholder1.PhysicalPath)" 'appsettings.json'
+                      if (-not (Test-Path $file)) { Write-Host "File not found: $file"; exit 0 }
+                      $content = Get-Content -LiteralPath $file -Raw
+                      $matches = [regex]::Matches($content, '\$\{([^}]+)\}')
+                      Write-Host ("Post-RT unresolved token count: {0}" -f $matches.Count)
+                      if ($matches.Count -gt 0) {
+                        $u = @{}; foreach ($m in $matches) { $u[$m.Groups[1].Value] = $true }
+                        Write-Host ("Unresolved: {0}" -f (($u.Keys) -join ', '))
+                      } else {
+                        Write-Host 'No ${...} tokens remain.'
+                      }
+
+                - task: PowerShell@2
                   displayName: 'Map env -> token variables (IT2)'
                   condition: and(succeeded(), eq(variables['Deploy.IT2'], 'true'))
                   inputs:
@@ -601,6 +619,24 @@ stages:
                     tokenSuffix: '}'
                     useEnvironmentVariables: true
                     verbosity: 'detailed'
+
+                - task: PowerShell@2
+                  displayName: 'Post-check after Replace Tokens (IT2)'
+                  condition: and(succeeded(), eq(variables['Deploy.IT2'], 'true'))
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      $file = Join-Path "$(Stakeholder2.PhysicalPath)" 'appsettings.json'
+                      if (-not (Test-Path $file)) { Write-Host "File not found: $file"; exit 0 }
+                      $content = Get-Content -LiteralPath $file -Raw
+                      $matches = [regex]::Matches($content, '\$\{([^}]+)\}')
+                      Write-Host ("Post-RT unresolved token count: {0}" -f $matches.Count)
+                      if ($matches.Count -gt 0) {
+                        $u = @{}; foreach ($m in $matches) { $u[$m.Groups[1].Value] = $true }
+                        Write-Host ("Unresolved: {0}" -f (($u.Keys) -join ', '))
+                      } else {
+                        Write-Host 'No ${...} tokens remain.'
+                      }
 
                 - task: PowerShell@2
                   displayName: 'Map env -> token variables (IT3)'
@@ -663,6 +699,24 @@ stages:
                     verbosity: 'detailed'
 
                 - task: PowerShell@2
+                  displayName: 'Post-check after Replace Tokens (IT3)'
+                  condition: and(succeeded(), eq(variables['Deploy.IT3'], 'true'))
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      $file = Join-Path "$(Stakeholder3.PhysicalPath)" 'appsettings.json'
+                      if (-not (Test-Path $file)) { Write-Host "File not found: $file"; exit 0 }
+                      $content = Get-Content -LiteralPath $file -Raw
+                      $matches = [regex]::Matches($content, '\$\{([^}]+)\}')
+                      Write-Host ("Post-RT unresolved token count: {0}" -f $matches.Count)
+                      if ($matches.Count -gt 0) {
+                        $u = @{}; foreach ($m in $matches) { $u[$m.Groups[1].Value] = $true }
+                        Write-Host ("Unresolved: {0}" -f (($u.Keys) -join ', '))
+                      } else {
+                        Write-Host 'No ${...} tokens remain.'
+                      }
+
+                - task: PowerShell@2
                   displayName: 'Map env -> token variables (IT4)'
                   condition: and(succeeded(), eq(variables['Deploy.IT4'], 'true'))
                   inputs:
@@ -722,6 +776,24 @@ stages:
                     tokenSuffix: '}'
                     useEnvironmentVariables: true
                     verbosity: 'detailed'
+
+                - task: PowerShell@2
+                  displayName: 'Post-check after Replace Tokens (IT4)'
+                  condition: and(succeeded(), eq(variables['Deploy.IT4'], 'true'))
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      $file = Join-Path "$(Stakeholder4.PhysicalPath)" 'appsettings.json'
+                      if (-not (Test-Path $file)) { Write-Host "File not found: $file"; exit 0 }
+                      $content = Get-Content -LiteralPath $file -Raw
+                      $matches = [regex]::Matches($content, '\$\{([^}]+)\}')
+                      Write-Host ("Post-RT unresolved token count: {0}" -f $matches.Count)
+                      if ($matches.Count -gt 0) {
+                        $u = @{}; foreach ($m in $matches) { $u[$m.Groups[1].Value] = $true }
+                        Write-Host ("Unresolved: {0}" -f (($u.Keys) -join ', '))
+                      } else {
+                        Write-Host 'No ${...} tokens remain.'
+                      }
 
   - stage: DiagnosePostInject
     displayName: 'Diagnose after injection (unresolved tokens)'
