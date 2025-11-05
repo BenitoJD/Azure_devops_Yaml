@@ -483,160 +483,140 @@ stages:
             deploy:
               steps:
                 - task: PowerShell@2
-                  displayName: 'Inject tokens from env (simple, case-insensitive) - IT1'
+                  displayName: 'Inject config from env (overwrite JSON) - IT1'
                   condition: and(succeeded(), eq(variables['Deploy.IT1'], 'true'))
                   inputs:
                     targetType: 'inline'
                     script: |
                       $sitePath = "$(Stakeholder1.PhysicalPath)"
-                      $groupPrefix = 'SIT_IT1_API_'
+                      $prefix = 'SIT_IT1_API_'
                       $file = Join-Path $sitePath 'appsettings.json'
                       if (-not (Test-Path $file)) { Write-Error "File not found: $file"; exit 1 }
-                      $content = Get-Content -LiteralPath $file -Raw
-                      $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
-                      if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; exit 0 }
-                      $envMap = @{}
-                      Get-ChildItem Env: | ForEach-Object { $envMap[$_.Name.ToUpperInvariant()] = $_.Value }
-                      $replaced = 0; $unresolved = @()
-                      foreach ($m in $matches) {
-                        $token = $m.Groups[1].Value
-                        $needle = "${$token}"
-                        $pattern = [Regex]::Escape($needle)
-                        $u = ($token -replace '[^A-Za-z0-9_]', '_').ToUpperInvariant()
-                        $candidates = @(($groupPrefix + $u), $u)
-                        $val = $null
-                        foreach ($cand in $candidates) { if ($envMap.ContainsKey($cand)) { $val = $envMap[$cand]; break } }
-                        if ($null -ne $val) {
-                          $content = [Regex]::Replace($content, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($x) $val })
-                          $replaced++
-                          Write-Host ("Replaced '{0}' from '{1}'" -f $needle, ($cand))
-                        } else {
-                          $unresolved += $token
-                        }
+                      $json = Get-Content -LiteralPath $file -Raw | ConvertFrom-Json
+                      function Get-Var([string]$name) {
+                        $v = (Get-ChildItem Env: | Where-Object { $_.Name -ieq $name } | Select-Object -First 1).Value
+                        return $v
                       }
-                      Set-Content -LiteralPath $file -Value $content -Encoding UTF8
-                      Write-Host ("Total tokens replaced: {0}" -f $replaced)
-                      if ($unresolved.Count -gt 0) {
-                        Write-Error ("Unresolved tokens: {0}" -f ($unresolved -join ', '))
-                        exit 1
+                      $map = @{
+                        "MongoDatabaseSettings_Name" = { param($v) $json.MongoDatabaseSettings.DatabaseName = $v }
+                        "MongoDatabaseSettings_ConnectionString" = { param($v) $json.MongoDatabaseSettings.ConnectionString = $v }
+                        "MasterDataSettings_includeTestStores" = { param($v) $json.MasterDataSettings.includeTestStores = (if ($v -match '^[0-9]+$') { [int]$v } elseif ($v -match '^(true|false)$') { [bool]::Parse($v) } else { $v }) }
+                        "MasterDataSettings_MasterDataKey" = { param($v) $json.MasterDataSettings.MasterDataKey = $v }
+                        "MasterDataSettings_MD_DBCon" = { param($v) $json.MasterDataSettings.MD_DBCon = $v }
+                        "MasterDataSettings_MDIS_DBCon" = { param($v) $json.MasterDataSettings.MDIS_DBCon = $v }
                       }
+                      $missing = @()
+                      foreach ($k in $map.Keys) {
+                        $v = Get-Var ($prefix + $k)
+                        if (-not $v) { $v = Get-Var $k }
+                        if (-not $v) { $missing += $k; continue }
+                        & $map[$k] $v
+                        Write-Host ("Set {0} from env" -f $k)
+                      }
+                      if ($missing.Count -gt 0) { Write-Host ("Missing env for: {0}" -f ($missing -join ', ')) }
+                      ($json | ConvertTo-Json -Depth 100) | Set-Content -LiteralPath $file -Encoding UTF8
 
                 - task: PowerShell@2
-                  displayName: 'Inject tokens from env (simple, case-insensitive) - IT2'
+                  displayName: 'Inject config from env (overwrite JSON) - IT2'
                   condition: and(succeeded(), eq(variables['Deploy.IT2'], 'true'))
                   inputs:
                     targetType: 'inline'
                     script: |
                       $sitePath = "$(Stakeholder2.PhysicalPath)"
-                      $groupPrefix = 'SIT_IT2_API_'
+                      $prefix = 'SIT_IT2_API_'
                       $file = Join-Path $sitePath 'appsettings.json'
                       if (-not (Test-Path $file)) { Write-Error "File not found: $file"; exit 1 }
-                      $content = Get-Content -LiteralPath $file -Raw
-                      $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
-                      if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; exit 0 }
-                      $envMap = @{}
-                      Get-ChildItem Env: | ForEach-Object { $envMap[$_.Name.ToUpperInvariant()] = $_.Value }
-                      $replaced = 0; $unresolved = @()
-                      foreach ($m in $matches) {
-                        $token = $m.Groups[1].Value
-                        $needle = "${$token}"
-                        $pattern = [Regex]::Escape($needle)
-                        $u = ($token -replace '[^A-Za-z0-9_]', '_').ToUpperInvariant()
-                        $candidates = @(($groupPrefix + $u), $u)
-                        $val = $null
-                        foreach ($cand in $candidates) { if ($envMap.ContainsKey($cand)) { $val = $envMap[$cand]; break } }
-                        if ($null -ne $val) {
-                          $content = [Regex]::Replace($content, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($x) $val })
-                          $replaced++
-                          Write-Host ("Replaced '{0}' from '{1}'" -f $needle, ($cand))
-                        } else {
-                          $unresolved += $token
-                        }
+                      $json = Get-Content -LiteralPath $file -Raw | ConvertFrom-Json
+                      function Get-Var([string]$name) {
+                        $v = (Get-ChildItem Env: | Where-Object { $_.Name -ieq $name } | Select-Object -First 1).Value
+                        return $v
                       }
-                      Set-Content -LiteralPath $file -Value $content -Encoding UTF8
-                      Write-Host ("Total tokens replaced: {0}" -f $replaced)
-                      if ($unresolved.Count -gt 0) {
-                        Write-Error ("Unresolved tokens: {0}" -f ($unresolved -join ', '))
-                        exit 1
+                      $map = @{
+                        "MongoDatabaseSettings_Name" = { param($v) $json.MongoDatabaseSettings.DatabaseName = $v }
+                        "MongoDatabaseSettings_ConnectionString" = { param($v) $json.MongoDatabaseSettings.ConnectionString = $v }
+                        "MasterDataSettings_includeTestStores" = { param($v) $json.MasterDataSettings.includeTestStores = (if ($v -match '^[0-9]+$') { [int]$v } elseif ($v -match '^(true|false)$') { [bool]::Parse($v) } else { $v }) }
+                        "MasterDataSettings_MasterDataKey" = { param($v) $json.MasterDataSettings.MasterDataKey = $v }
+                        "MasterDataSettings_MD_DBCon" = { param($v) $json.MasterDataSettings.MD_DBCon = $v }
+                        "MasterDataSettings_MDIS_DBCon" = { param($v) $json.MasterDataSettings.MDIS_DBCon = $v }
                       }
+                      $missing = @()
+                      foreach ($k in $map.Keys) {
+                        $v = Get-Var ($prefix + $k)
+                        if (-not $v) { $v = Get-Var $k }
+                        if (-not $v) { $missing += $k; continue }
+                        & $map[$k] $v
+                        Write-Host ("Set {0} from env" -f $k)
+                      }
+                      if ($missing.Count -gt 0) { Write-Host ("Missing env for: {0}" -f ($missing -join ', ')) }
+                      ($json | ConvertTo-Json -Depth 100) | Set-Content -LiteralPath $file -Encoding UTF8
 
                 - task: PowerShell@2
-                  displayName: 'Inject tokens from env (simple, case-insensitive) - IT3'
+                  displayName: 'Inject config from env (overwrite JSON) - IT3'
                   condition: and(succeeded(), eq(variables['Deploy.IT3'], 'true'))
                   inputs:
                     targetType: 'inline'
                     script: |
                       $sitePath = "$(Stakeholder3.PhysicalPath)"
-                      $groupPrefix = 'SIT_IT3_API_'
+                      $prefix = 'SIT_IT3_API_'
                       $file = Join-Path $sitePath 'appsettings.json'
                       if (-not (Test-Path $file)) { Write-Error "File not found: $file"; exit 1 }
-                      $content = Get-Content -LiteralPath $file -Raw
-                      $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
-                      if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; exit 0 }
-                      $envMap = @{}
-                      Get-ChildItem Env: | ForEach-Object { $envMap[$_.Name.ToUpperInvariant()] = $_.Value }
-                      $replaced = 0; $unresolved = @()
-                      foreach ($m in $matches) {
-                        $token = $m.Groups[1].Value
-                        $needle = "${$token}"
-                        $pattern = [Regex]::Escape($needle)
-                        $u = ($token -replace '[^A-Za-z0-9_]', '_').ToUpperInvariant()
-                        $candidates = @(($groupPrefix + $u), $u)
-                        $val = $null
-                        foreach ($cand in $candidates) { if ($envMap.ContainsKey($cand)) { $val = $envMap[$cand]; break } }
-                        if ($null -ne $val) {
-                          $content = [Regex]::Replace($content, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($x) $val })
-                          $replaced++
-                          Write-Host ("Replaced '{0}' from '{1}'" -f $needle, ($cand))
-                        } else {
-                          $unresolved += $token
-                        }
+                      $json = Get-Content -LiteralPath $file -Raw | ConvertFrom-Json
+                      function Get-Var([string]$name) {
+                        $v = (Get-ChildItem Env: | Where-Object { $_.Name -ieq $name } | Select-Object -First 1).Value
+                        return $v
                       }
-                      Set-Content -LiteralPath $file -Value $content -Encoding UTF8
-                      Write-Host ("Total tokens replaced: {0}" -f $replaced)
-                      if ($unresolved.Count -gt 0) {
-                        Write-Error ("Unresolved tokens: {0}" -f ($unresolved -join ', '))
-                        exit 1
+                      $map = @{
+                        "MongoDatabaseSettings_Name" = { param($v) $json.MongoDatabaseSettings.DatabaseName = $v }
+                        "MongoDatabaseSettings_ConnectionString" = { param($v) $json.MongoDatabaseSettings.ConnectionString = $v }
+                        "MasterDataSettings_includeTestStores" = { param($v) $json.MasterDataSettings.includeTestStores = (if ($v -match '^[0-9]+$') { [int]$v } elseif ($v -match '^(true|false)$') { [bool]::Parse($v) } else { $v }) }
+                        "MasterDataSettings_MasterDataKey" = { param($v) $json.MasterDataSettings.MasterDataKey = $v }
+                        "MasterDataSettings_MD_DBCon" = { param($v) $json.MasterDataSettings.MD_DBCon = $v }
+                        "MasterDataSettings_MDIS_DBCon" = { param($v) $json.MasterDataSettings.MDIS_DBCon = $v }
                       }
+                      $missing = @()
+                      foreach ($k in $map.Keys) {
+                        $v = Get-Var ($prefix + $k)
+                        if (-not $v) { $v = Get-Var $k }
+                        if (-not $v) { $missing += $k; continue }
+                        & $map[$k] $v
+                        Write-Host ("Set {0} from env" -f $k)
+                      }
+                      if ($missing.Count -gt 0) { Write-Host ("Missing env for: {0}" -f ($missing -join ', ')) }
+                      ($json | ConvertTo-Json -Depth 100) | Set-Content -LiteralPath $file -Encoding UTF8
 
                 - task: PowerShell@2
-                  displayName: 'Inject tokens from env (simple, case-insensitive) - IT4'
+                  displayName: 'Inject config from env (overwrite JSON) - IT4'
                   condition: and(succeeded(), eq(variables['Deploy.IT4'], 'true'))
                   inputs:
                     targetType: 'inline'
                     script: |
                       $sitePath = "$(Stakeholder4.PhysicalPath)"
-                      $groupPrefix = 'SIT_IT4_API_'
+                      $prefix = 'SIT_IT4_API_'
                       $file = Join-Path $sitePath 'appsettings.json'
                       if (-not (Test-Path $file)) { Write-Error "File not found: $file"; exit 1 }
-                      $content = Get-Content -LiteralPath $file -Raw
-                      $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
-                      if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; exit 0 }
-                      $envMap = @{}
-                      Get-ChildItem Env: | ForEach-Object { $envMap[$_.Name.ToUpperInvariant()] = $_.Value }
-                      $replaced = 0; $unresolved = @()
-                      foreach ($m in $matches) {
-                        $token = $m.Groups[1].Value
-                        $needle = "${$token}"
-                        $pattern = [Regex]::Escape($needle)
-                        $u = ($token -replace '[^A-Za-z0-9_]', '_').ToUpperInvariant()
-                        $candidates = @(($groupPrefix + $u), $u)
-                        $val = $null
-                        foreach ($cand in $candidates) { if ($envMap.ContainsKey($cand)) { $val = $envMap[$cand]; break } }
-                        if ($null -ne $val) {
-                          $content = [Regex]::Replace($content, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($x) $val })
-                          $replaced++
-                          Write-Host ("Replaced '{0}' from '{1}'" -f $needle, ($cand))
-                        } else {
-                          $unresolved += $token
-                        }
+                      $json = Get-Content -LiteralPath $file -Raw | ConvertFrom-Json
+                      function Get-Var([string]$name) {
+                        $v = (Get-ChildItem Env: | Where-Object { $_.Name -ieq $name } | Select-Object -First 1).Value
+                        return $v
                       }
-                      Set-Content -LiteralPath $file -Value $content -Encoding UTF8
-                      Write-Host ("Total tokens replaced: {0}" -f $replaced)
-                      if ($unresolved.Count -gt 0) {
-                        Write-Error ("Unresolved tokens: {0}" -f ($unresolved -join ', '))
-                        exit 1
+                      $map = @{
+                        "MongoDatabaseSettings_Name" = { param($v) $json.MongoDatabaseSettings.DatabaseName = $v }
+                        "MongoDatabaseSettings_ConnectionString" = { param($v) $json.MongoDatabaseSettings.ConnectionString = $v }
+                        "MasterDataSettings_includeTestStores" = { param($v) $json.MasterDataSettings.includeTestStores = (if ($v -match '^[0-9]+$') { [int]$v } elseif ($v -match '^(true|false)$') { [bool]::Parse($v) } else { $v }) }
+                        "MasterDataSettings_MasterDataKey" = { param($v) $json.MasterDataSettings.MasterDataKey = $v }
+                        "MasterDataSettings_MD_DBCon" = { param($v) $json.MasterDataSettings.MD_DBCon = $v }
+                        "MasterDataSettings_MDIS_DBCon" = { param($v) $json.MasterDataSettings.MDIS_DBCon = $v }
                       }
+                      $missing = @()
+                      foreach ($k in $map.Keys) {
+                        $v = Get-Var ($prefix + $k)
+                        if (-not $v) { $v = Get-Var $k }
+                        if (-not $v) { $missing += $k; continue }
+                        & $map[$k] $v
+                        Write-Host ("Set {0} from env" -f $k)
+                      }
+                      if ($missing.Count -gt 0) { Write-Host ("Missing env for: {0}" -f ($missing -join ', ')) }
+                      ($json | ConvertTo-Json -Depth 100) | Set-Content -LiteralPath $file -Encoding UTF8
 
   - stage: DiagnosePostInject
     displayName: 'Diagnose after injection (unresolved tokens)'
