@@ -483,20 +483,41 @@ stages:
             deploy:
               steps:
                 - task: PowerShell@2
-                  displayName: 'Map SIT_IT1_API_* env vars to unprefixed tokens (IT1)'
+                  displayName: 'Prepare variables for tokens (case-insensitive) - IT1'
                   condition: and(succeeded(), eq(variables['Deploy.IT1'], 'true'))
                   inputs:
                     targetType: 'inline'
                     script: |
+                      $sitePath = "$(Stakeholder1.PhysicalPath)"
                       $prefix = 'SIT_IT1_API_'
-                      Write-Host "Mapping variables with prefix '$prefix' to unprefixed names for Replace Tokens"
-                      $envVars = Get-ChildItem Env: | Where-Object { $_.Name -like "$prefix*" }
-                      foreach ($v in $envVars) {
-                        $name = $v.Name.Substring($prefix.Length)
-                        $value = $v.Value
-                        Write-Host " - $($v.Name) -> $name"
-                        Write-Host "##vso[task.setvariable variable=$name]$value"
-                        Set-Item "Env:$name" $value
+                      $file = Join-Path $sitePath 'appsettings.json'
+                      Write-Host "Preparing variables for tokens in $file (prefix '$prefix')"
+                      if (-not (Test-Path $file)) { Write-Host "File not found: $file"; exit 0 }
+                      $content = Get-Content -LiteralPath $file -Raw
+                      $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
+                      if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; exit 0 }
+                      # Build case-insensitive map of environment vars
+                      $envMap = @{}
+                      Get-ChildItem Env: | ForEach-Object { $envMap[$_.Name.ToUpperInvariant()] = $_.Value }
+                      foreach ($m in $matches) {
+                        $token = $m.Groups[1].Value
+                        $u = ($token -replace '[^A-Za-z0-9_]', '_').ToUpperInvariant()
+                        $candidates = @(
+                          $u,
+                          ($prefix + $u)
+                        )
+                        $found = $false
+                        foreach ($cand in $candidates) {
+                          if ($envMap.ContainsKey($cand)) {
+                            $val = $envMap[$cand]
+                            Write-Host ("Setting pipeline/env variable for token '{0}' from '{1}'" -f $token, $cand)
+                            Write-Host "##vso[task.setvariable variable=$token]$val"
+                            Set-Item "Env:$token" $val
+                            $found = $true
+                            break
+                          }
+                        }
+                        if (-not $found) { Write-Host ("No env var found (case-insensitive) for token '{0}' (looked for '{1}', '{2}')" -f $token, $u, ($prefix + $u)) }
                       }
                 - task: qetza.replacetokens.replacetokens-task.replacetokens@5
                   displayName: 'Replace tokens in appsettings.json - IT1'
@@ -512,20 +533,37 @@ stages:
                     tokenSuffix: '}'
 
                 - task: PowerShell@2
-                  displayName: 'Map SIT_IT2_API_* env vars to unprefixed tokens (IT2)'
+                  displayName: 'Prepare variables for tokens (case-insensitive) - IT2'
                   condition: and(succeeded(), eq(variables['Deploy.IT2'], 'true'))
                   inputs:
                     targetType: 'inline'
                     script: |
+                      $sitePath = "$(Stakeholder2.PhysicalPath)"
                       $prefix = 'SIT_IT2_API_'
-                      Write-Host "Mapping variables with prefix '$prefix' to unprefixed names for Replace Tokens"
-                      $envVars = Get-ChildItem Env: | Where-Object { $_.Name -like "$prefix*" }
-                      foreach ($v in $envVars) {
-                        $name = $v.Name.Substring($prefix.Length)
-                        $value = $v.Value
-                        Write-Host " - $($v.Name) -> $name"
-                        Write-Host "##vso[task.setvariable variable=$name]$value"
-                        Set-Item "Env:$name" $value
+                      $file = Join-Path $sitePath 'appsettings.json'
+                      Write-Host "Preparing variables for tokens in $file (prefix '$prefix')"
+                      if (-not (Test-Path $file)) { Write-Host "File not found: $file"; exit 0 }
+                      $content = Get-Content -LiteralPath $file -Raw
+                      $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
+                      if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; exit 0 }
+                      $envMap = @{}
+                      Get-ChildItem Env: | ForEach-Object { $envMap[$_.Name.ToUpperInvariant()] = $_.Value }
+                      foreach ($m in $matches) {
+                        $token = $m.Groups[1].Value
+                        $u = ($token -replace '[^A-Za-z0-9_]', '_').ToUpperInvariant()
+                        $candidates = @($u, ($prefix + $u))
+                        $found = $false
+                        foreach ($cand in $candidates) {
+                          if ($envMap.ContainsKey($cand)) {
+                            $val = $envMap[$cand]
+                            Write-Host ("Setting pipeline/env variable for token '{0}' from '{1}'" -f $token, $cand)
+                            Write-Host "##vso[task.setvariable variable=$token]$val"
+                            Set-Item "Env:$token" $val
+                            $found = $true
+                            break
+                          }
+                        }
+                        if (-not $found) { Write-Host ("No env var found (case-insensitive) for token '{0}' (looked for '{1}', '{2}')" -f $token, $u, ($prefix + $u)) }
                       }
                 - task: qetza.replacetokens.replacetokens-task.replacetokens@5
                   displayName: 'Replace tokens in appsettings.json - IT2'
@@ -541,20 +579,37 @@ stages:
                     tokenSuffix: '}'
 
                 - task: PowerShell@2
-                  displayName: 'Map SIT_IT3_API_* env vars to unprefixed tokens (IT3)'
+                  displayName: 'Prepare variables for tokens (case-insensitive) - IT3'
                   condition: and(succeeded(), eq(variables['Deploy.IT3'], 'true'))
                   inputs:
                     targetType: 'inline'
                     script: |
+                      $sitePath = "$(Stakeholder3.PhysicalPath)"
                       $prefix = 'SIT_IT3_API_'
-                      Write-Host "Mapping variables with prefix '$prefix' to unprefixed names for Replace Tokens"
-                      $envVars = Get-ChildItem Env: | Where-Object { $_.Name -like "$prefix*" }
-                      foreach ($v in $envVars) {
-                        $name = $v.Name.Substring($prefix.Length)
-                        $value = $v.Value
-                        Write-Host " - $($v.Name) -> $name"
-                        Write-Host "##vso[task.setvariable variable=$name]$value"
-                        Set-Item "Env:$name" $value
+                      $file = Join-Path $sitePath 'appsettings.json'
+                      Write-Host "Preparing variables for tokens in $file (prefix '$prefix')"
+                      if (-not (Test-Path $file)) { Write-Host "File not found: $file"; exit 0 }
+                      $content = Get-Content -LiteralPath $file -Raw
+                      $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
+                      if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; exit 0 }
+                      $envMap = @{}
+                      Get-ChildItem Env: | ForEach-Object { $envMap[$_.Name.ToUpperInvariant()] = $_.Value }
+                      foreach ($m in $matches) {
+                        $token = $m.Groups[1].Value
+                        $u = ($token -replace '[^A-Za-z0-9_]', '_').ToUpperInvariant()
+                        $candidates = @($u, ($prefix + $u))
+                        $found = $false
+                        foreach ($cand in $candidates) {
+                          if ($envMap.ContainsKey($cand)) {
+                            $val = $envMap[$cand]
+                            Write-Host ("Setting pipeline/env variable for token '{0}' from '{1}'" -f $token, $cand)
+                            Write-Host "##vso[task.setvariable variable=$token]$val"
+                            Set-Item "Env:$token" $val
+                            $found = $true
+                            break
+                          }
+                        }
+                        if (-not $found) { Write-Host ("No env var found (case-insensitive) for token '{0}' (looked for '{1}', '{2}')" -f $token, $u, ($prefix + $u)) }
                       }
                 - task: qetza.replacetokens.replacetokens-task.replacetokens@5
                   displayName: 'Replace tokens in appsettings.json - IT3'
@@ -570,20 +625,37 @@ stages:
                     tokenSuffix: '}'
 
                 - task: PowerShell@2
-                  displayName: 'Map SIT_IT4_API_* env vars to unprefixed tokens (IT4)'
+                  displayName: 'Prepare variables for tokens (case-insensitive) - IT4'
                   condition: and(succeeded(), eq(variables['Deploy.IT4'], 'true'))
                   inputs:
                     targetType: 'inline'
                     script: |
+                      $sitePath = "$(Stakeholder4.PhysicalPath)"
                       $prefix = 'SIT_IT4_API_'
-                      Write-Host "Mapping variables with prefix '$prefix' to unprefixed names for Replace Tokens"
-                      $envVars = Get-ChildItem Env: | Where-Object { $_.Name -like "$prefix*" }
-                      foreach ($v in $envVars) {
-                        $name = $v.Name.Substring($prefix.Length)
-                        $value = $v.Value
-                        Write-Host " - $($v.Name) -> $name"
-                        Write-Host "##vso[task.setvariable variable=$name]$value"
-                        Set-Item "Env:$name" $value
+                      $file = Join-Path $sitePath 'appsettings.json'
+                      Write-Host "Preparing variables for tokens in $file (prefix '$prefix')"
+                      if (-not (Test-Path $file)) { Write-Host "File not found: $file"; exit 0 }
+                      $content = Get-Content -LiteralPath $file -Raw
+                      $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
+                      if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; exit 0 }
+                      $envMap = @{}
+                      Get-ChildItem Env: | ForEach-Object { $envMap[$_.Name.ToUpperInvariant()] = $_.Value }
+                      foreach ($m in $matches) {
+                        $token = $m.Groups[1].Value
+                        $u = ($token -replace '[^A-Za-z0-9_]', '_').ToUpperInvariant()
+                        $candidates = @($u, ($prefix + $u))
+                        $found = $false
+                        foreach ($cand in $candidates) {
+                          if ($envMap.ContainsKey($cand)) {
+                            $val = $envMap[$cand]
+                            Write-Host ("Setting pipeline/env variable for token '{0}' from '{1}'" -f $token, $cand)
+                            Write-Host "##vso[task.setvariable variable=$token]$val"
+                            Set-Item "Env:$token" $val
+                            $found = $true
+                            break
+                          }
+                        }
+                        if (-not $found) { Write-Host ("No env var found (case-insensitive) for token '{0}' (looked for '{1}', '{2}')" -f $token, $u, ($prefix + $u)) }
                       }
                 - task: qetza.replacetokens.replacetokens-task.replacetokens@5
                   displayName: 'Replace tokens in appsettings.json - IT4'
