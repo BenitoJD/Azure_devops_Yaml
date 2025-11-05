@@ -527,23 +527,70 @@ stages:
                       Write-Host ("Variables set for tokens: {0}" -f $setCount)
                       if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
 
-                - task: qetza.replacetokens.replacetokens-task.replacetokens@5
-                  displayName: 'Replace tokens (IT1)'
+                - task: PowerShell@2
+                  displayName: 'Direct JSON token injection (IT1)'
                   condition: and(succeeded(), eq(variables['Deploy.IT1'], 'true'))
                   inputs:
-                    rootDirectory: '$(Stakeholder1.PhysicalPath)'
-                    targetFiles: 'appsettings.json'
-                    encoding: 'auto'
-                    writeBOM: true
-                    actionOnMissing: 'keep'
-                    keepToken: true
-                    tokenPrefix: '${'
-                    tokenSuffix: '}'
-                    useEnvironmentVariables: true
-                    verbosity: 'detailed'
+                    targetType: 'inline'
+                    script: |
+                      $file = Join-Path "$(Stakeholder1.PhysicalPath)" 'appsettings.json'
+                      if (-not (Test-Path $file)) { Write-Error "File not found: $file"; exit 1 }
+
+                      $envVars = Get-ChildItem Env:
+                      $exactMap = @{}
+                      $suffixMap = @{}
+                      foreach ($e in $envVars) {
+                        $nameUpper = $e.Name.ToUpperInvariant()
+                        $exactMap[$nameUpper] = $e.Value
+                        $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
+                        $suffixMap[$normalized] = $e.Value
+                      }
+
+                      function Resolve-Token([string]$tokenName) {
+                        if ([string]::IsNullOrWhiteSpace($tokenName)) { return $null }
+                        $key = $tokenName.ToUpperInvariant()
+                        if ($exactMap.ContainsKey($key)) { return $exactMap[$key] }
+                        if ($suffixMap.ContainsKey($key)) { return $suffixMap[$key] }
+                        return $null
+                      }
+
+                      $jsonText = Get-Content -LiteralPath $file -Raw
+                      $json = $jsonText | ConvertFrom-Json -Depth 100
+                      $script:replacementCount = 0
+                      $unresolved = New-Object System.Collections.Generic.HashSet[string]
+
+                      function Replace-InNode([object]$node) {
+                        if ($null -eq $node) { return $node }
+                        if ($node -is [string]) {
+                          $m = [regex]::Match($node, '^\$\{([^}]+)\}$')
+                          if ($m.Success) {
+                            $name = $m.Groups[1].Value
+                            $val = Resolve-Token $name
+                            if ($null -ne $val) { $script:replacementCount++; return $val }
+                            [void]$unresolved.Add($name)
+                          }
+                          return $node
+                        }
+                        if ($node -is [System.Collections.IEnumerable] -and -not ($node -is [pscustomobject])) {
+                          $list = @()
+                          foreach ($item in $node) { $list += ,(Replace-InNode $item) }
+                          return $list
+                        }
+                        if ($node -is [pscustomobject]) {
+                          $props = $node | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name
+                          foreach ($p in $props) { $node.$p = Replace-InNode $node.$p }
+                          return $node
+                        }
+                        return $node
+                      }
+
+                      $newJson = Replace-InNode $json
+                      ($newJson | ConvertTo-Json -Depth 100) | Set-Content -LiteralPath $file -Encoding UTF8
+                      Write-Host ("Direct JSON replacements: {0}" -f $script:replacementCount)
+                      if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f (($unresolved.ToArray()) -join ', ')) }
 
                 - task: PowerShell@2
-                  displayName: 'Post-check after Replace Tokens (IT1)'
+                  displayName: 'Post-check after JSON injection (IT1)'
                   condition: and(succeeded(), eq(variables['Deploy.IT1'], 'true'))
                   inputs:
                     targetType: 'inline'
@@ -605,23 +652,70 @@ stages:
                       Write-Host ("Variables set for tokens: {0}" -f $setCount)
                       if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
 
-                - task: qetza.replacetokens.replacetokens-task.replacetokens@5
-                  displayName: 'Replace tokens (IT2)'
+                - task: PowerShell@2
+                  displayName: 'Direct JSON token injection (IT2)'
                   condition: and(succeeded(), eq(variables['Deploy.IT2'], 'true'))
                   inputs:
-                    rootDirectory: '$(Stakeholder2.PhysicalPath)'
-                    targetFiles: 'appsettings.json'
-                    encoding: 'auto'
-                    writeBOM: true
-                    actionOnMissing: 'keep'
-                    keepToken: true
-                    tokenPrefix: '${'
-                    tokenSuffix: '}'
-                    useEnvironmentVariables: true
-                    verbosity: 'detailed'
+                    targetType: 'inline'
+                    script: |
+                      $file = Join-Path "$(Stakeholder2.PhysicalPath)" 'appsettings.json'
+                      if (-not (Test-Path $file)) { Write-Error "File not found: $file"; exit 1 }
+
+                      $envVars = Get-ChildItem Env:
+                      $exactMap = @{}
+                      $suffixMap = @{}
+                      foreach ($e in $envVars) {
+                        $nameUpper = $e.Name.ToUpperInvariant()
+                        $exactMap[$nameUpper] = $e.Value
+                        $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
+                        $suffixMap[$normalized] = $e.Value
+                      }
+
+                      function Resolve-Token([string]$tokenName) {
+                        if ([string]::IsNullOrWhiteSpace($tokenName)) { return $null }
+                        $key = $tokenName.ToUpperInvariant()
+                        if ($exactMap.ContainsKey($key)) { return $exactMap[$key] }
+                        if ($suffixMap.ContainsKey($key)) { return $suffixMap[$key] }
+                        return $null
+                      }
+
+                      $jsonText = Get-Content -LiteralPath $file -Raw
+                      $json = $jsonText | ConvertFrom-Json -Depth 100
+                      $script:replacementCount = 0
+                      $unresolved = New-Object System.Collections.Generic.HashSet[string]
+
+                      function Replace-InNode([object]$node) {
+                        if ($null -eq $node) { return $node }
+                        if ($node -is [string]) {
+                          $m = [regex]::Match($node, '^\$\{([^}]+)\}$')
+                          if ($m.Success) {
+                            $name = $m.Groups[1].Value
+                            $val = Resolve-Token $name
+                            if ($null -ne $val) { $script:replacementCount++; return $val }
+                            [void]$unresolved.Add($name)
+                          }
+                          return $node
+                        }
+                        if ($node -is [System.Collections.IEnumerable] -and -not ($node -is [pscustomobject])) {
+                          $list = @()
+                          foreach ($item in $node) { $list += ,(Replace-InNode $item) }
+                          return $list
+                        }
+                        if ($node -is [pscustomobject]) {
+                          $props = $node | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name
+                          foreach ($p in $props) { $node.$p = Replace-InNode $node.$p }
+                          return $node
+                        }
+                        return $node
+                      }
+
+                      $newJson = Replace-InNode $json
+                      ($newJson | ConvertTo-Json -Depth 100) | Set-Content -LiteralPath $file -Encoding UTF8
+                      Write-Host ("Direct JSON replacements: {0}" -f $script:replacementCount)
+                      if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f (($unresolved.ToArray()) -join ', ')) }
 
                 - task: PowerShell@2
-                  displayName: 'Post-check after Replace Tokens (IT2)'
+                  displayName: 'Post-check after JSON injection (IT2)'
                   condition: and(succeeded(), eq(variables['Deploy.IT2'], 'true'))
                   inputs:
                     targetType: 'inline'
@@ -683,23 +777,70 @@ stages:
                       Write-Host ("Variables set for tokens: {0}" -f $setCount)
                       if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
 
-                - task: qetza.replacetokens.replacetokens-task.replacetokens@5
-                  displayName: 'Replace tokens (IT3)'
+                - task: PowerShell@2
+                  displayName: 'Direct JSON token injection (IT3)'
                   condition: and(succeeded(), eq(variables['Deploy.IT3'], 'true'))
                   inputs:
-                    rootDirectory: '$(Stakeholder3.PhysicalPath)'
-                    targetFiles: 'appsettings.json'
-                    encoding: 'auto'
-                    writeBOM: true
-                    actionOnMissing: 'keep'
-                    keepToken: true
-                    tokenPrefix: '${'
-                    tokenSuffix: '}'
-                    useEnvironmentVariables: true
-                    verbosity: 'detailed'
+                    targetType: 'inline'
+                    script: |
+                      $file = Join-Path "$(Stakeholder3.PhysicalPath)" 'appsettings.json'
+                      if (-not (Test-Path $file)) { Write-Error "File not found: $file"; exit 1 }
+
+                      $envVars = Get-ChildItem Env:
+                      $exactMap = @{}
+                      $suffixMap = @{}
+                      foreach ($e in $envVars) {
+                        $nameUpper = $e.Name.ToUpperInvariant()
+                        $exactMap[$nameUpper] = $e.Value
+                        $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
+                        $suffixMap[$normalized] = $e.Value
+                      }
+
+                      function Resolve-Token([string]$tokenName) {
+                        if ([string]::IsNullOrWhiteSpace($tokenName)) { return $null }
+                        $key = $tokenName.ToUpperInvariant()
+                        if ($exactMap.ContainsKey($key)) { return $exactMap[$key] }
+                        if ($suffixMap.ContainsKey($key)) { return $suffixMap[$key] }
+                        return $null
+                      }
+
+                      $jsonText = Get-Content -LiteralPath $file -Raw
+                      $json = $jsonText | ConvertFrom-Json -Depth 100
+                      $script:replacementCount = 0
+                      $unresolved = New-Object System.Collections.Generic.HashSet[string]
+
+                      function Replace-InNode([object]$node) {
+                        if ($null -eq $node) { return $node }
+                        if ($node -is [string]) {
+                          $m = [regex]::Match($node, '^\$\{([^}]+)\}$')
+                          if ($m.Success) {
+                            $name = $m.Groups[1].Value
+                            $val = Resolve-Token $name
+                            if ($null -ne $val) { $script:replacementCount++; return $val }
+                            [void]$unresolved.Add($name)
+                          }
+                          return $node
+                        }
+                        if ($node -is [System.Collections.IEnumerable] -and -not ($node -is [pscustomobject])) {
+                          $list = @()
+                          foreach ($item in $node) { $list += ,(Replace-InNode $item) }
+                          return $list
+                        }
+                        if ($node -is [pscustomobject]) {
+                          $props = $node | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name
+                          foreach ($p in $props) { $node.$p = Replace-InNode $node.$p }
+                          return $node
+                        }
+                        return $node
+                      }
+
+                      $newJson = Replace-InNode $json
+                      ($newJson | ConvertTo-Json -Depth 100) | Set-Content -LiteralPath $file -Encoding UTF8
+                      Write-Host ("Direct JSON replacements: {0}" -f $script:replacementCount)
+                      if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f (($unresolved.ToArray()) -join ', ')) }
 
                 - task: PowerShell@2
-                  displayName: 'Post-check after Replace Tokens (IT3)'
+                  displayName: 'Post-check after JSON injection (IT3)'
                   condition: and(succeeded(), eq(variables['Deploy.IT3'], 'true'))
                   inputs:
                     targetType: 'inline'
@@ -762,23 +903,70 @@ stages:
                       Write-Host ("Variables set for tokens: {0}" -f $setCount)
                       if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
 
-                - task: qetza.replacetokens.replacetokens-task.replacetokens@5
-                  displayName: 'Replace tokens (IT4)'
+                - task: PowerShell@2
+                  displayName: 'Direct JSON token injection (IT4)'
                   condition: and(succeeded(), eq(variables['Deploy.IT4'], 'true'))
                   inputs:
-                    rootDirectory: '$(Stakeholder4.PhysicalPath)'
-                    targetFiles: 'appsettings.json'
-                    encoding: 'auto'
-                    writeBOM: true
-                    actionOnMissing: 'keep'
-                    keepToken: true
-                    tokenPrefix: '${'
-                    tokenSuffix: '}'
-                    useEnvironmentVariables: true
-                    verbosity: 'detailed'
+                    targetType: 'inline'
+                    script: |
+                      $file = Join-Path "$(Stakeholder4.PhysicalPath)" 'appsettings.json'
+                      if (-not (Test-Path $file)) { Write-Error "File not found: $file"; exit 1 }
+
+                      $envVars = Get-ChildItem Env:
+                      $exactMap = @{}
+                      $suffixMap = @{}
+                      foreach ($e in $envVars) {
+                        $nameUpper = $e.Name.ToUpperInvariant()
+                        $exactMap[$nameUpper] = $e.Value
+                        $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
+                        $suffixMap[$normalized] = $e.Value
+                      }
+
+                      function Resolve-Token([string]$tokenName) {
+                        if ([string]::IsNullOrWhiteSpace($tokenName)) { return $null }
+                        $key = $tokenName.ToUpperInvariant()
+                        if ($exactMap.ContainsKey($key)) { return $exactMap[$key] }
+                        if ($suffixMap.ContainsKey($key)) { return $suffixMap[$key] }
+                        return $null
+                      }
+
+                      $jsonText = Get-Content -LiteralPath $file -Raw
+                      $json = $jsonText | ConvertFrom-Json -Depth 100
+                      $script:replacementCount = 0
+                      $unresolved = New-Object System.Collections.Generic.HashSet[string]
+
+                      function Replace-InNode([object]$node) {
+                        if ($null -eq $node) { return $node }
+                        if ($node -is [string]) {
+                          $m = [regex]::Match($node, '^\$\{([^}]+)\}$')
+                          if ($m.Success) {
+                            $name = $m.Groups[1].Value
+                            $val = Resolve-Token $name
+                            if ($null -ne $val) { $script:replacementCount++; return $val }
+                            [void]$unresolved.Add($name)
+                          }
+                          return $node
+                        }
+                        if ($node -is [System.Collections.IEnumerable] -and -not ($node -is [pscustomobject])) {
+                          $list = @()
+                          foreach ($item in $node) { $list += ,(Replace-InNode $item) }
+                          return $list
+                        }
+                        if ($node -is [pscustomobject]) {
+                          $props = $node | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name
+                          foreach ($p in $props) { $node.$p = Replace-InNode $node.$p }
+                          return $node
+                        }
+                        return $node
+                      }
+
+                      $newJson = Replace-InNode $json
+                      ($newJson | ConvertTo-Json -Depth 100) | Set-Content -LiteralPath $file -Encoding UTF8
+                      Write-Host ("Direct JSON replacements: {0}" -f $script:replacementCount)
+                      if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f (($unresolved.ToArray()) -join ', ')) }
 
                 - task: PowerShell@2
-                  displayName: 'Post-check after Replace Tokens (IT4)'
+                  displayName: 'Post-check after JSON injection (IT4)'
                   condition: and(succeeded(), eq(variables['Deploy.IT4'], 'true'))
                   inputs:
                     targetType: 'inline'
