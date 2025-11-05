@@ -84,6 +84,48 @@ stages:
           runOnce:
             deploy:
               steps:
+                - task: PowerShell@2
+                  displayName: 'Define token injection function'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      function Invoke-TokenInjection([string]$filePath) {
+                        if (-not (Test-Path $filePath)) { Write-Error "File not found: $filePath"; exit 1 }
+                        $content = Get-Content -LiteralPath $filePath -Raw
+                        $matches = [regex]::Matches($content, '\$\{([^}]+)\}')
+                        if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; return }
+
+                        $envVars = Get-ChildItem Env:
+                        $exact = @{}
+                        $stripped = @{}
+                        foreach ($e in $envVars) {
+                          $U = $e.Name.ToUpperInvariant()
+                          $V = [string]$e.Value
+                          $exact[$U] = $V
+                          $S = ($U -replace '^(SIT|UAT|PRD)?_?IT[1-4]_API_+', '')
+                          $stripped[$S] = $V
+                        }
+
+                        $tokens = @{}
+                        foreach ($m in $matches) { $tokens[$m.Groups[1].Value] = $true }
+
+                        $replaced = 0; $unresolved = @()
+                        foreach ($t in $tokens.Keys) {
+                          if ([string]::IsNullOrWhiteSpace($t)) { continue }
+                          $needle = "${$t}"
+                          $key = $t.ToUpperInvariant()
+                          $val = $null
+                          if ($exact.ContainsKey($key)) { $val = $exact[$key] }
+                          elseif ($stripped.ContainsKey($key)) { $val = $stripped[$key] }
+                          elseif ($exact.ContainsKey(($key -replace '_+', '__'))) { $val = $exact[($key -replace '_+', '__')] }
+                          if ($null -ne $val) { if ($content.Contains($needle)) { $content = $content.Replace($needle, $val); $replaced++ } }
+                          else { $unresolved += $t }
+                        }
+
+                        Set-Content -LiteralPath $filePath -Value $content -Encoding UTF8
+                        Write-Host ("Direct text replacements: {0}" -f $replaced)
+                        if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
+                      }
                 - checkout: none
                 - task: PowerShell@2
                   displayName: 'Build Information'
@@ -483,89 +525,13 @@ stages:
             deploy:
               steps:
                 - task: PowerShell@2
-                  displayName: 'Inject tokens from env (strip any prefix) - IT1'
-                  condition: and(succeeded(), eq(variables['Deploy.IT1'], 'true'))
-                  inputs:
-                    targetType: 'inline'
-                    script: |
-                      $sitePath = "$(Stakeholder1.PhysicalPath)"
-                      $file = Join-Path $sitePath 'appsettings.json'
-                      if (-not (Test-Path $file)) { Write-Error "File not found: $file"; exit 1 }
-                      $content = Get-Content -LiteralPath $file -Raw
-                      $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
-                      if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; exit 0 }
-                      $envVars = Get-ChildItem Env:
-                      $exactMap = @{}
-                      $suffixMap = @{}
-                      foreach ($e in $envVars) {
-                        $nameUpper = $e.Name.ToUpperInvariant()
-                        $exactMap[$nameUpper] = $e.Value
-                        $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
-                        $suffixMap[$normalized] = $e.Value
-                      }
-                      $setCount = 0; $unresolved = @(); $matchedLog = @()
-                      $tokenSet = @{}
-                      foreach ($m in $matches) { $tokenSet[$m.Groups[1].Value] = $true }
-                      Write-Host ("Tokens found: {0}" -f (($tokenSet.Keys) -join ', '))
-                      foreach ($t in $tokenSet.Keys) {
-                        if ([string]::IsNullOrWhiteSpace($t)) { continue }
-                        $tUpper = $t.ToUpperInvariant()
-                        $val = $null
-                        if ($exactMap.ContainsKey($tUpper)) { $val = $exactMap[$tUpper] }
-                        elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper] }
-                        if ($null -ne $val) {
-                          Write-Host ("##vso[task.setvariable variable={0}]{1}" -f $t, $val)
-                          try { Set-Item "Env:$t" $val } catch {}
-                          $setCount++
-                          $disp = $val; if ($disp -is [string] -and $disp.Length -gt 60) { $disp = $disp.Substring(0,60) + '...' }
-                          $matchedLog += ("  ${$t} <= {0}" -f $disp)
-                        } else {
-                          $unresolved += $t
-                        }
-                      }
-                      if ($matchedLog.Count -gt 0) { Write-Host 'Will replace:'; $matchedLog | ForEach-Object { Write-Host $_ } }
-                      Write-Host ("Variables set for tokens: {0}" -f $setCount)
-                      if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
-
-                - task: PowerShell@2
                   displayName: 'Direct text token injection (IT1)'
                   condition: and(succeeded(), eq(variables['Deploy.IT1'], 'true'))
                   inputs:
                     targetType: 'inline'
                     script: |
                       $file = Join-Path "$(Stakeholder1.PhysicalPath)" 'appsettings.json'
-                      if (-not (Test-Path $file)) { Write-Error "File not found: $file"; exit 1 }
-
-                      $envVars = Get-ChildItem Env:
-                      $exactMap = @{}
-                      $suffixMap = @{}
-                      foreach ($e in $envVars) {
-                        $nameUpper = $e.Name.ToUpperInvariant()
-                        $exactMap[$nameUpper] = $e.Value
-                        $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
-                        $suffixMap[$normalized] = $e.Value
-                      }
-                      $content = Get-Content -LiteralPath $file -Raw
-                      $matches = [regex]::Matches($content, '\$\{([^}]+)\}')
-                      if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; exit 0 }
-                      $tokenSet = @{}
-                      foreach ($m in $matches) { $tokenSet[$m.Groups[1].Value] = $true }
-                      $replaced = 0; $unresolved = @()
-                      foreach ($t in $tokenSet.Keys) {
-                        if ([string]::IsNullOrWhiteSpace($t)) { continue }
-                        $needle = "${$t}"
-                        if ([string]::IsNullOrEmpty($needle)) { continue }
-                        $key = $t.ToUpperInvariant()
-                        $val = $null
-                        if ($exactMap.ContainsKey($key)) { $val = [string]$exactMap[$key] }
-                        elseif ($suffixMap.ContainsKey($key)) { $val = [string]$suffixMap[$key] }
-                        if ($null -ne $val) {
-                          if ($content.Contains($needle)) { $content = $content.Replace($needle, $val); $replaced++ }
-                        } else { $unresolved += $t }
-                      }
-                      Set-Content -LiteralPath $file -Value $content -Encoding UTF8
-                      Write-Host ("Direct text replacements: {0}" -f $replaced)
-                      if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
+                      Invoke-TokenInjection -filePath $file
 
                 - task: PowerShell@2
                   displayName: 'Post-check after JSON injection (IT1)'
@@ -586,98 +552,13 @@ stages:
                       }
 
                 - task: PowerShell@2
-                  displayName: 'Map env -> token variables (IT2)'
-                  condition: and(succeeded(), eq(variables['Deploy.IT2'], 'true'))
-                  inputs:
-                    targetType: 'inline'
-                    script: |
-                      $sitePath = "$(Stakeholder2.PhysicalPath)"
-                      $file = Join-Path $sitePath 'appsettings.json'
-                      if (-not (Test-Path $file)) { Write-Error "File not found: $file"; exit 1 }
-                      $content = Get-Content -LiteralPath $file -Raw
-                      $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
-                      if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; exit 0 }
-                      $envVars = Get-ChildItem Env:
-                      $exactMap = @{}
-                      $suffixMap = @{}
-                      foreach ($e in $envVars) {
-                        $nameUpper = $e.Name.ToUpperInvariant()
-                        $exactMap[$nameUpper] = @{ Name = $e.Name; Value = $e.Value }
-                        $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
-                        $suffixMap[$normalized] = @{ Name = $e.Name; Value = $e.Value }
-                      }
-                      $setCount = 0; $unresolved = @(); $matchedLog = @()
-                      $tokenSet = @{}
-                      foreach ($m in $matches) { $tokenSet[$m.Groups[1].Value] = $true }
-                      Write-Host ("Tokens found: {0}" -f (($tokenSet.Keys) -join ', '))
-                      foreach ($t in $tokenSet.Keys) {
-                        if ([string]::IsNullOrWhiteSpace($t)) { continue }
-                        $tUpper = $t.ToUpperInvariant()
-                        $val = $null
-                        if ($exactMap.ContainsKey($tUpper)) { $val = $exactMap[$tUpper] }
-                        elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper] }
-                        if ($null -ne $val) {
-                          Write-Host ("##vso[task.setvariable variable={0}]{1}" -f $t, $val)
-                          try { Set-Item "Env:$t" $val } catch {}
-                          $setCount++
-                          $disp = $val; if ($disp -is [string] -and $disp.Length -gt 60) { $disp = $disp.Substring(0,60) + '...' }
-                          $matchedLog += ("  ${$t} <= {0}" -f $disp)
-                        } else {
-                          $unresolved += $t
-                        }
-                      }
-                      if ($matchedLog.Count -gt 0) { Write-Host 'Will replace:'; $matchedLog | ForEach-Object { Write-Host $_ } }
-                      Write-Host ("Variables set for tokens: {0}" -f $setCount)
-                      if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
-
-                - task: PowerShell@2
                   displayName: 'Direct text token injection (IT2)'
                   condition: and(succeeded(), eq(variables['Deploy.IT2'], 'true'))
                   inputs:
                     targetType: 'inline'
                     script: |
                       $file = Join-Path "$(Stakeholder2.PhysicalPath)" 'appsettings.json'
-                      if (-not (Test-Path $file)) { Write-Error "File not found: $file"; exit 1 }
-
-                      $envVars = Get-ChildItem Env:
-                      $exactMap = @{}
-                      $suffixMap = @{}
-                      foreach ($e in $envVars) {
-                        $nameUpper = $e.Name.ToUpperInvariant()
-                        $exactMap[$nameUpper] = $e.Value
-                        $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
-                        $suffixMap[$normalized] = $e.Value
-                      }
-
-                      function Resolve-Token([string]$tokenName) {
-                        if ([string]::IsNullOrWhiteSpace($tokenName)) { return $null }
-                        $key = $tokenName.ToUpperInvariant()
-                        if ($exactMap.ContainsKey($key)) { return $exactMap[$key] }
-                        if ($suffixMap.ContainsKey($key)) { return $suffixMap[$key] }
-                        return $null
-                      }
-
-                      $content = Get-Content -LiteralPath $file -Raw
-                      $matches = [regex]::Matches($content, '\$\{([^}]+)\}')
-                      if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; exit 0 }
-                      $tokenSet = @{}
-                      foreach ($m in $matches) { $tokenSet[$m.Groups[1].Value] = $true }
-                      $replaced = 0; $unresolved = @()
-                      foreach ($t in $tokenSet.Keys) {
-                        if ([string]::IsNullOrWhiteSpace($t)) { continue }
-                        $needle = "${$t}"
-                        if ([string]::IsNullOrEmpty($needle)) { continue }
-                        $key = $t.ToUpperInvariant()
-                        $val = $null
-                        if ($exactMap.ContainsKey($key)) { $val = [string]$exactMap[$key] }
-                        elseif ($suffixMap.ContainsKey($key)) { $val = [string]$suffixMap[$key] }
-                        if ($null -ne $val) {
-                          if ($content.Contains($needle)) { $content = $content.Replace($needle, $val); $replaced++ }
-                        } else { $unresolved += $t }
-                      }
-                      Set-Content -LiteralPath $file -Value $content -Encoding UTF8
-                      Write-Host ("Direct text replacements: {0}" -f $replaced)
-                      if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
+                      Invoke-TokenInjection -filePath $file
 
                 - task: PowerShell@2
                   displayName: 'Post-check after JSON injection (IT2)'
@@ -698,98 +579,13 @@ stages:
                       }
 
                 - task: PowerShell@2
-                  displayName: 'Map env -> token variables (IT3)'
-                  condition: and(succeeded(), eq(variables['Deploy.IT3'], 'true'))
-                  inputs:
-                    targetType: 'inline'
-                    script: |
-                      $sitePath = "$(Stakeholder3.PhysicalPath)"
-                      $file = Join-Path $sitePath 'appsettings.json'
-                      if (-not (Test-Path $file)) { Write-Error "File not found: $file"; exit 1 }
-                      $content = Get-Content -LiteralPath $file -Raw
-                      $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
-                      if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; exit 0 }
-                      $envVars = Get-ChildItem Env:
-                      $exactMap = @{}
-                      $suffixMap = @{}
-                      foreach ($e in $envVars) {
-                        $nameUpper = $e.Name.ToUpperInvariant()
-                        $exactMap[$nameUpper] = @{ Name = $e.Name; Value = $e.Value }
-                        $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
-                        $suffixMap[$normalized] = @{ Name = $e.Name; Value = $e.Value }
-                      }
-                      $setCount = 0; $unresolved = @(); $matchedLog = @()
-                      $tokenSet = @{}
-                      foreach ($m in $matches) { $tokenSet[$m.Groups[1].Value] = $true }
-                      Write-Host ("Tokens found: {0}" -f (($tokenSet.Keys) -join ', '))
-                      foreach ($t in $tokenSet.Keys) {
-                        if ([string]::IsNullOrWhiteSpace($t)) { continue }
-                        $tUpper = $t.ToUpperInvariant()
-                        $val = $null
-                        if ($exactMap.ContainsKey($tUpper)) { $val = $exactMap[$tUpper] }
-                        elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper] }
-                        if ($null -ne $val) {
-                          Write-Host ("##vso[task.setvariable variable={0}]{1}" -f $t, $val)
-                          try { Set-Item "Env:$t" $val } catch {}
-                          $setCount++
-                          $disp = $val; if ($disp -is [string] -and $disp.Length -gt 60) { $disp = $disp.Substring(0,60) + '...' }
-                          $matchedLog += ("  ${$t} <= {0}" -f $disp)
-                        } else {
-                          $unresolved += $t
-                        }
-                      }
-                      if ($matchedLog.Count -gt 0) { Write-Host 'Will replace:'; $matchedLog | ForEach-Object { Write-Host $_ } }
-                      Write-Host ("Variables set for tokens: {0}" -f $setCount)
-                      if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
-
-                - task: PowerShell@2
                   displayName: 'Direct text token injection (IT3)'
                   condition: and(succeeded(), eq(variables['Deploy.IT3'], 'true'))
                   inputs:
                     targetType: 'inline'
                     script: |
                       $file = Join-Path "$(Stakeholder3.PhysicalPath)" 'appsettings.json'
-                      if (-not (Test-Path $file)) { Write-Error "File not found: $file"; exit 1 }
-
-                      $envVars = Get-ChildItem Env:
-                      $exactMap = @{}
-                      $suffixMap = @{}
-                      foreach ($e in $envVars) {
-                        $nameUpper = $e.Name.ToUpperInvariant()
-                        $exactMap[$nameUpper] = $e.Value
-                        $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
-                        $suffixMap[$normalized] = $e.Value
-                      }
-
-                      function Resolve-Token([string]$tokenName) {
-                        if ([string]::IsNullOrWhiteSpace($tokenName)) { return $null }
-                        $key = $tokenName.ToUpperInvariant()
-                        if ($exactMap.ContainsKey($key)) { return $exactMap[$key] }
-                        if ($suffixMap.ContainsKey($key)) { return $suffixMap[$key] }
-                        return $null
-                      }
-
-                      $content = Get-Content -LiteralPath $file -Raw
-                      $matches = [regex]::Matches($content, '\$\{([^}]+)\}')
-                      if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; exit 0 }
-                      $tokenSet = @{}
-                      foreach ($m in $matches) { $tokenSet[$m.Groups[1].Value] = $true }
-                      $replaced = 0; $unresolved = @()
-                      foreach ($t in $tokenSet.Keys) {
-                        if ([string]::IsNullOrWhiteSpace($t)) { continue }
-                        $needle = "${$t}"
-                        if ([string]::IsNullOrEmpty($needle)) { continue }
-                        $key = $t.ToUpperInvariant()
-                        $val = $null
-                        if ($exactMap.ContainsKey($key)) { $val = [string]$exactMap[$key] }
-                        elseif ($suffixMap.ContainsKey($key)) { $val = [string]$suffixMap[$key] }
-                        if ($null -ne $val) {
-                          if ($content.Contains($needle)) { $content = $content.Replace($needle, $val); $replaced++ }
-                        } else { $unresolved += $t }
-                      }
-                      Set-Content -LiteralPath $file -Value $content -Encoding UTF8
-                      Write-Host ("Direct text replacements: {0}" -f $replaced)
-                      if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
+                      Invoke-TokenInjection -filePath $file
 
                 - task: PowerShell@2
                   displayName: 'Post-check after JSON injection (IT3)'
@@ -810,99 +606,13 @@ stages:
                       }
 
                 - task: PowerShell@2
-                  displayName: 'Map env -> token variables (IT4)'
-                  condition: and(succeeded(), eq(variables['Deploy.IT4'], 'true'))
-                  inputs:
-                    targetType: 'inline'
-                    script: |
-                      $sitePath = "$(Stakeholder4.PhysicalPath)"
-                      $file = Join-Path $sitePath 'appsettings.json'
-                      if (-not (Test-Path $file)) { Write-Error "File not found: $file"; exit 1 }
-                      $content = Get-Content -LiteralPath $file -Raw
-                      $matches = [System.Text.RegularExpressions.Regex]::Matches($content, '\$\{([^}]+)\}')
-                      if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; exit 0 }
-                      $envVars = Get-ChildItem Env:
-                      $exactMap = @{}
-                      $suffixMap = @{}
-                      foreach ($e in $envVars) {
-                        $nameUpper = $e.Name.ToUpperInvariant()
-                        $exactMap[$nameUpper] = $e.Value
-                        $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
-                        $suffixMap[$normalized] = $e.Value
-                      }
-                      $setCount = 0; $unresolved = @(); $matchedLog = @()
-                      $tokenSet = @{}
-                      foreach ($m in $matches) { $tokenSet[$m.Groups[1].Value] = $true }
-                      Write-Host ("Tokens found: {0}" -f (($tokenSet.Keys) -join ', '))
-                      Write-Host ("Tokens found: {0}" -f (($tokenSet.Keys) -join ', '))
-                      foreach ($t in $tokenSet.Keys) {
-                        if ([string]::IsNullOrWhiteSpace($t)) { continue }
-                        $tUpper = $t.ToUpperInvariant()
-                        $val = $null
-                        if ($exactMap.ContainsKey($tUpper)) { $val = $exactMap[$tUpper] }
-                        elseif ($suffixMap.ContainsKey($tUpper)) { $val = $suffixMap[$tUpper] }
-                        if ($null -ne $val) {
-                          Write-Host ("##vso[task.setvariable variable={0}]{1}" -f $t, $val)
-                          try { Set-Item "Env:$t" $val } catch {}
-                          $setCount++
-                          $disp = $val; if ($disp -is [string] -and $disp.Length -gt 60) { $disp = $disp.Substring(0,60) + '...' }
-                          $matchedLog += ("  ${$t} <= {0}" -f $disp)
-                        } else {
-                          $unresolved += $t
-                        }
-                      }
-                      if ($matchedLog.Count -gt 0) { Write-Host 'Will replace:'; $matchedLog | ForEach-Object { Write-Host $_ } }
-                      Write-Host ("Variables set for tokens: {0}" -f $setCount)
-                      if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
-
-                - task: PowerShell@2
                   displayName: 'Direct text token injection (IT4)'
                   condition: and(succeeded(), eq(variables['Deploy.IT4'], 'true'))
                   inputs:
                     targetType: 'inline'
                     script: |
                       $file = Join-Path "$(Stakeholder4.PhysicalPath)" 'appsettings.json'
-                      if (-not (Test-Path $file)) { Write-Error "File not found: $file"; exit 1 }
-
-                      $envVars = Get-ChildItem Env:
-                      $exactMap = @{}
-                      $suffixMap = @{}
-                      foreach ($e in $envVars) {
-                        $nameUpper = $e.Name.ToUpperInvariant()
-                        $exactMap[$nameUpper] = $e.Value
-                        $normalized = ($nameUpper -replace '^SIT_IT[1-4]_API_', '')
-                        $suffixMap[$normalized] = $e.Value
-                      }
-
-                      function Resolve-Token([string]$tokenName) {
-                        if ([string]::IsNullOrWhiteSpace($tokenName)) { return $null }
-                        $key = $tokenName.ToUpperInvariant()
-                        if ($exactMap.ContainsKey($key)) { return $exactMap[$key] }
-                        if ($suffixMap.ContainsKey($key)) { return $suffixMap[$key] }
-                        return $null
-                      }
-
-                      $content = Get-Content -LiteralPath $file -Raw
-                      $matches = [regex]::Matches($content, '\$\{([^}]+)\}')
-                      if ($matches.Count -eq 0) { Write-Host 'No ${...} tokens found.'; exit 0 }
-                      $tokenSet = @{}
-                      foreach ($m in $matches) { $tokenSet[$m.Groups[1].Value] = $true }
-                      $replaced = 0; $unresolved = @()
-                      foreach ($t in $tokenSet.Keys) {
-                        if ([string]::IsNullOrWhiteSpace($t)) { continue }
-                        $needle = "${$t}"
-                        if ([string]::IsNullOrEmpty($needle)) { continue }
-                        $key = $t.ToUpperInvariant()
-                        $val = $null
-                        if ($exactMap.ContainsKey($key)) { $val = [string]$exactMap[$key] }
-                        elseif ($suffixMap.ContainsKey($key)) { $val = [string]$suffixMap[$key] }
-                        if ($null -ne $val) {
-                          if ($content.Contains($needle)) { $content = $content.Replace($needle, $val); $replaced++ }
-                        } else { $unresolved += $t }
-                      }
-                      Set-Content -LiteralPath $file -Value $content -Encoding UTF8
-                      Write-Host ("Direct text replacements: {0}" -f $replaced)
-                      if ($unresolved.Count -gt 0) { Write-Host ("Unresolved tokens: {0}" -f ($unresolved -join ', ')) }
+                      Invoke-TokenInjection -filePath $file
 
                 - task: PowerShell@2
                   displayName: 'Post-check after JSON injection (IT4)'
