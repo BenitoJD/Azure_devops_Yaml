@@ -52,90 +52,93 @@ stages:
 - stage: Deploy_AutoDataRefresh
   displayName: Deploy SIT using ${{ parameters.configVariableGroup }}
   jobs:
-  - job: Deploy
+  - deployment: Deploy
     displayName: Build and deploy with ${{ parameters.configVariableGroup }}
     environment:
       name: SIT
       resourceType: virtualMachine
     pool:
       name: ccoe-nprod-windows-mdp-01
-    steps:
-    - task: DownloadPipelineArtifact@2
-      displayName: Download AutoDataRefresh artifact
-      inputs:
-        buildType: specific
-        project: $(System.TeamProject)
-        definition: $(selectedBuildPipelineName)
-        buildVersionToDownload: latest
-        artifactName: $(artifactName)
-        targetPath: '$(downloadedArtifactFolder)'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: DownloadPipelineArtifact@2
+            displayName: Download AutoDataRefresh artifact
+            inputs:
+              buildType: specific
+              project: $(System.TeamProject)
+              definition: $(selectedBuildPipelineName)
+              buildVersionToDownload: latest
+              artifactName: $(artifactName)
+              targetPath: '$(downloadedArtifactFolder)'
 
-    - task: ExtractFiles@1
-      displayName: Extract AutoDataRefresh package
-      inputs:
-        archiveFilePatterns: '$(downloadedArtifactFolder)/$(artifactZip)'
-        destinationFolder: '$(extractedFolder)'
-        cleanDestinationFolder: true
+          - task: ExtractFiles@1
+            displayName: Extract AutoDataRefresh package
+            inputs:
+              archiveFilePatterns: '$(downloadedArtifactFolder)/$(artifactZip)'
+              destinationFolder: '$(extractedFolder)'
+              cleanDestinationFolder: true
 
-    - task: PowerShell@2
-      displayName: Locate AutoDataRefresh config
-      inputs:
-        targetType: inline
-        script: |
-          $root = "$(extractedFolder)"
-          Write-Host "Searching for AutoDataRefresh config under $root"
-          $config = Get-ChildItem -Path $root -Filter "Boots.MasterData.Application.AutoDataRefresh.exe.config" -Recurse -File | Select-Object -First 1
+          - task: PowerShell@2
+            displayName: Locate AutoDataRefresh config
+            inputs:
+              targetType: inline
+              script: |
+                $root = "$(extractedFolder)"
+                Write-Host "Searching for AutoDataRefresh config under $root"
+                $config = Get-ChildItem -Path $root -Filter "Boots.MasterData.Application.AutoDataRefresh.exe.config" -Recurse -File | Select-Object -First 1
 
-          if (-not $config) {
-              throw "Boots.MasterData.Application.AutoDataRefresh.exe.config not found under $root"
-          }
+                if (-not $config) {
+                    throw "Boots.MasterData.Application.AutoDataRefresh.exe.config not found under $root"
+                }
 
-          $configFolder = Split-Path -Path $config.FullName -Parent
-          $configFile = Split-Path -Path $config.FullName -Leaf
+                $configFolder = Split-Path -Path $config.FullName -Parent
+                $configFile = Split-Path -Path $config.FullName -Leaf
 
-          Write-Host "Found config at $($config.FullName)"
-          Write-Host "##vso[task.setvariable variable=configFolder]$configFolder"
-          Write-Host "##vso[task.setvariable variable=configFileName]$configFile"
+                Write-Host "Found config at $($config.FullName)"
+                Write-Host "##vso[task.setvariable variable=configFolder]$configFolder"
+                Write-Host "##vso[task.setvariable variable=configFileName]$configFile"
 
-    - task: PowerShell@2
-      displayName: Show config variables
-      inputs:
-        targetType: inline
-        script: |
-          Write-Host "configFolder = $(configFolder)"
-          Write-Host "configFileName = $(configFileName)"
+          - task: PowerShell@2
+            displayName: Show config variables
+            inputs:
+              targetType: inline
+              script: |
+                Write-Host "configFolder = $(configFolder)"
+                Write-Host "configFileName = $(configFileName)"
 
-    - task: FileTransform@2
-      displayName: Apply configuration transform
-      inputs:
-        folderPath: '$(configFolder)'
-        fileType: xml
-        targetFiles: '$(configFileName)'
-        enableXmlVariableSubstitution: true
+          - task: FileTransform@2
+            displayName: Apply configuration transform
+            inputs:
+              folderPath: '$(configFolder)'
+              fileType: xml
+              targetFiles: '$(configFileName)'
+              enableXmlVariableSubstitution: true
 
-    - task: PowerShell@2
-      displayName: Deploy AutoDataRefresh to G drive
-      inputs:
-        targetType: inline
-        script: |
-          $source = "$(extractedFolder)"
-          $destination = "$(deployPath)"
-          Write-Host "Source: $source"
-          Write-Host "Destination: $destination"
+          - task: PowerShell@2
+            displayName: Deploy AutoDataRefresh to G drive
+            inputs:
+              targetType: inline
+              script: |
+                $source = "$(extractedFolder)"
+                $destination = "$(deployPath)"
+                Write-Host "Source: $source"
+                Write-Host "Destination: $destination"
 
-          if (-not (Test-Path -Path $source)) {
-              throw "Extracted files not found at $source"
-          }
+                if (-not (Test-Path -Path $source)) {
+                    throw "Extracted files not found at $source"
+                }
 
-          if (Test-Path -Path $destination) {
-              Write-Host "Clearing existing contents at $destination"
-              Get-ChildItem -Path $destination -Force | Remove-Item -Recurse -Force -ErrorAction Stop
-          } else {
-              Write-Host "Creating destination path $destination"
-              New-Item -ItemType Directory -Path $destination -Force | Out-Null
-          }
+                if (Test-Path -Path $destination) {
+                    Write-Host "Clearing existing contents at $destination"
+                    Get-ChildItem -Path $destination -Force | Remove-Item -Recurse -Force -ErrorAction Stop
+                } else {
+                    Write-Host "Creating destination path $destination"
+                    New-Item -ItemType Directory -Path $destination -Force | Out-Null
+                }
 
-          Write-Host "Copying files..."
-          Copy-Item -Path (Join-Path $source '*') -Destination $destination -Recurse -Force
-          Write-Host "Deployment completed for SIT using ${{ parameters.configVariableGroup }}"
+                Write-Host "Copying files..."
+                Copy-Item -Path (Join-Path $source '*') -Destination $destination -Recurse -Force
+                Write-Host "Deployment completed for SIT using ${{ parameters.configVariableGroup }}"
 
