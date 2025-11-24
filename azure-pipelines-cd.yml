@@ -67,7 +67,7 @@ stages:
       inputs:
         folderPath: '$(extractedFolder)'
         fileType: xml
-        targetFiles: '**/Boots.MasterData.Application.AutoDataRefresh.exe.config'
+        targetFiles: 'Boots.MasterData.Application.AutoDataRefresh.exe.config'
         enableXmlTransform: false
         enableXmlVariableSubstitution: true
 
