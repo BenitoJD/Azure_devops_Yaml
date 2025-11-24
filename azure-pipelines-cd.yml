@@ -29,12 +29,24 @@ variables:
   value: ${{ parameters.buildPipelineName }}
 - ${{ if eq(parameters.targetEnvironment, 'SIT_IT1_ADR') }}:
   - group: SIT_IT1_ADR
+- ${{ if eq(parameters.targetEnvironment, 'SIT_IT1_ADR') }}:
+  - name: deployPath
+    value: 'G:\MasterData\AutoDataRefresh\IT1_SIT_ADR'
 - ${{ if eq(parameters.targetEnvironment, 'SIT_IT2_ADR') }}:
   - group: SIT_IT2_ADR
+- ${{ if eq(parameters.targetEnvironment, 'SIT_IT2_ADR') }}:
+  - name: deployPath
+    value: 'G:\MasterData\AutoDataRefresh\IT2_SIT_ADR'
 - ${{ if eq(parameters.targetEnvironment, 'SIT_IT3_ADR') }}:
   - group: SIT_IT3_ADR
+- ${{ if eq(parameters.targetEnvironment, 'SIT_IT3_ADR') }}:
+  - name: deployPath
+    value: 'G:\MasterData\AutoDataRefresh\IT3_SIT_ADR'
 - ${{ if eq(parameters.targetEnvironment, 'SIT_IT4_ADR') }}:
   - group: SIT_IT4_ADR
+- ${{ if eq(parameters.targetEnvironment, 'SIT_IT4_ADR') }}:
+  - name: deployPath
+    value: 'G:\MasterData\AutoDataRefresh\IT4_SIT_ADR'
 
 stages:
 - stage: Deploy_AutoDataRefresh
@@ -104,8 +116,8 @@ stages:
       inputs:
         targetType: inline
         script: |
-          $source = "$(configFolder)"
-          $destination = "G:\MasterData\AutoDataRefresh"
+          $source = "$(extractedFolder)"
+          $destination = "$(deployPath)"
           Write-Host "Source: $source"
           Write-Host "Destination: $destination"
 
