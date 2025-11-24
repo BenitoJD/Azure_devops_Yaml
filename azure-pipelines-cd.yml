@@ -11,6 +11,7 @@ parameters:
   - SIT_IT2_ADR
   - SIT_IT3_ADR
   - SIT_IT4_ADR
+
 - name: buildPipelineName
   displayName: Build pipeline (definition name)
   type: string
@@ -29,22 +30,18 @@ variables:
   value: ${{ parameters.buildPipelineName }}
 - ${{ if eq(parameters.configVariableGroup, 'SIT_IT1_ADR') }}:
   - group: SIT_IT1_ADR
-- ${{ if eq(parameters.configVariableGroup, 'SIT_IT1_ADR') }}:
   - name: deployPath
     value: 'G:\MasterData\AutoDataRefresh\IT1_SIT_ADR'
 - ${{ if eq(parameters.configVariableGroup, 'SIT_IT2_ADR') }}:
   - group: SIT_IT2_ADR
-- ${{ if eq(parameters.configVariableGroup, 'SIT_IT2_ADR') }}:
   - name: deployPath
     value: 'G:\MasterData\AutoDataRefresh\IT2_SIT_ADR'
 - ${{ if eq(parameters.configVariableGroup, 'SIT_IT3_ADR') }}:
   - group: SIT_IT3_ADR
-- ${{ if eq(parameters.configVariableGroup, 'SIT_IT3_ADR') }}:
   - name: deployPath
     value: 'G:\MasterData\AutoDataRefresh\IT3_SIT_ADR'
 - ${{ if eq(parameters.configVariableGroup, 'SIT_IT4_ADR') }}:
   - group: SIT_IT4_ADR
-- ${{ if eq(parameters.configVariableGroup, 'SIT_IT4_ADR') }}:
   - name: deployPath
     value: 'G:\MasterData\AutoDataRefresh\IT4_SIT_ADR'
 
@@ -53,16 +50,13 @@ stages:
   displayName: Deploy SIT using ${{ parameters.configVariableGroup }}
   jobs:
   - deployment: Deploy
-    displayName: Build and deploy with ${{ parameters.configVariableGroup }}
+    displayName: Deploy with ${{ parameters.configVariableGroup }}
     environment: SIT
-    pool:
-      name: ccoe-nprod-windows-mdp-01
     strategy:
       runOnce:
         deploy:
           steps:
           - task: DownloadPipelineArtifact@2
-            displayName: Download AutoDataRefresh artifact
             inputs:
               buildType: specific
               project: $(System.TeamProject)
@@ -72,39 +66,21 @@ stages:
               targetPath: '$(downloadedArtifactFolder)'
 
           - task: ExtractFiles@1
-            displayName: Extract AutoDataRefresh package
             inputs:
               archiveFilePatterns: '$(downloadedArtifactFolder)/$(artifactZip)'
               destinationFolder: '$(extractedFolder)'
               cleanDestinationFolder: true
 
           - task: PowerShell@2
-            displayName: Locate AutoDataRefresh config
+            displayName: Locate config file
             inputs:
               targetType: inline
               script: |
-                $root = "$(extractedFolder)"
-                Write-Host "Searching for AutoDataRefresh config under $root"
-                $config = Get-ChildItem -Path $root -Filter "Boots.MasterData.Application.AutoDataRefresh.exe.config" -Recurse -File | Select-Object -First 1
-
-                if (-not $config) {
-                    throw "Boots.MasterData.Application.AutoDataRefresh.exe.config not found under $root"
-                }
-
-                $configFolder = Split-Path -Path $config.FullName -Parent
-                $configFile = Split-Path -Path $config.FullName -Leaf
-
-                Write-Host "Found config at $($config.FullName)"
-                Write-Host "##vso[task.setvariable variable=configFolder]$configFolder"
-                Write-Host "##vso[task.setvariable variable=configFileName]$configFile"
-
-          - task: PowerShell@2
-            displayName: Show config variables
-            inputs:
-              targetType: inline
-              script: |
-                Write-Host "configFolder = $(configFolder)"
-                Write-Host "configFileName = $(configFileName)"
+                $ErrorActionPreference = 'Stop'
+                $config = Get-ChildItem -Path "$(extractedFolder)" -Filter "Boots.MasterData.Application.AutoDataRefresh.exe.config" -Recurse -File | Select-Object -First 1
+                if (-not $config) { throw "Config file not found" }
+                Write-Host "##vso[task.setvariable variable=configFolder]$(Split-Path $config.FullName -Parent)"
+                Write-Host "##vso[task.setvariable variable=configFileName]$(Split-Path $config.FullName -Leaf)"
 
           - task: FileTransform@2
             displayName: Apply configuration transform
@@ -115,28 +91,14 @@ stages:
               enableXmlVariableSubstitution: true
 
           - task: PowerShell@2
-            displayName: Deploy AutoDataRefresh to G drive
+            displayName: Deploy to SIT
             inputs:
               targetType: inline
               script: |
+                $ErrorActionPreference = 'Stop'
                 $source = "$(extractedFolder)"
                 $destination = "$(deployPath)"
-                Write-Host "Source: $source"
-                Write-Host "Destination: $destination"
-
-                if (-not (Test-Path -Path $source)) {
-                    throw "Extracted files not found at $source"
-                }
-
-                if (Test-Path -Path $destination) {
-                    Write-Host "Clearing existing contents at $destination"
-                    Get-ChildItem -Path $destination -Force | Remove-Item -Recurse -Force -ErrorAction Stop
-                } else {
-                    Write-Host "Creating destination path $destination"
-                    New-Item -ItemType Directory -Path $destination -Force | Out-Null
-                }
-
-                Write-Host "Copying files..."
+                if (-not (Test-Path $source)) { throw "Source not found: $source" }
+                if (Test-Path $destination) { Get-ChildItem $destination -Force | Remove-Item -Recurse -Force }
+                else { New-Item -ItemType Directory -Path $destination -Force | Out-Null }
                 Copy-Item -Path (Join-Path $source '*') -Destination $destination -Recurse -Force
-                Write-Host "Deployment completed for SIT using ${{ parameters.configVariableGroup }}"
-
