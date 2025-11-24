@@ -1,0 +1,130 @@
+trigger: none
+pr: none
+
+parameters:
+- name: targetEnvironment
+  displayName: Target SIT deployment
+  type: string
+  default: SIT_IT1_ADR
+  values:
+  - SIT_IT1_ADR
+  - SIT_IT2_ADR
+  - SIT_IT3_ADR
+  - SIT_IT4_ADR
+
+variables:
+- name: solution
+  value: '**/*.sln'
+- name: buildPlatform
+  value: 'Any CPU'
+- name: buildConfiguration
+  value: 'Release'
+- name: autoDataRefreshOutput
+  value: '$(Build.SourcesDirectory)\Application Layer\Boots.MasterData.Application.AutoDataRefresh\bin\Release'
+- ${{ if eq(parameters.targetEnvironment, 'SIT_IT1_ADR') }}:
+  - group: SIT_IT1_ADR
+- ${{ if eq(parameters.targetEnvironment, 'SIT_IT2_ADR') }}:
+  - group: SIT_IT2_ADR
+- ${{ if eq(parameters.targetEnvironment, 'SIT_IT3_ADR') }}:
+  - group: SIT_IT3_ADR
+- ${{ if eq(parameters.targetEnvironment, 'SIT_IT4_ADR') }}:
+  - group: SIT_IT4_ADR
+
+stages:
+- stage: Deploy_AutoDataRefresh
+  displayName: Deploy ${{ parameters.targetEnvironment }}
+  jobs:
+  - job: Deploy
+    displayName: Build and deploy ${{ parameters.targetEnvironment }}
+    pool:
+      name: ccoe-nprod-windows-mdp-01
+    steps:
+    - task: NuGetToolInstaller@1
+      displayName: Install NuGet Tool
+
+    - task: NuGetAuthenticate@1
+      displayName: Authenticate NuGet Feeds
+
+    - task: PowerShell@2
+      displayName: Configure NuGet Feeds
+      inputs:
+        targetType: inline
+        script: |
+          $nugetConfig = @"
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="Boots.Common" value="https://pkgs.dev.azure.com/BootsCCoE/Masterdata/_packaging/Boots.Common/nuget/v3/index.json" />
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+            </packageSources>
+            <packageSourceCredentials>
+              <Boots.Common>
+                <add key="Username" value="PAT" />
+                <add key="ClearTextPassword" value="$(System.AccessToken)" />
+              </Boots.Common>
+            </packageSourceCredentials>
+          </configuration>
+          "@
+
+          $configPath = "$(Build.SourcesDirectory)\nuget.config"
+          Set-Content -Path $configPath -Value $nugetConfig
+          Write-Host "nuget.config created at $configPath"
+          Get-Content -Path $configPath
+
+    - task: NuGetCommand@2
+      displayName: Restore NuGet Packages
+      inputs:
+        command: restore
+        restoreSolution: '$(solution)'
+        feedsToUse: config
+        nugetConfigPath: '$(Build.SourcesDirectory)\nuget.config'
+
+    - task: VSBuild@1
+      displayName: Build Solution
+      inputs:
+        solution: '$(solution)'
+        msbuildArgs: '/t:Rebuild'
+        platform: '$(buildPlatform)'
+        configuration: '$(buildConfiguration)'
+
+    - task: VisualStudioTestPlatformInstaller@1
+      displayName: Install VS Test Platform
+      inputs:
+        packageFeedSelector: nugetOrg
+
+    - task: FileTransform@2
+      displayName: Apply configuration transform
+      inputs:
+        folderPath: '$(autoDataRefreshOutput)'
+        fileType: xml
+        targetFiles: 'Boots.MasterData.Application.AutoDataRefresh.exe.config'
+        enableXmlTransform: false
+        enableXmlVariableSubstitution: true
+
+    - task: PowerShell@2
+      displayName: Deploy AutoDataRefresh to G drive
+      inputs:
+        targetType: inline
+        script: |
+          $source = "$(autoDataRefreshOutput)"
+          $destination = "G:\MasterData\AutoDataRefresh"
+          Write-Host "Source: $source"
+          Write-Host "Destination: $destination"
+
+          if (-not (Test-Path -Path $source)) {
+              throw "Build output not found at $source"
+          }
+
+          if (Test-Path -Path $destination) {
+              Write-Host "Clearing existing contents at $destination"
+              Get-ChildItem -Path $destination -Force | Remove-Item -Recurse -Force -ErrorAction Stop
+          } else {
+              Write-Host "Creating destination path $destination"
+              New-Item -ItemType Directory -Path $destination -Force | Out-Null
+          }
+
+          Write-Host "Copying files..."
+          Copy-Item -Path (Join-Path $source '*') -Destination $destination -Recurse -Force
+          Write-Host "Deployment completed for ${{ parameters.targetEnvironment }}"
+
