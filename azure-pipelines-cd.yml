@@ -104,7 +104,7 @@ stages:
       inputs:
         targetType: inline
         script: |
-          $source = "$(extractedFolder)"
+          $source = "$(configFolder)"
           $destination = "G:\MasterData\AutoDataRefresh"
           Write-Host "Source: $source"
           Write-Host "Destination: $destination"
