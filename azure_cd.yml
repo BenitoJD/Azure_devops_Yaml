@@ -1,0 +1,68 @@
+parameters:
+  - name: buildRunId
+    displayName: Build run ID (leave blank for latest)
+    type: string
+    default: ''
+
+pool:
+  name: ccoe-nprod-windows-mdp-01
+
+trigger: none
+
+resources:
+  pipelines:
+    - pipeline: buildPipeline
+      source: MasterData.AutoDataRefresh
+
+variables:
+  destinationFolder: 'D:\\Apps\\AutoDataRefresh'
+
+stages:
+  - stage: Deploy_SIT
+    displayName: Deploy to SIT VM
+    jobs:
+      - deployment: DeployAutoDataRefresh
+        displayName: Deploy AutoDataRefresh zip
+        environment:
+          name: SIT
+          resourceType: virtualMachine
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - ${{ if eq(parameters.buildRunId, '') }}:
+                    - download: buildPipeline
+                      displayName: Download latest AutoDataRefresh artifact
+                      artifact: AutoDataRefresh
+                - ${{ if ne(parameters.buildRunId, '') }}:
+                    - download: buildPipeline
+                      displayName: Download specific AutoDataRefresh artifact
+                      artifact: AutoDataRefresh
+                      runVersion: specific
+                      runId: ${{ parameters.buildRunId }}
+
+                - task: PowerShell@2
+                  displayName: Extract AutoDataRefresh.zip to destination folder
+                  inputs:
+                    targetType: inline
+                    script: |
+                      $destination = "$(destinationFolder)"
+                      $artifactRoot = "$(Pipeline.Workspace)\buildPipeline\AutoDataRefresh"
+                      $zipPath = Join-Path $artifactRoot 'Boots.MasterData.Application.AutoDataRefresh.zip'
+
+                      if (-not (Test-Path $zipPath)) {
+                        Write-Error "Artifact zip not found at $zipPath"
+                      }
+
+                      if (-not (Test-Path $destination)) {
+                        Write-Host "Creating destination folder $destination"
+                        New-Item -ItemType Directory -Path $destination | Out-Null
+                      } else {
+                        Write-Host "Clearing existing contents in $destination"
+                        Get-ChildItem -Path $destination -Recurse -Force | Remove-Item -Recurse -Force
+                      }
+
+                      Write-Host "Extracting $zipPath to $destination"
+                      Expand-Archive -LiteralPath $zipPath -DestinationPath $destination -Force
+
+
