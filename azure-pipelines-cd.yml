@@ -25,6 +25,8 @@ variables:
   value: '$(Pipeline.Workspace)\AutoDataRefreshExtracted'
 - name: downloadedArtifactFolder
   value: '$(Pipeline.Workspace)\AutoDataRefreshDownloaded'
+- name: selectedBuildPipelineName
+  value: ${{ parameters.buildPipelineName }}
 - ${{ if eq(parameters.targetEnvironment, 'SIT_IT1_ADR') }}:
   - group: SIT_IT1_ADR
 - ${{ if eq(parameters.targetEnvironment, 'SIT_IT2_ADR') }}:
@@ -48,7 +50,7 @@ stages:
       inputs:
         buildType: specific
         project: $(System.TeamProject)
-        definition: ${{ parameters.buildPipelineName }}
+        definition: $(selectedBuildPipelineName)
         buildVersionToDownload: latest
         artifactName: $(artifactName)
         targetPath: '$(downloadedArtifactFolder)'
