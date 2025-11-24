@@ -31,19 +31,19 @@ variables:
 - ${{ if eq(parameters.configVariableGroup, 'SIT_IT1_ADR') }}:
   - group: SIT_IT1_ADR
   - name: deployPath
-    value: 'G:\MasterData\AutoDataRefresh\IT1_SIT_ADR'
+    value: 'D:\MasterData\AutoDataRefresh\IT1_SIT_ADR'
 - ${{ if eq(parameters.configVariableGroup, 'SIT_IT2_ADR') }}:
   - group: SIT_IT2_ADR
   - name: deployPath
-    value: 'G:\MasterData\AutoDataRefresh\IT2_SIT_ADR'
+    value: 'D:\MasterData\AutoDataRefresh\IT2_SIT_ADR'
 - ${{ if eq(parameters.configVariableGroup, 'SIT_IT3_ADR') }}:
   - group: SIT_IT3_ADR
   - name: deployPath
-    value: 'G:\MasterData\AutoDataRefresh\IT3_SIT_ADR'
+    value: 'D:\MasterData\AutoDataRefresh\IT3_SIT_ADR'
 - ${{ if eq(parameters.configVariableGroup, 'SIT_IT4_ADR') }}:
   - group: SIT_IT4_ADR
   - name: deployPath
-    value: 'G:\MasterData\AutoDataRefresh\IT4_SIT_ADR'
+    value: 'D:\MasterData\AutoDataRefresh\IT4_SIT_ADR'
 
 stages:
 - stage: Deploy_AutoDataRefresh
@@ -99,6 +99,6 @@ stages:
                 $source = "$(extractedFolder)"
                 $destination = "$(deployPath)"
                 if (-not (Test-Path $source)) { throw "Source not found: $source" }
-                if (Test-Path $destination) { Get-ChildItem $destination -Force | Remove-Item -Recurse -Force }
-                else { New-Item -ItemType Directory -Path $destination -Force | Out-Null }
-                Copy-Item -Path (Join-Path $source '*') -Destination $destination -Recurse -Force
+                if (-not (Test-Path $destination)) { New-Item -ItemType Directory -Path $destination -Force | Out-Null }
+                else { Get-ChildItem $destination -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue }
+                Copy-Item -Path (Join-Path $source '*') -Destination $destination -Recurse -Force -ErrorAction Stop
