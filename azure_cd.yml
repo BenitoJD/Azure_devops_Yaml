@@ -1,3 +1,14 @@
+parameters:
+  - name: userSlot
+    displayName: Target SIT user slot
+    type: string
+    default: SIT_IT1_ADR
+    values:
+      - SIT_IT1_ADR
+      - SIT_IT2_ADR
+      - SIT_IT3_ADR
+      - SIT_IT4_ADR
+
 pool:
   name: ccoe-nprod-windows-mdp-01
 
@@ -9,7 +20,22 @@ resources:
       source: MasterData.AutoDataRefresh
 
 variables:
-  destinationFolder: 'D:\\Apps\\AutoDataRefresh'
+  - ${{ if eq(parameters.userSlot, 'SIT_IT1_ADR') }}:
+      - group: SIT_IT1_ADR
+      - name: destinationFolder
+        value: 'G:\MasterData\AutoDataRefresh\IT1_SIT_ADR'
+  - ${{ if eq(parameters.userSlot, 'SIT_IT2_ADR') }}:
+      - group: SIT_IT2_ADR
+      - name: destinationFolder
+        value: 'G:\MasterData\AutoDataRefresh\IT2_SIT_ADR'
+  - ${{ if eq(parameters.userSlot, 'SIT_IT3_ADR') }}:
+      - group: SIT_IT3_ADR
+      - name: destinationFolder
+        value: 'G:\MasterData\AutoDataRefresh\IT3_SIT_ADR'
+  - ${{ if eq(parameters.userSlot, 'SIT_IT4_ADR') }}:
+      - group: SIT_IT4_ADR
+      - name: destinationFolder
+        value: 'G:\MasterData\AutoDataRefresh\IT4_SIT_ADR'
 
 stages:
   - stage: Deploy_SIT
@@ -53,3 +79,9 @@ stages:
                       Expand-Archive -LiteralPath $zipPath -DestinationPath $destination -Force
 
 
+                - task: FileTransform@1
+                  displayName: Apply SIT-specific variables to config
+                  inputs:
+                    folderPath: '$(destinationFolder)'
+                    fileType: xml
+                    targetFiles: 'Boots.MasterData.Application.AutoDataRefresh.exe.config'
