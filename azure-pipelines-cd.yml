@@ -82,6 +82,14 @@ stages:
           Write-Host "##vso[task.setvariable variable=configFolder]$configFolder"
           Write-Host "##vso[task.setvariable variable=configFileName]$configFile"
 
+    - task: PowerShell@2
+      displayName: Show config variables
+      inputs:
+        targetType: inline
+        script: |
+          Write-Host "configFolder = $(configFolder)"
+          Write-Host "configFileName = $(configFileName)"
+
     - task: FileTransform@2
       displayName: Apply configuration transform
       inputs:
