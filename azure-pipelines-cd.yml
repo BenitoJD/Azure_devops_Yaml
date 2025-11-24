@@ -1,5 +1,5 @@
-trigger: none
-pr: none
+pool:
+  name: ccoe-nprod-windows-mdp-01
 
 parameters:
 - name: configVariableGroup
@@ -56,7 +56,24 @@ stages:
       runOnce:
         deploy:
           steps:
+          - task: PowerShell@2
+            displayName: Display deployment information
+            inputs:
+              targetType: inline
+              script: |
+                Write-Host "=========================================="
+                Write-Host "DEPLOYMENT INFORMATION"
+                Write-Host "=========================================="
+                Write-Host "Variable Group: ${{ parameters.configVariableGroup }}"
+                Write-Host "Build Pipeline: $(selectedBuildPipelineName)"
+                Write-Host "Artifact Name: $(artifactName)"
+                Write-Host "Deployment Path: $(deployPath)"
+                Write-Host "Download Folder: $(downloadedArtifactFolder)"
+                Write-Host "Extracted Folder: $(extractedFolder)"
+                Write-Host "=========================================="
+
           - task: DownloadPipelineArtifact@2
+            displayName: Download artifact
             inputs:
               buildType: specific
               project: $(System.TeamProject)
@@ -65,11 +82,45 @@ stages:
               artifactName: $(artifactName)
               targetPath: '$(downloadedArtifactFolder)'
 
+          - task: PowerShell@2
+            displayName: Verify artifact download
+            inputs:
+              targetType: inline
+              script: |
+                Write-Host "Checking downloaded artifact location: $(downloadedArtifactFolder)"
+                if (Test-Path "$(downloadedArtifactFolder)") {
+                  $items = Get-ChildItem -Path "$(downloadedArtifactFolder)" -Recurse
+                  Write-Host "✓ Artifact downloaded successfully"
+                  Write-Host "  Files found: $($items.Count)"
+                  Write-Host "  Location: $(downloadedArtifactFolder)"
+                  Get-ChildItem -Path "$(downloadedArtifactFolder)" | ForEach-Object { Write-Host "    - $($_.Name)" }
+                } else {
+                  throw "✗ Artifact download failed - folder not found: $(downloadedArtifactFolder)"
+                }
+
           - task: ExtractFiles@1
+            displayName: Extract artifact package
             inputs:
               archiveFilePatterns: '$(downloadedArtifactFolder)/$(artifactZip)'
               destinationFolder: '$(extractedFolder)'
               cleanDestinationFolder: true
+
+          - task: PowerShell@2
+            displayName: Verify extraction
+            inputs:
+              targetType: inline
+              script: |
+                Write-Host "Checking extracted files location: $(extractedFolder)"
+                if (Test-Path "$(extractedFolder)") {
+                  $items = Get-ChildItem -Path "$(extractedFolder)" -Recurse -File
+                  Write-Host "✓ Files extracted successfully"
+                  Write-Host "  Files extracted: $($items.Count)"
+                  Write-Host "  Location: $(extractedFolder)"
+                  Write-Host "  Top-level items:"
+                  Get-ChildItem -Path "$(extractedFolder)" | Select-Object -First 10 | ForEach-Object { Write-Host "    - $($_.Name) ($($_.PSIsContainer ? 'Directory' : 'File'))" }
+                } else {
+                  throw "✗ Extraction failed - folder not found: $(extractedFolder)"
+                }
 
           - task: PowerShell@2
             displayName: Locate config file
@@ -77,10 +128,20 @@ stages:
               targetType: inline
               script: |
                 $ErrorActionPreference = 'Stop'
+                Write-Host "Searching for config file in: $(extractedFolder)"
                 $config = Get-ChildItem -Path "$(extractedFolder)" -Filter "Boots.MasterData.Application.AutoDataRefresh.exe.config" -Recurse -File | Select-Object -First 1
-                if (-not $config) { throw "Config file not found" }
-                Write-Host "##vso[task.setvariable variable=configFolder]$(Split-Path $config.FullName -Parent)"
-                Write-Host "##vso[task.setvariable variable=configFileName]$(Split-Path $config.FullName -Leaf)"
+                if (-not $config) {
+                  Write-Host "✗ Config file not found. Searching in subdirectories..."
+                  Get-ChildItem -Path "$(extractedFolder)" -Recurse -File -Filter "*.config" | ForEach-Object { Write-Host "  Found: $($_.FullName)" }
+                  throw "Config file 'Boots.MasterData.Application.AutoDataRefresh.exe.config' not found under $(extractedFolder)"
+                }
+                Write-Host "✓ Config file found: $($config.FullName)"
+                $configFolder = Split-Path -Path $config.FullName -Parent
+                $configFileName = Split-Path -Path $config.FullName -Leaf
+                Write-Host "  Config Folder: $configFolder"
+                Write-Host "  Config File: $configFileName"
+                Write-Host "##vso[task.setvariable variable=configFolder]$configFolder"
+                Write-Host "##vso[task.setvariable variable=configFileName]$configFileName"
 
           - task: FileTransform@2
             displayName: Apply configuration transform
@@ -98,7 +159,87 @@ stages:
                 $ErrorActionPreference = 'Stop'
                 $source = "$(extractedFolder)"
                 $destination = "$(deployPath)"
-                if (-not (Test-Path $source)) { throw "Source not found: $source" }
-                if (-not (Test-Path $destination)) { New-Item -ItemType Directory -Path $destination -Force | Out-Null }
-                else { Get-ChildItem $destination -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue }
-                Copy-Item -Path (Join-Path $source '*') -Destination $destination -Recurse -Force -ErrorAction Stop
+                
+                Write-Host "=========================================="
+                Write-Host "DEPLOYMENT PROCESS"
+                Write-Host "=========================================="
+                Write-Host "Source: $source"
+                Write-Host "Destination: $destination"
+                Write-Host ""
+                
+                # Verify source exists
+                Write-Host "Step 1: Verifying source location..."
+                if (-not (Test-Path $source)) {
+                  Write-Host "✗ Source not found: $source"
+                  throw "Source not found: $source"
+                }
+                $sourceItems = Get-ChildItem -Path $source -Recurse -File
+                Write-Host "✓ Source verified - $($sourceItems.Count) files ready for deployment"
+                Write-Host ""
+                
+                # Check/create destination
+                Write-Host "Step 2: Checking destination folder..."
+                if (-not (Test-Path $destination)) {
+                  Write-Host "  Destination folder does not exist. Creating: $destination"
+                  try {
+                    $created = New-Item -ItemType Directory -Path $destination -Force
+                    Write-Host "✓ Folder created successfully: $($created.FullName)"
+                  } catch {
+                    Write-Host "✗ Failed to create folder: $_"
+                    throw
+                  }
+                } else {
+                  Write-Host "  Destination folder exists. Clearing existing contents..."
+                  $existingItems = Get-ChildItem $destination -Force -Recurse
+                  Write-Host "  Found $($existingItems.Count) existing items to remove"
+                  Get-ChildItem $destination -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+                  Write-Host "✓ Existing contents cleared"
+                }
+                Write-Host ""
+                
+                # Verify destination exists before copy
+                if (-not (Test-Path $destination)) {
+                  Write-Host "✗ Destination folder still does not exist after creation attempt"
+                  throw "Destination folder creation failed: $destination"
+                }
+                Write-Host "✓ Destination folder confirmed: $destination"
+                Write-Host ""
+                
+                # Copy files
+                Write-Host "Step 3: Copying files..."
+                $sourcePath = Join-Path $source '*'
+                Write-Host "  Copying from: $sourcePath"
+                Write-Host "  Copying to: $destination"
+                try {
+                  Copy-Item -Path $sourcePath -Destination $destination -Recurse -Force -ErrorAction Stop
+                  Write-Host "✓ Files copied successfully"
+                } catch {
+                  Write-Host "✗ Copy failed: $_"
+                  throw
+                }
+                Write-Host ""
+                
+                # Verify deployment
+                Write-Host "Step 4: Verifying deployment..."
+                if (Test-Path $destination) {
+                  $deployedItems = Get-ChildItem -Path $destination -Recurse -File
+                  Write-Host "✓ Deployment verified"
+                  Write-Host "  Files deployed: $($deployedItems.Count)"
+                  Write-Host "  Destination: $destination"
+                  Write-Host ""
+                  Write-Host "  Top-level items in destination:"
+                  Get-ChildItem -Path $destination | Select-Object -First 10 | ForEach-Object {
+                    $type = if ($_.PSIsContainer) { "Directory" } else { "File ($([math]::Round($_.Length/1KB, 2)) KB)" }
+                    Write-Host "    - $($_.Name) [$type]"
+                  }
+                  Write-Host ""
+                  Write-Host "=========================================="
+                  Write-Host "✓ DEPLOYMENT COMPLETED SUCCESSFULLY"
+                  Write-Host "=========================================="
+                  Write-Host "Deployment Path: $destination"
+                  Write-Host "Total Files: $($deployedItems.Count)"
+                  Write-Host "=========================================="
+                } else {
+                  Write-Host "✗ Deployment verification failed - destination folder not found"
+                  throw "Deployment verification failed: $destination"
+                }
