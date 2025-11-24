@@ -54,9 +54,7 @@ stages:
   jobs:
   - deployment: Deploy
     displayName: Build and deploy with ${{ parameters.configVariableGroup }}
-    environment:
-      name: SIT
-      resourceType: virtualMachine
+    environment: SIT
     pool:
       name: ccoe-nprod-windows-mdp-01
     strategy:
