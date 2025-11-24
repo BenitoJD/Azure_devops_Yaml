@@ -108,7 +108,6 @@ stages:
         folderPath: '$(configFolder)'
         fileType: xml
         targetFiles: '$(configFileName)'
-        enableXmlTransform: false
         enableXmlVariableSubstitution: true
 
     - task: PowerShell@2
