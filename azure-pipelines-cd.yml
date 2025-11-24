@@ -11,16 +11,10 @@ parameters:
   - SIT_IT2_ADR
   - SIT_IT3_ADR
   - SIT_IT4_ADR
-- name: buildPipelineSource
-  displayName: Build pipeline to consume
+- name: buildPipelineName
+  displayName: Build pipeline (definition name)
   type: string
   default: MDVersionUpgrade/Lonestar
-
-resources:
-  pipelines:
-  - pipeline: autoDataRefreshBuild
-    source: ${{ parameters.buildPipelineSource }}
-    trigger: none
 
 variables:
 - name: artifactName
@@ -29,6 +23,8 @@ variables:
   value: 'Boots.MasterData.Application.AutoDataRefresh.zip'
 - name: extractedFolder
   value: '$(Pipeline.Workspace)\AutoDataRefreshExtracted'
+- name: downloadedArtifactFolder
+  value: '$(Pipeline.Workspace)\AutoDataRefreshDownloaded'
 - ${{ if eq(parameters.targetEnvironment, 'SIT_IT1_ADR') }}:
   - group: SIT_IT1_ADR
 - ${{ if eq(parameters.targetEnvironment, 'SIT_IT2_ADR') }}:
@@ -47,14 +43,20 @@ stages:
     pool:
       name: ccoe-nprod-windows-mdp-01
     steps:
-    - download: autoDataRefreshBuild
+    - task: DownloadPipelineArtifact@2
       displayName: Download AutoDataRefresh artifact
-      artifact: $(artifactName)
+      inputs:
+        buildType: specific
+        project: $(System.TeamProject)
+        definition: ${{ parameters.buildPipelineName }}
+        buildVersionToDownload: latest
+        artifactName: $(artifactName)
+        targetPath: '$(downloadedArtifactFolder)'
 
     - task: ExtractFiles@1
       displayName: Extract AutoDataRefresh package
       inputs:
-        archiveFilePatterns: '$(Pipeline.Workspace)/autoDataRefreshBuild/$(artifactName)/$(artifactZip)'
+        archiveFilePatterns: '$(downloadedArtifactFolder)/$(artifactZip)'
         destinationFolder: '$(extractedFolder)'
         cleanDestinationFolder: true
 
