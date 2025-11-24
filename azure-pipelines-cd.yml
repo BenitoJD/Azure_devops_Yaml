@@ -14,7 +14,7 @@ parameters:
 - name: buildPipelineName
   displayName: Build pipeline (definition name)
   type: string
-  default: MDVersionUpgrade/Lonestar
+  default: MasterData.AutoDataRefresh
 
 variables:
 - name: artifactName
@@ -62,12 +62,32 @@ stages:
         destinationFolder: '$(extractedFolder)'
         cleanDestinationFolder: true
 
+    - task: PowerShell@2
+      displayName: Locate AutoDataRefresh config
+      inputs:
+        targetType: inline
+        script: |
+          $root = "$(extractedFolder)"
+          Write-Host "Searching for AutoDataRefresh config under $root"
+          $config = Get-ChildItem -Path $root -Filter "Boots.MasterData.Application.AutoDataRefresh.exe.config" -Recurse -File | Select-Object -First 1
+
+          if (-not $config) {
+              throw "Boots.MasterData.Application.AutoDataRefresh.exe.config not found under $root"
+          }
+
+          $configFolder = Split-Path -Path $config.FullName -Parent
+          $configFile = Split-Path -Path $config.FullName -Leaf
+
+          Write-Host "Found config at $($config.FullName)"
+          Write-Host "##vso[task.setvariable variable=configFolder]$configFolder"
+          Write-Host "##vso[task.setvariable variable=configFileName]$configFile"
+
     - task: FileTransform@2
       displayName: Apply configuration transform
       inputs:
-        folderPath: '$(extractedFolder)'
+        folderPath: '$(configFolder)'
         fileType: xml
-        targetFiles: 'Boots.MasterData.Application.AutoDataRefresh.exe.config'
+        targetFiles: '$(configFileName)'
         enableXmlTransform: false
         enableXmlVariableSubstitution: true
 
