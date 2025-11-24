@@ -2,8 +2,8 @@ trigger: none
 pr: none
 
 parameters:
-- name: targetEnvironment
-  displayName: Target SIT deployment
+- name: configVariableGroup
+  displayName: SIT variable group (values injected into config)
   type: string
   default: SIT_IT1_ADR
   values:
@@ -27,33 +27,36 @@ variables:
   value: '$(Pipeline.Workspace)\AutoDataRefreshDownloaded'
 - name: selectedBuildPipelineName
   value: ${{ parameters.buildPipelineName }}
-- ${{ if eq(parameters.targetEnvironment, 'SIT_IT1_ADR') }}:
+- ${{ if eq(parameters.configVariableGroup, 'SIT_IT1_ADR') }}:
   - group: SIT_IT1_ADR
-- ${{ if eq(parameters.targetEnvironment, 'SIT_IT1_ADR') }}:
+- ${{ if eq(parameters.configVariableGroup, 'SIT_IT1_ADR') }}:
   - name: deployPath
     value: 'G:\MasterData\AutoDataRefresh\IT1_SIT_ADR'
-- ${{ if eq(parameters.targetEnvironment, 'SIT_IT2_ADR') }}:
+- ${{ if eq(parameters.configVariableGroup, 'SIT_IT2_ADR') }}:
   - group: SIT_IT2_ADR
-- ${{ if eq(parameters.targetEnvironment, 'SIT_IT2_ADR') }}:
+- ${{ if eq(parameters.configVariableGroup, 'SIT_IT2_ADR') }}:
   - name: deployPath
     value: 'G:\MasterData\AutoDataRefresh\IT2_SIT_ADR'
-- ${{ if eq(parameters.targetEnvironment, 'SIT_IT3_ADR') }}:
+- ${{ if eq(parameters.configVariableGroup, 'SIT_IT3_ADR') }}:
   - group: SIT_IT3_ADR
-- ${{ if eq(parameters.targetEnvironment, 'SIT_IT3_ADR') }}:
+- ${{ if eq(parameters.configVariableGroup, 'SIT_IT3_ADR') }}:
   - name: deployPath
     value: 'G:\MasterData\AutoDataRefresh\IT3_SIT_ADR'
-- ${{ if eq(parameters.targetEnvironment, 'SIT_IT4_ADR') }}:
+- ${{ if eq(parameters.configVariableGroup, 'SIT_IT4_ADR') }}:
   - group: SIT_IT4_ADR
-- ${{ if eq(parameters.targetEnvironment, 'SIT_IT4_ADR') }}:
+- ${{ if eq(parameters.configVariableGroup, 'SIT_IT4_ADR') }}:
   - name: deployPath
     value: 'G:\MasterData\AutoDataRefresh\IT4_SIT_ADR'
 
 stages:
 - stage: Deploy_AutoDataRefresh
-  displayName: Deploy ${{ parameters.targetEnvironment }}
+  displayName: Deploy SIT using ${{ parameters.configVariableGroup }}
   jobs:
   - job: Deploy
-    displayName: Build and deploy ${{ parameters.targetEnvironment }}
+    displayName: Build and deploy with ${{ parameters.configVariableGroup }}
+    environment:
+      name: SIT
+      resourceType: virtualMachine
     pool:
       name: ccoe-nprod-windows-mdp-01
     steps:
@@ -134,5 +137,5 @@ stages:
 
           Write-Host "Copying files..."
           Copy-Item -Path (Join-Path $source '*') -Destination $destination -Recurse -Force
-          Write-Host "Deployment completed for ${{ parameters.targetEnvironment }}"
+          Write-Host "Deployment completed for SIT using ${{ parameters.configVariableGroup }}"
 
