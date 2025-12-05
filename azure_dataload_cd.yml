@@ -1,0 +1,55 @@
+pool:
+  name: ccoe-nprod-windows-mdp-01
+
+trigger: none
+
+resources:
+  pipelines:
+    - pipeline: buildPipeline
+      source: MasterData.DB.DataLoad
+
+variables:
+  - name: destinationFolder
+    value: 'G:\MasterData\DataLoad\'
+
+stages:
+  - stage: Deploy_SIT
+    displayName: Deploy to SIT VM
+    jobs:
+      - deployment: DeployDataLoad
+        displayName: Deploy DataLoad zip
+        environment:
+          name: SIT
+          resourceType: virtualMachine
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: buildPipeline
+                  displayName: Download latest DataLoad artifact
+                  artifact: drop
+
+                - task: PowerShell@2
+                  displayName: Extract MasterData.DB.DataLoad.zip to destination folder
+                  inputs:
+                    targetType: inline
+                    script: |
+                      $destination = "$(destinationFolder)"
+                      $artifactRoot = "$(Pipeline.Workspace)\buildPipeline\drop"
+                      $zipPath = Join-Path $artifactRoot 'MasterData.DB.DataLoad.zip'
+
+                      if (-not (Test-Path $zipPath)) {
+                        Write-Error "Artifact zip not found at $zipPath"
+                      }
+
+                      if (-not (Test-Path $destination)) {
+                        Write-Host "Creating destination folder $destination"
+                        New-Item -ItemType Directory -Path $destination | Out-Null
+                      } else {
+                        Write-Host "Clearing existing contents in $destination"
+                        Get-ChildItem -Path $destination -Recurse -Force | Remove-Item -Recurse -Force
+                      }
+
+                      Write-Host "Extracting $zipPath to $destination"
+                      Expand-Archive -LiteralPath $zipPath -DestinationPath $destination -Force
+

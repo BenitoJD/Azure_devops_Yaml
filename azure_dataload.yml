@@ -1,0 +1,41 @@
+trigger:
+- MDVersionUpgrade/Lonestar
+ 
+pool:
+  name: ccoe-nprod-windows-mdp-01
+ 
+variables:
+  solution: '**/*.sln'
+  buildPlatform: 'Any CPU'
+  buildConfiguration: 'Release'
+ 
+steps:
+- task: NuGetToolInstaller@1
+
+- task: NuGetCommand@2
+  inputs:
+    restoreSolution: '$(solution)'
+ 
+- task: VSBuild@1
+  inputs:
+    solution: '$(solution)'
+    msbuildArgs: '/p:DeployOnBuild=false'
+    platform: '$(buildPlatform)'
+    configuration: '$(buildConfiguration)'
+ 
+- task: VisualStudioTestPlatformInstaller@1
+  inputs:
+    packageFeedSelector: 'nugetOrg'
+
+- task: ArchiveFiles@2
+  displayName: 'Archive MasterData.DB.DataLoad'
+  inputs:
+    rootFolderOrFile: '$(Build.SourcesDirectory)/Boots.MasterData.DB.DataLoad/bin/Release'
+    includeRootFolder: false
+    archiveType: 'zip'
+    archiveFile: '$(Build.ArtifactStagingDirectory)/MasterData.DB.DataLoad.zip'
+    replaceExistingArchive: true
+ 
+- publish: '$(Build.ArtifactStagingDirectory)/MasterData.DB.DataLoad.zip'
+  displayName: 'Publish MasterData.DB.DataLoad.zip'
+  artifact: 'drop'
