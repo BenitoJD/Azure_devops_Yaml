@@ -23,7 +23,7 @@ stages:
           Invoke-Command -ComputerName "$(targetMachine)" -ScriptBlock {
             New-Item -ItemType Directory -Path "C:\Temp\WinRMTest" -Force
             Write-Host "Folder created: C:\Temp\WinRMTest"
-          } -Credential $credential
+          } -Credential $credential -Authentication Negotiate
 
     - task: PowerShell@2
       displayName: 'Create File and Write Content'
@@ -38,7 +38,7 @@ stages:
           Invoke-Command -ComputerName "$(targetMachine)" -ScriptBlock {
             Set-Content -Path "C:\Temp\WinRMTest\testfile.txt" -Value "hi how are you"
             Write-Host "File created: C:\Temp\WinRMTest\testfile.txt"
-          } -Credential $credential
+          } -Credential $credential -Authentication Negotiate
 
     - task: PowerShell@2
       displayName: 'Verify File'
@@ -59,4 +59,4 @@ stages:
             } else {
               Write-Error "File not found: $file"
             }
-          } -Credential $credential
+          } -Credential $credential -Authentication Negotiate
