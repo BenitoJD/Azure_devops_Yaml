@@ -11,6 +11,15 @@ stages:
     steps:
 
     - task: PowerShell@2
+      displayName: 'Configure TrustedHosts on Agent'
+      inputs:
+        targetType: 'inline'
+        script: |
+          Set-Item WSMan:\localhost\Client\TrustedHosts -Value "$(targetMachine)" -Force
+          Write-Host "Added $(targetMachine) to TrustedHosts"
+          Get-Item WSMan:\localhost\Client\TrustedHosts
+
+    - task: PowerShell@2
       displayName: 'Create Folder'
       inputs:
         targetType: 'inline'
