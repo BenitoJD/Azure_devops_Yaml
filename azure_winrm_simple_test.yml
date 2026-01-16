@@ -1,0 +1,62 @@
+variables:
+  targetMachine: 'YOUR_TARGET_MACHINE'
+  username: 'YOUR_USERNAME'
+  password: 'YOUR_PASSWORD'
+
+stages:
+- stage: WinRM_POC
+  jobs:
+  - job: Test_Remote_Operations
+    displayName: 'Test Remote Operations via WinRM'
+    steps:
+
+    - task: PowerShell@2
+      displayName: 'Create Folder'
+      inputs:
+        targetType: 'inline'
+        script: |
+          Write-Host "Creating folder on target machine"
+          
+          $password = ConvertTo-SecureString "$(password)" -AsPlainText -Force
+          $credential = New-Object System.Management.Automation.PSCredential ("$(username)", $password)
+          
+          Invoke-Command -ComputerName "$(targetMachine)" -ScriptBlock {
+            New-Item -ItemType Directory -Path "C:\Temp\WinRMTest" -Force
+            Write-Host "Folder created: C:\Temp\WinRMTest"
+          } -Credential $credential
+
+    - task: PowerShell@2
+      displayName: 'Create File and Write Content'
+      inputs:
+        targetType: 'inline'
+        script: |
+          Write-Host "Creating file on target machine"
+          
+          $password = ConvertTo-SecureString "$(password)" -AsPlainText -Force
+          $credential = New-Object System.Management.Automation.PSCredential ("$(username)", $password)
+          
+          Invoke-Command -ComputerName "$(targetMachine)" -ScriptBlock {
+            Set-Content -Path "C:\Temp\WinRMTest\testfile.txt" -Value "hi how are you"
+            Write-Host "File created: C:\Temp\WinRMTest\testfile.txt"
+          } -Credential $credential
+
+    - task: PowerShell@2
+      displayName: 'Verify File'
+      inputs:
+        targetType: 'inline'
+        script: |
+          Write-Host "Verifying file on target machine"
+          
+          $password = ConvertTo-SecureString "$(password)" -AsPlainText -Force
+          $credential = New-Object System.Management.Automation.PSCredential ("$(username)", $password)
+          
+          Invoke-Command -ComputerName "$(targetMachine)" -ScriptBlock {
+            $file = "C:\Temp\WinRMTest\testfile.txt"
+            if (Test-Path $file) {
+              Write-Host "File exists: $file"
+              Write-Host "Content:"
+              Get-Content $file
+            } else {
+              Write-Error "File not found: $file"
+            }
+          } -Credential $credential
