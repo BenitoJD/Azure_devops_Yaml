@@ -47,6 +47,14 @@ resources:
       source: MasterData.AutoDataRefresh
 
 variables:
+  # Set server name based on environment parameter
+  - ${{ if eq(parameters.environment, 'prod') }}:
+      - name: selectedServerName
+        value: ${{ parameters.prodServerName }}
+  - ${{ if eq(parameters.environment, 'non-prod') }}:
+      - name: selectedServerName
+        value: ${{ parameters.nonProdServerName }}
+
   # Load WinRM service account credentials based on environment parameter
   - ${{ if eq(parameters.environment, 'non-prod') }}:
       - group: NonProd-WinRM-ServiceAccount
@@ -100,37 +108,25 @@ stages:
                   artifact: AutoDataRefresh
 
                 - task: PowerShell@2
-                  displayName: Determine target server
+                  displayName: Set target server
                   inputs:
                     targetType: inline
                     script: |
-                      $environment = $env:ENVIRONMENT_PARAM
-                      $targetServer = ""
-                      
-                      if ($environment -eq "prod") {
-                        $targetServer = $env:PROD_SERVER_PARAM
-                      } else {
-                        $targetServer = $env:NONPROD_SERVER_PARAM
-                      }
+                      $targetServer = "$(selectedServerName)"
                       
                       if ([string]::IsNullOrWhiteSpace($targetServer)) {
                         throw "Server name cannot be empty. Please select a server from the dropdown."
                       }
                       
-                      Write-Host "Environment: $environment"
                       Write-Host "Setting targetServer variable to: $targetServer"
                       Write-Host "##vso[task.setvariable variable=targetServer]$targetServer"
-                  env:
-                    ENVIRONMENT_PARAM: ${{ parameters.environment }}
-                    PROD_SERVER_PARAM: ${{ parameters.prodServerName }}
-                    NONPROD_SERVER_PARAM: ${{ parameters.nonProdServerName }}
 
                 - task: PowerShell@2
                   displayName: Validate server selection
                   inputs:
                     targetType: inline
                     script: |
-                      $environment = $env:ENVIRONMENT_PARAM
+                      $environment = "$(parameters.environment)"
                       $selectedServer = "$(targetServer)"
                       
                       Write-Host "=========================================="
@@ -139,8 +135,6 @@ stages:
                       Write-Host "=========================================="
                       Write-Host ""
                       Write-Host "Proceeding with deployment to $selectedServer..."
-                  env:
-                    ENVIRONMENT_PARAM: ${{ parameters.environment }}
 
                 - task: WindowsMachineFileCopy@2
                   displayName: Copy AutoDataRefresh.zip to target server
