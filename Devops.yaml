@@ -104,15 +104,13 @@ stages:
                   inputs:
                     targetType: inline
                     script: |
-                      $environment = "$(environment)"
+                      $environment = $env:ENVIRONMENT_PARAM
                       $targetServer = ""
                       
                       if ($environment -eq "prod") {
-                        $prodServer = "$(prodServerName)"
-                        $targetServer = $prodServer
+                        $targetServer = $env:PROD_SERVER_PARAM
                       } else {
-                        $nonProdServer = "$(nonProdServerName)"
-                        $targetServer = $nonProdServer
+                        $targetServer = $env:NONPROD_SERVER_PARAM
                       }
                       
                       if ([string]::IsNullOrWhiteSpace($targetServer)) {
@@ -122,6 +120,10 @@ stages:
                       Write-Host "Environment: $environment"
                       Write-Host "Setting targetServer variable to: $targetServer"
                       Write-Host "##vso[task.setvariable variable=targetServer]$targetServer"
+                  env:
+                    ENVIRONMENT_PARAM: ${{ parameters.environment }}
+                    PROD_SERVER_PARAM: ${{ parameters.prodServerName }}
+                    NONPROD_SERVER_PARAM: ${{ parameters.nonProdServerName }}
 
                 - task: PowerShell@2
                   displayName: Validate server selection
