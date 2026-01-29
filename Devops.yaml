@@ -94,73 +94,69 @@ stages:
   - stage: Deploy_SIT
     displayName: Deploy to SIT VM
     jobs:
-      - deployment: DeployAutoDataRefresh
+      - job: DeployAutoDataRefresh
         displayName: Deploy AutoDataRefresh zip
-        environment:
-          name: SIT
-          resourceType: virtualMachine
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - download: buildPipeline
-                  displayName: Download latest AutoDataRefresh artifact
-                  artifact: AutoDataRefresh
+        pool:
+          name: ccoe-nprod-windows-mdp-01
+        steps:
+          - download: buildPipeline
+            displayName: Download latest AutoDataRefresh artifact
+            artifact: AutoDataRefresh
 
-                - task: PowerShellOnTargetMachines@3
-                  displayName: Copy and extract AutoDataRefresh on target server
-                  inputs:
-                    Machines: "$(selectedServerName)"
-                    UserName: "$(winrmUserName)"
-                    UserPassword: "$(winrmPassword)"
-                    CopyFilesToMachines: |
-                      $(Pipeline.Workspace)\buildPipeline\AutoDataRefresh\Boots.MasterData.Application.AutoDataRefresh.zip => C:\Temp\AutoDataRefresh\
-                    InlineScript: |
-                      $destination = "$(destinationFolder)"
-                      $tempFolder = 'C:\Temp\AutoDataRefresh'
-                      $zipPath = Join-Path $tempFolder 'Boots.MasterData.Application.AutoDataRefresh.zip'
+          - task: PowerShellOnTargetMachines@3
+            displayName: Copy and extract AutoDataRefresh on target server
+            inputs:
+              Machines: "$(selectedServerName)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              CopyFilesToMachines: |
+                $(Pipeline.Workspace)\buildPipeline\AutoDataRefresh\Boots.MasterData.Application.AutoDataRefresh.zip => C:\Temp\AutoDataRefresh\
+              InlineScript: |
+                $destination = "$(destinationFolder)"
+                $tempFolder = 'C:\Temp\AutoDataRefresh'
+                $zipPath = Join-Path $tempFolder 'Boots.MasterData.Application.AutoDataRefresh.zip'
 
-                      if (-not (Test-Path $zipPath)) {
-                        throw "Artifact zip not found at $zipPath"
-                      }
+                if (-not (Test-Path $zipPath)) {
+                  throw "Artifact zip not found at $zipPath"
+                }
 
-                      if (-not (Test-Path $destination)) {
-                        Write-Host "Creating destination folder $destination"
-                        New-Item -ItemType Directory -Path $destination -Force | Out-Null
-                      } else {
-                        Write-Host "Clearing existing contents in $destination"
-                        Get-ChildItem -Path $destination -Recurse -Force | Remove-Item -Recurse -Force
-                      }
+                if (-not (Test-Path $destination)) {
+                  Write-Host "Creating destination folder $destination"
+                  New-Item -ItemType Directory -Path $destination -Force | Out-Null
+                } else {
+                  Write-Host "Clearing existing contents in $destination"
+                  Get-ChildItem -Path $destination -Recurse -Force | Remove-Item -Recurse -Force
+                }
 
-                      Write-Host "Extracting $zipPath to $destination"
-                      Expand-Archive -LiteralPath $zipPath -DestinationPath $destination -Force
-                      Write-Host "Extraction completed successfully"
-                    NewPsSessionOptionArguments: >
-                      -SkipCACheck
-                      -SkipCNCheck
-                      -SkipRevocationCheck
-                      -IdleTimeout 7200000
-                      -OperationTimeout 0
-                      -OutputBufferingMode Block
+                Write-Host "Extracting $zipPath to $destination"
+                Expand-Archive -LiteralPath $zipPath -DestinationPath $destination -Force
+                Write-Host "Extraction completed successfully"
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
 
-                - task: PowerShellOnTargetMachines@3
-                  displayName: Apply configuration transformations
-                  inputs:
-                    Machines: "$(selectedServerName)"
-                    UserName: "$(winrmUserName)"
-                    UserPassword: "$(winrmPassword)"
-                    InlineScript: |
-                      $configPath = Join-Path "$(destinationFolder)" "Boots.MasterData.Application.AutoDataRefresh.exe.config"
-                      if (Test-Path $configPath) {
-                        Write-Host "Configuration file found at $configPath"
-                        # FileTransform variables will be applied if configured in variable groups
-                      } else {
-                        Write-Warning "Configuration file not found at $configPath"
-                      }
-                    NewPsSessionOptionArguments: >
-                      -SkipCACheck
-                      -SkipCNCheck
-                      -SkipRevocationCheck
-                      -IdleTimeout 7200000
-                      -OperationTimeout 0
-                      -OutputBufferingMode Block
+          - task: PowerShellOnTargetMachines@3
+            displayName: Apply configuration transformations
+            inputs:
+              Machines: "$(selectedServerName)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $configPath = Join-Path "$(destinationFolder)" "Boots.MasterData.Application.AutoDataRefresh.exe.config"
+                if (Test-Path $configPath) {
+                  Write-Host "Configuration file found at $configPath"
+                  # FileTransform variables will be applied if configured in variable groups
+                } else {
+                  Write-Warning "Configuration file not found at $configPath"
+                }
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
