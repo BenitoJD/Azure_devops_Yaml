@@ -13,6 +13,7 @@ parameters:
     default: ''
     values:
       - Custom
+      # Add your production server names here (also add them to Prod-WinRM-ServiceAccount variable group)
 
   - name: nonProdServerName
     displayName: Non-Production Server
@@ -20,6 +21,7 @@ parameters:
     default: ''
     values:
       - Custom
+      # Add your non-production server names here (also add them to NonProd-WinRM-ServiceAccount variable group)
 
   - name: customProdServerName
     displayName: Custom Production Server Name
@@ -101,6 +103,56 @@ stages:
                 - download: buildPipeline
                   displayName: Download latest AutoDataRefresh artifact
                   artifact: AutoDataRefresh
+
+                - task: PowerShell@2
+                  displayName: Validate server name against environment server list
+                  inputs:
+                    targetType: inline
+                    script: |
+                      $selectedServer = "$(targetServer)"
+                      $environment = "$(environment)"
+                      
+                      if ([string]::IsNullOrWhiteSpace($selectedServer)) {
+                        throw "Server name cannot be empty. Please provide a server name."
+                      }
+                      
+                      Write-Host "Validating server '$selectedServer' for $environment environment..."
+                      
+                      # Get server list from variable group (comma-separated format)
+                      $serverList = @()
+                      
+                      if ($environment -eq "prod") {
+                        $serverListVar = "$(prodServerList)"
+                        if ([string]::IsNullOrWhiteSpace($serverListVar)) {
+                          Write-Warning "prodServerList variable not found in Prod-WinRM-ServiceAccount variable group."
+                          Write-Host "Please add 'prodServerList' variable with comma-separated server names (e.g., 'server1.domain.com,server2.domain.com')."
+                          Write-Host "Proceeding without validation for server: $selectedServer"
+                        } else {
+                          $serverList = $serverListVar -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' }
+                        }
+                      } else {
+                        # Non-prod environment
+                        $serverListVar = "$(nonProdServerList)"
+                        if ([string]::IsNullOrWhiteSpace($serverListVar)) {
+                          Write-Warning "nonProdServerList variable not found in NonProd-WinRM-ServiceAccount variable group."
+                          Write-Host "Please add 'nonProdServerList' variable with comma-separated server names (e.g., 'dev-server1.domain.com,test-server1.domain.com')."
+                          Write-Host "Proceeding without validation for server: $selectedServer"
+                        } else {
+                          $serverList = $serverListVar -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' }
+                        }
+                      }
+                      
+                      # Validate server against approved list
+                      if ($serverList.Count -gt 0) {
+                        Write-Host "Found $($serverList.Count) approved server(s) in variable group: $($serverList -join ', ')"
+                        if ($serverList -notcontains $selectedServer) {
+                          Write-Warning "Server '$selectedServer' is not in the approved server list for $environment environment."
+                          Write-Host "Approved servers: $($serverList -join ', ')"
+                          Write-Host "Proceeding with deployment, but please verify the server name is correct."
+                        } else {
+                          Write-Host "✓ Server '$selectedServer' validated successfully against $environment server list."
+                        }
+                      }
 
                 - task: WindowsMachineFileCopy@2
                   displayName: Copy AutoDataRefresh.zip to target server
