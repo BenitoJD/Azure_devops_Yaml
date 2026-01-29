@@ -107,6 +107,86 @@ stages:
                   displayName: Download latest AutoDataRefresh artifact
                   artifact: AutoDataRefresh
 
+                - task: PowerShell@2
+                  displayName: Test server connectivity and WinRM
+                  inputs:
+                    targetType: inline
+                    script: |
+                      $server = "$(selectedServerName)"
+                      $username = "$(winrmUserName)"
+                      
+                      Write-Host "=========================================="
+                      Write-Host "Testing connectivity to server: $server"
+                      Write-Host "Service Account: $username"
+                      Write-Host "=========================================="
+                      Write-Host ""
+                      
+                      # Test DNS resolution
+                      Write-Host "1. Testing DNS Resolution..."
+                      try {
+                        $ip = [System.Net.Dns]::GetHostAddresses($server)
+                        Write-Host "   ✓ DNS Resolution: SUCCESS"
+                        Write-Host "   IP Address(es): $($ip.IPAddressToString -join ', ')"
+                      } catch {
+                        Write-Host "   ✗ DNS Resolution: FAILED"
+                        Write-Host "   Error: $_"
+                        Write-Host "   This could be the issue - server name cannot be resolved"
+                      }
+                      Write-Host ""
+                      
+                      # Test ping/network connectivity
+                      Write-Host "2. Testing Network Connectivity (Ping)..."
+                      try {
+                        $ping = Test-Connection -ComputerName $server -Count 2 -Quiet -ErrorAction Stop
+                        if ($ping) {
+                          Write-Host "   ✓ Ping Test: SUCCESS - Server is reachable"
+                        } else {
+                          Write-Host "   ✗ Ping Test: FAILED - Server did not respond"
+                        }
+                      } catch {
+                        Write-Host "   ✗ Ping Test: FAILED"
+                        Write-Host "   Error: $_"
+                        Write-Host "   This could indicate firewall or network issues"
+                      }
+                      Write-Host ""
+                      
+                      # Test WinRM port connectivity
+                      Write-Host "3. Testing WinRM Port Connectivity..."
+                      try {
+                        $tcpClient = New-Object System.Net.Sockets.TcpClient
+                        $result = $tcpClient.BeginConnect($server, 5985, $null, $null)
+                        $wait = $result.AsyncWaitHandle.WaitOne(3000, $false)
+                        if ($wait) {
+                          $tcpClient.EndConnect($result)
+                          Write-Host "   ✓ Port 5985 (WinRM HTTP): OPEN"
+                          $tcpClient.Close()
+                        } else {
+                          Write-Host "   ✗ Port 5985 (WinRM HTTP): CLOSED or TIMEOUT"
+                          Write-Host "   This could indicate firewall blocking WinRM"
+                        }
+                      } catch {
+                        Write-Host "   ✗ Port 5985 Test: FAILED"
+                        Write-Host "   Error: $_"
+                      }
+                      Write-Host ""
+                      
+                      # Test WinRM service
+                      Write-Host "4. Testing WinRM Service..."
+                      try {
+                        $winrmTest = Test-WSMan -ComputerName $server -ErrorAction Stop
+                        Write-Host "   ✓ WinRM Service: AVAILABLE"
+                        Write-Host "   Product: $($winrmTest.ProductVendor) $($winrmTest.ProductVersion)"
+                      } catch {
+                        Write-Host "   ✗ WinRM Service: NOT AVAILABLE or NOT CONFIGURED"
+                        Write-Host "   Error: $_"
+                        Write-Host "   This is likely the main issue - WinRM may not be enabled/configured"
+                      }
+                      Write-Host ""
+                      
+                      Write-Host "=========================================="
+                      Write-Host "Connectivity test completed"
+                      Write-Host "=========================================="
+
                 - task: WindowsMachineFileCopy@2
                   displayName: Copy AutoDataRefresh.zip to target server
                   inputs:
