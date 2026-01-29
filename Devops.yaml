@@ -130,7 +130,7 @@ stages:
                   inputs:
                     targetType: inline
                     script: |
-                      $environment = "$(environment)"
+                      $environment = $env:ENVIRONMENT_PARAM
                       $selectedServer = "$(targetServer)"
                       
                       Write-Host "=========================================="
@@ -139,6 +139,8 @@ stages:
                       Write-Host "=========================================="
                       Write-Host ""
                       Write-Host "Proceeding with deployment to $selectedServer..."
+                  env:
+                    ENVIRONMENT_PARAM: ${{ parameters.environment }}
 
                 - task: WindowsMachineFileCopy@2
                   displayName: Copy AutoDataRefresh.zip to target server
