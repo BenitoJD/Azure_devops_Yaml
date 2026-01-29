@@ -107,142 +107,14 @@ stages:
                   displayName: Download latest AutoDataRefresh artifact
                   artifact: AutoDataRefresh
 
-                - task: PowerShell@2
-                  displayName: Test server connectivity and WinRM
-                  inputs:
-                    targetType: inline
-                    script: |
-                      $server = "$(selectedServerName)"
-                      $username = "$(winrmUserName)"
-                      
-                      Write-Host "=========================================="
-                      Write-Host "Testing connectivity to server: $server"
-                      Write-Host "Service Account: $username"
-                      Write-Host "=========================================="
-                      Write-Host ""
-                      
-                      # Test DNS resolution
-                      Write-Host "1. Testing DNS Resolution..."
-                      try {
-                        $ip = [System.Net.Dns]::GetHostAddresses($server)
-                        Write-Host "   ✓ DNS Resolution: SUCCESS"
-                        Write-Host "   IP Address(es): $($ip.IPAddressToString -join ', ')"
-                      } catch {
-                        Write-Host "   ✗ DNS Resolution: FAILED"
-                        Write-Host "   Error: $_"
-                        Write-Host "   This could be the issue - server name cannot be resolved"
-                      }
-                      Write-Host ""
-                      
-                      # Test ping/network connectivity
-                      Write-Host "2. Testing Network Connectivity (Ping)..."
-                      try {
-                        $ping = Test-Connection -ComputerName $server -Count 2 -Quiet -ErrorAction Stop
-                        if ($ping) {
-                          Write-Host "   ✓ Ping Test: SUCCESS - Server is reachable"
-                        } else {
-                          Write-Host "   ✗ Ping Test: FAILED - Server did not respond"
-                        }
-                      } catch {
-                        Write-Host "   ✗ Ping Test: FAILED"
-                        Write-Host "   Error: $_"
-                        Write-Host "   This could indicate firewall or network issues"
-                      }
-                      Write-Host ""
-                      
-                      # Test WinRM port connectivity
-                      Write-Host "3. Testing WinRM Port Connectivity..."
-                      try {
-                        $tcpClient = New-Object System.Net.Sockets.TcpClient
-                        $result = $tcpClient.BeginConnect($server, 5985, $null, $null)
-                        $wait = $result.AsyncWaitHandle.WaitOne(3000, $false)
-                        if ($wait) {
-                          $tcpClient.EndConnect($result)
-                          Write-Host "   ✓ Port 5985 (WinRM HTTP): OPEN"
-                          $tcpClient.Close()
-                        } else {
-                          Write-Host "   ✗ Port 5985 (WinRM HTTP): CLOSED or TIMEOUT"
-                          Write-Host "   This could indicate firewall blocking WinRM"
-                        }
-                      } catch {
-                        Write-Host "   ✗ Port 5985 Test: FAILED"
-                        Write-Host "   Error: $_"
-                      }
-                      Write-Host ""
-                      
-                      # Test WinRM service
-                      Write-Host "4. Testing WinRM Service..."
-                      try {
-                        $winrmTest = Test-WSMan -ComputerName $server -ErrorAction Stop
-                        Write-Host "   ✓ WinRM Service: AVAILABLE"
-                        Write-Host "   Product: $($winrmTest.ProductVendor) $($winrmTest.ProductVersion)"
-                      } catch {
-                        Write-Host "   ✗ WinRM Service: NOT AVAILABLE or NOT CONFIGURED"
-                        Write-Host "   Error: $_"
-                        Write-Host "   This is likely the main issue - WinRM may not be enabled/configured"
-                      }
-                      Write-Host ""
-                      
-                      # Test PowerShell Session Creation with credentials
-                      Write-Host "5. Testing PowerShell Session Creation..."
-                      $password = ConvertTo-SecureString "$(winrmPassword)" -AsPlainText -Force
-                      $credential = New-Object System.Management.Automation.PSCredential($username, $password)
-                      
-                      try {
-                        $session = New-PSSession -ComputerName $server -Credential $credential -ErrorAction Stop
-                        Write-Host "   ✓ PowerShell Session: CREATED SUCCESSFULLY"
-                        Write-Host "   Session ID: $($session.Id)"
-                        Write-Host "   State: $($session.State)"
-                        
-                        # Test a simple command
-                        Write-Host "   Testing remote command execution..."
-                        $result = Invoke-Command -Session $session -ScriptBlock { 
-                          $env:COMPUTERNAME 
-                        } -ErrorAction Stop
-                        Write-Host "   ✓ Remote Command Execution: SUCCESS"
-                        Write-Host "   Remote Computer Name: $result"
-                        
-                        # Clean up session
-                        Remove-PSSession -Session $session
-                        Write-Host "   ✓ Session closed successfully"
-                      } catch {
-                        Write-Host "   ✗ PowerShell Session Creation: FAILED"
-                        Write-Host "   Error: $_"
-                        Write-Host "   Error Details:"
-                        Write-Host "   - This could indicate authentication failure (wrong credentials)"
-                        Write-Host "   - Or insufficient permissions for the service account"
-                        Write-Host "   - Or WinRM authentication not properly configured"
-                        
-                        # Try to get more details
-                        if ($_.Exception.Message) {
-                          Write-Host "   Exception Message: $($_.Exception.Message)"
-                        }
-                        if ($_.Exception.InnerException) {
-                          Write-Host "   Inner Exception: $($_.Exception.InnerException.Message)"
-                        }
-                      }
-                      Write-Host ""
-                      
-                      Write-Host "=========================================="
-                      Write-Host "Connectivity test completed"
-                      Write-Host "=========================================="
-
-                - task: WindowsMachineFileCopy@2
-                  displayName: Copy AutoDataRefresh.zip to target server
-                  inputs:
-                    SourcePath: '$(Pipeline.Workspace)\buildPipeline\AutoDataRefresh\Boots.MasterData.Application.AutoDataRefresh.zip'
-                    MachineNames: "$(selectedServerName)"
-                    AdminUserName: "$(winrmUserName)"
-                    AdminPassword: "$(winrmPassword)"
-                    Protocol: "WinRM"
-                    TargetPath: 'C:\Temp\AutoDataRefresh'
-
                 - task: PowerShellOnTargetMachines@3
-                  displayName: Extract and configure AutoDataRefresh on target server
+                  displayName: Copy and extract AutoDataRefresh on target server
                   inputs:
                     Machines: "$(selectedServerName)"
                     UserName: "$(winrmUserName)"
                     UserPassword: "$(winrmPassword)"
+                    CopyFilesToMachines: |
+                      $(Pipeline.Workspace)\buildPipeline\AutoDataRefresh\Boots.MasterData.Application.AutoDataRefresh.zip => C:\Temp\AutoDataRefresh\
                     InlineScript: |
                       $destination = "$(destinationFolder)"
                       $tempFolder = 'C:\Temp\AutoDataRefresh'
@@ -262,6 +134,7 @@ stages:
 
                       Write-Host "Extracting $zipPath to $destination"
                       Expand-Archive -LiteralPath $zipPath -DestinationPath $destination -Force
+                      Write-Host "Extraction completed successfully"
                     NewPsSessionOptionArguments: >
                       -SkipCACheck
                       -SkipCNCheck
