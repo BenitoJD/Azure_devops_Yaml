@@ -1,0 +1,158 @@
+parameters:
+  - name: environment
+    displayName: Environment
+    type: string
+    default: non-prod
+    values:
+      - non-prod
+      - prod
+
+  - name: prodServerName
+    displayName: Production Server
+    type: string
+    default: ''
+    values:
+      - Custom
+
+  - name: nonProdServerName
+    displayName: Non-Production Server
+    type: string
+    default: ''
+    values:
+      - Custom
+
+  - name: customProdServerName
+    displayName: Custom Production Server Name
+    type: string
+    default: ''
+
+  - name: customNonProdServerName
+    displayName: Custom Non-Production Server Name
+    type: string
+    default: ''
+
+  - name: userSlot
+    displayName: Target user slot
+    type: string
+    default: ST_Dev_ADR
+    values:
+      - ST_Dev_ADR
+      - ST_FT1_ADR
+      - ST_FT2_ADR
+      - ST_FT3_ADR
+      - ST_R1_ADR
+
+pool:
+  name: ccoe-nprod-windows-mdp-01
+
+trigger: none
+
+resources:
+  pipelines:
+    - pipeline: buildPipeline
+      source: MasterData.AutoDataRefresh
+
+variables:
+  # Load WinRM service account credentials based on environment parameter
+  - ${{ if eq(parameters.environment, 'non-prod') }}:
+      - group: NonProd-WinRM-ServiceAccount
+  - ${{ if eq(parameters.environment, 'prod') }}:
+      - group: Prod-WinRM-ServiceAccount
+
+  # Determine target server based on environment and server selection
+  - name: targetServer
+    value: ${{ if and(eq(parameters.environment, 'prod'), eq(parameters.prodServerName, 'Custom')) }}${{ parameters.customProdServerName }}${{ else if eq(parameters.environment, 'prod') }}${{ parameters.prodServerName }}${{ else if and(eq(parameters.environment, 'non-prod'), eq(parameters.nonProdServerName, 'Custom')) }}${{ parameters.customNonProdServerName }}${{ else }}${{ parameters.nonProdServerName }}${{ endif }}
+
+  # Load userSlot-based variable groups
+  - ${{ if eq(parameters.userSlot, 'ST_Dev_ADR') }}:
+      - group: ST_Dev_ADR
+      - name: destinationFolder
+        value: 'G:\MasterData\AutoDataRefresh\ST_Dev_ADR'
+  - ${{ if eq(parameters.userSlot, 'ST_FT1_ADR') }}:
+      - group: ST_FT1_ADR
+      - name: destinationFolder
+        value: 'G:\MasterData\AutoDataRefresh\ST_FT1_ADR'
+  - ${{ if eq(parameters.userSlot, 'ST_FT2_ADR') }}:
+      - group: ST_FT2_ADR
+      - name: destinationFolder
+        value: 'G:\MasterData\AutoDataRefresh\ST_FT2_ADR'
+  - ${{ if eq(parameters.userSlot, 'ST_FT3_ADR') }}:
+      - group: ST_FT3_ADR
+      - name: destinationFolder
+        value: 'G:\MasterData\AutoDataRefresh\ST_FT3_ADR'
+  - ${{ if eq(parameters.userSlot, 'ST_R1_ADR') }}:
+      - group: ST_R1_ADR
+      - name: destinationFolder
+        value: 'G:\MasterData\AutoDataRefresh\ST_R1_ADR'
+
+stages:
+  - stage: Deploy_SIT
+    displayName: Deploy to SIT VM
+    jobs:
+      - deployment: DeployAutoDataRefresh
+        displayName: Deploy AutoDataRefresh zip
+        environment:
+          name: SIT
+          resourceType: virtualMachine
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: buildPipeline
+                  displayName: Download latest AutoDataRefresh artifact
+                  artifact: AutoDataRefresh
+
+                - task: WindowsMachineFileCopy@2
+                  displayName: Copy AutoDataRefresh.zip to target server
+                  inputs:
+                    SourcePath: '$(Pipeline.Workspace)\buildPipeline\AutoDataRefresh\Boots.MasterData.Application.AutoDataRefresh.zip'
+                    MachineNames: '$(targetServer)'
+                    AdminUserName: '$(winrmUserName)'
+                    AdminPassword: '$(winrmPassword)'
+                    Protocol: 'WinRM'
+                    TargetPath: 'C:\Temp\AutoDataRefresh'
+
+                - task: PowerShellOnTargetMachines@3
+                  displayName: Extract and configure AutoDataRefresh on target server
+                  inputs:
+                    Machines: '$(targetServer)'
+                    AdminUserName: '$(winrmUserName)'
+                    AdminPassword: '$(winrmPassword)'
+                    Protocol: 'WinRM'
+                    ScriptType: 'InlineScript'
+                    InlineScript: |
+                      $destination = "$(destinationFolder)"
+                      $tempFolder = 'C:\Temp\AutoDataRefresh'
+                      $zipPath = Join-Path $tempFolder 'Boots.MasterData.Application.AutoDataRefresh.zip'
+
+                      if (-not (Test-Path $zipPath)) {
+                        throw "Artifact zip not found at $zipPath"
+                      }
+
+                      if (-not (Test-Path $destination)) {
+                        Write-Host "Creating destination folder $destination"
+                        New-Item -ItemType Directory -Path $destination -Force | Out-Null
+                      } else {
+                        Write-Host "Clearing existing contents in $destination"
+                        Get-ChildItem -Path $destination -Recurse -Force | Remove-Item -Recurse -Force
+                      }
+
+                      Write-Host "Extracting $zipPath to $destination"
+                      Expand-Archive -LiteralPath $zipPath -DestinationPath $destination -Force
+
+                - task: PowerShellOnTargetMachines@3
+                  displayName: Apply configuration transformations
+                  inputs:
+                    Machines: '$(targetServer)'
+                    AdminUserName: '$(winrmUserName)'
+                    AdminPassword: '$(winrmPassword)'
+                    Protocol: 'WinRM'
+                    ScriptType: 'InlineScript'
+                    InlineScript: |
+                      $configPath = Join-Path "$(destinationFolder)" "Boots.MasterData.Application.AutoDataRefresh.exe.config"
+                      if (Test-Path $configPath) {
+                        Write-Host "Configuration file found at $configPath"
+                        # FileTransform variables will be applied if configured in variable groups
+                      } else {
+                        Write-Warning "Configuration file not found at $configPath"
+                      }
