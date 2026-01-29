@@ -24,10 +24,9 @@ parameters:
     default: Custom
     values:
       - Custom
-      # Add your non-production server names below:
-      # - dev-server01.domain.com
-      # - test-server01.domain.com
-      # - qa-server01.domain.com
+      - GBRPMSMDFT01.Corp.Internal
+      - GBRPMSMDRT01.Corp.Internal
+      - GBRPMSMDST03.Corp.Internal
 
   - name: customProdServerName
     displayName: Custom Production Server Name
@@ -69,7 +68,7 @@ variables:
 
   # Determine target server based on environment and server selection
   - name: targetServer
-    value: ${{ if and(eq(parameters.environment, 'prod'), eq(parameters.prodServerName, 'Custom')) }}${{ parameters.customProdServerName }}${{ else if eq(parameters.environment, 'prod') }}${{ parameters.prodServerName }}${{ else if and(eq(parameters.environment, 'non-prod'), eq(parameters.nonProdServerName, 'Custom')) }}${{ parameters.customNonProdServerName }}${{ else }}${{ parameters.nonProdServerName }}${{ endif }}
+    value: ${{ if and(eq(parameters.environment, 'prod'), eq(parameters.prodServerName, 'Custom')) }}{{ parameters.customProdServerName }}{{ elseif eq(parameters.environment, 'prod') }}{{ parameters.prodServerName }}{{ elseif and(eq(parameters.environment, 'non-prod'), eq(parameters.nonProdServerName, 'Custom')) }}{{ parameters.customNonProdServerName }}{{ else }}{{ parameters.nonProdServerName }}{{ endif }}
 
   # Load userSlot-based variable groups
   - ${{ if eq(parameters.userSlot, 'ST_Dev_ADR') }}:
