@@ -108,15 +108,18 @@ stages:
                       $targetServer = ""
                       
                       if ($environment -eq "prod") {
-                        $targetServer = "$(prodServerName)"
+                        $prodServer = "$(prodServerName)"
+                        $targetServer = $prodServer
                       } else {
-                        $targetServer = "$(nonProdServerName)"
+                        $nonProdServer = "$(nonProdServerName)"
+                        $targetServer = $nonProdServer
                       }
                       
                       if ([string]::IsNullOrWhiteSpace($targetServer)) {
                         throw "Server name cannot be empty. Please select a server from the dropdown."
                       }
                       
+                      Write-Host "Environment: $environment"
                       Write-Host "Setting targetServer variable to: $targetServer"
                       Write-Host "##vso[task.setvariable variable=targetServer]$targetServer"
 
