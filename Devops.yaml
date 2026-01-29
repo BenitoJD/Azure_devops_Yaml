@@ -107,40 +107,11 @@ stages:
                   displayName: Download latest AutoDataRefresh artifact
                   artifact: AutoDataRefresh
 
-                - task: PowerShell@2
-                  displayName: Set target server
-                  inputs:
-                    targetType: inline
-                    script: |
-                      $targetServer = "$(selectedServerName)"
-
-                      if ([string]::IsNullOrWhiteSpace($targetServer)) {
-                        throw "Server name cannot be empty. Please select a server from the dropdown."
-                      }
-
-                      Write-Host "Setting targetServer variable to: $targetServer"
-                      Write-Host "##vso[task.setvariable variable=targetServer]$targetServer"
-
-                - task: PowerShell@2
-                  displayName: Validate server selection
-                  inputs:
-                    targetType: inline
-                    script: |
-                      $environment = "${{ parameters.environment }}"
-                      $selectedServer = "$(targetServer)"
-
-                      Write-Host "=========================================="
-                      Write-Host "Environment: $environment"
-                      Write-Host "Selected Server: $selectedServer"
-                      Write-Host "=========================================="
-                      Write-Host ""
-                      Write-Host "Proceeding with deployment to $selectedServer..."
-
                 - task: WindowsMachineFileCopy@2
                   displayName: Copy AutoDataRefresh.zip to target server
                   inputs:
                     SourcePath: '$(Pipeline.Workspace)\buildPipeline\AutoDataRefresh\Boots.MasterData.Application.AutoDataRefresh.zip'
-                    MachineNames: "$(targetServer)"
+                    MachineNames: "$(selectedServerName)"
                     AdminUserName: "$(winrmUserName)"
                     AdminPassword: "$(winrmPassword)"
                     Protocol: "WinRM"
@@ -149,7 +120,7 @@ stages:
                 - task: PowerShellOnTargetMachines@3
                   displayName: Extract and configure AutoDataRefresh on target server
                   inputs:
-                    Machines: "$(targetServer)"
+                    Machines: "$(selectedServerName)"
                     AdminUserName: "$(winrmUserName)"
                     AdminPassword: "$(winrmPassword)"
                     Protocol: "WinRM"
@@ -177,7 +148,7 @@ stages:
                 - task: PowerShellOnTargetMachines@3
                   displayName: Apply configuration transformations
                   inputs:
-                    Machines: "$(targetServer)"
+                    Machines: "$(selectedServerName)"
                     AdminUserName: "$(winrmUserName)"
                     AdminPassword: "$(winrmPassword)"
                     Protocol: "WinRM"
