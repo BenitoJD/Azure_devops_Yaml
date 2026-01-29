@@ -10,33 +10,20 @@ parameters:
   - name: prodServerName
     displayName: Production Server
     type: string
-    default: Custom
+    default: GBRPMSMDFT01.Corp.Internal
     values:
-      - Custom
-      # Add your production server names below:
-      # - prod-server01.domain.com
-      # - prod-server02.domain.com
-      # - prod-server03.domain.com
-
-  - name: nonProdServerName
-    displayName: Non-Production Server
-    type: string
-    default: Custom
-    values:
-      - Custom
       - GBRPMSMDFT01.Corp.Internal
       - GBRPMSMDRT01.Corp.Internal
       - GBRPMSMDST03.Corp.Internal
 
-  - name: customProdServerName
-    displayName: Custom Production Server Name
+  - name: nonProdServerName
+    displayName: Non-Production Server
     type: string
-    default: ''
-
-  - name: customNonProdServerName
-    displayName: Custom Non-Production Server Name
-    type: string
-    default: ''
+    default: GBRPMSMDFT01.Corp.Internal
+    values:
+      - GBRPMSMDFT01.Corp.Internal
+      - GBRPMSMDRT01.Corp.Internal
+      - GBRPMSMDST03.Corp.Internal
 
   - name: userSlot
     displayName: Target user slot
@@ -121,21 +108,13 @@ stages:
                       $targetServer = ""
                       
                       if ($environment -eq "prod") {
-                        if ("$(prodServerName)" -eq "Custom") {
-                          $targetServer = "$(customProdServerName)"
-                        } else {
-                          $targetServer = "$(prodServerName)"
-                        }
+                        $targetServer = "$(prodServerName)"
                       } else {
-                        if ("$(nonProdServerName)" -eq "Custom") {
-                          $targetServer = "$(customNonProdServerName)"
-                        } else {
-                          $targetServer = "$(nonProdServerName)"
-                        }
+                        $targetServer = "$(nonProdServerName)"
                       }
                       
                       if ([string]::IsNullOrWhiteSpace($targetServer)) {
-                        throw "Server name cannot be empty. Please select a server from the dropdown or enter a custom server name."
+                        throw "Server name cannot be empty. Please select a server from the dropdown."
                       }
                       
                       Write-Host "Setting targetServer variable to: $targetServer"
