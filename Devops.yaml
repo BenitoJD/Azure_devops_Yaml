@@ -241,10 +241,8 @@ stages:
                   displayName: Extract and configure AutoDataRefresh on target server
                   inputs:
                     Machines: "$(selectedServerName)"
-                    AdminUserName: "$(winrmUserName)"
-                    AdminPassword: "$(winrmPassword)"
-                    Protocol: "WinRM"
-                    ScriptType: "InlineScript"
+                    UserName: "$(winrmUserName)"
+                    UserPassword: "$(winrmPassword)"
                     InlineScript: |
                       $destination = "$(destinationFolder)"
                       $tempFolder = 'C:\Temp\AutoDataRefresh'
@@ -264,15 +262,20 @@ stages:
 
                       Write-Host "Extracting $zipPath to $destination"
                       Expand-Archive -LiteralPath $zipPath -DestinationPath $destination -Force
+                    NewPsSessionOptionArguments: >
+                      -SkipCACheck
+                      -SkipCNCheck
+                      -SkipRevocationCheck
+                      -IdleTimeout 7200000
+                      -OperationTimeout 0
+                      -OutputBufferingMode Block
 
                 - task: PowerShellOnTargetMachines@3
                   displayName: Apply configuration transformations
                   inputs:
                     Machines: "$(selectedServerName)"
-                    AdminUserName: "$(winrmUserName)"
-                    AdminPassword: "$(winrmPassword)"
-                    Protocol: "WinRM"
-                    ScriptType: "InlineScript"
+                    UserName: "$(winrmUserName)"
+                    UserPassword: "$(winrmPassword)"
                     InlineScript: |
                       $configPath = Join-Path "$(destinationFolder)" "Boots.MasterData.Application.AutoDataRefresh.exe.config"
                       if (Test-Path $configPath) {
@@ -281,3 +284,10 @@ stages:
                       } else {
                         Write-Warning "Configuration file not found at $configPath"
                       }
+                    NewPsSessionOptionArguments: >
+                      -SkipCACheck
+                      -SkipCNCheck
+                      -SkipRevocationCheck
+                      -IdleTimeout 7200000
+                      -OperationTimeout 0
+                      -OutputBufferingMode Block
