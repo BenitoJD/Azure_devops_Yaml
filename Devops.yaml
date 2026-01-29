@@ -183,6 +183,46 @@ stages:
                       }
                       Write-Host ""
                       
+                      # Test PowerShell Session Creation with credentials
+                      Write-Host "5. Testing PowerShell Session Creation..."
+                      $password = ConvertTo-SecureString "$(winrmPassword)" -AsPlainText -Force
+                      $credential = New-Object System.Management.Automation.PSCredential($username, $password)
+                      
+                      try {
+                        $session = New-PSSession -ComputerName $server -Credential $credential -ErrorAction Stop
+                        Write-Host "   ✓ PowerShell Session: CREATED SUCCESSFULLY"
+                        Write-Host "   Session ID: $($session.Id)"
+                        Write-Host "   State: $($session.State)"
+                        
+                        # Test a simple command
+                        Write-Host "   Testing remote command execution..."
+                        $result = Invoke-Command -Session $session -ScriptBlock { 
+                          $env:COMPUTERNAME 
+                        } -ErrorAction Stop
+                        Write-Host "   ✓ Remote Command Execution: SUCCESS"
+                        Write-Host "   Remote Computer Name: $result"
+                        
+                        # Clean up session
+                        Remove-PSSession -Session $session
+                        Write-Host "   ✓ Session closed successfully"
+                      } catch {
+                        Write-Host "   ✗ PowerShell Session Creation: FAILED"
+                        Write-Host "   Error: $_"
+                        Write-Host "   Error Details:"
+                        Write-Host "   - This could indicate authentication failure (wrong credentials)"
+                        Write-Host "   - Or insufficient permissions for the service account"
+                        Write-Host "   - Or WinRM authentication not properly configured"
+                        
+                        # Try to get more details
+                        if ($_.Exception.Message) {
+                          Write-Host "   Exception Message: $($_.Exception.Message)"
+                        }
+                        if ($_.Exception.InnerException) {
+                          Write-Host "   Inner Exception: $($_.Exception.InnerException.Message)"
+                        }
+                      }
+                      Write-Host ""
+                      
                       Write-Host "=========================================="
                       Write-Host "Connectivity test completed"
                       Write-Host "=========================================="
