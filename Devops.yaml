@@ -66,20 +66,6 @@ variables:
   - ${{ if eq(parameters.environment, 'prod') }}:
       - group: Prod-WinRM-ServiceAccount
 
-  # Determine target server based on environment and server selection
-  - ${{ if and(eq(parameters.environment, 'prod'), eq(parameters.prodServerName, 'Custom')) }}:
-      - name: targetServer
-        value: ${{ parameters.customProdServerName }}
-  - ${{ if and(eq(parameters.environment, 'prod'), ne(parameters.prodServerName, 'Custom')) }}:
-      - name: targetServer
-        value: ${{ parameters.prodServerName }}
-  - ${{ if and(eq(parameters.environment, 'non-prod'), eq(parameters.nonProdServerName, 'Custom')) }}:
-      - name: targetServer
-        value: ${{ parameters.customNonProdServerName }}
-  - ${{ if and(eq(parameters.environment, 'non-prod'), ne(parameters.nonProdServerName, 'Custom')) }}:
-      - name: targetServer
-        value: ${{ parameters.nonProdServerName }}
-
   # Load userSlot-based variable groups
   - ${{ if eq(parameters.userSlot, 'ST_Dev_ADR') }}:
       - group: ST_Dev_ADR
@@ -120,16 +106,41 @@ stages:
                   artifact: AutoDataRefresh
 
                 - task: PowerShell@2
+                  displayName: Determine target server
+                  inputs:
+                    targetType: inline
+                    script: |
+                      $environment = "$(environment)"
+                      $targetServer = ""
+                      
+                      if ($environment -eq "prod") {
+                        if ("$(prodServerName)" -eq "Custom") {
+                          $targetServer = "$(customProdServerName)"
+                        } else {
+                          $targetServer = "$(prodServerName)"
+                        }
+                      } else {
+                        if ("$(nonProdServerName)" -eq "Custom") {
+                          $targetServer = "$(customNonProdServerName)"
+                        } else {
+                          $targetServer = "$(nonProdServerName)"
+                        }
+                      }
+                      
+                      if ([string]::IsNullOrWhiteSpace($targetServer)) {
+                        throw "Server name cannot be empty. Please select a server from the dropdown or enter a custom server name."
+                      }
+                      
+                      Write-Host "Setting targetServer variable to: $targetServer"
+                      Write-Host "##vso[task.setvariable variable=targetServer]$targetServer"
+
+                - task: PowerShell@2
                   displayName: Validate server selection
                   inputs:
                     targetType: inline
                     script: |
                       $environment = "$(environment)"
                       $selectedServer = "$(targetServer)"
-                      
-                      if ([string]::IsNullOrWhiteSpace($selectedServer)) {
-                        throw "Server name cannot be empty. Please select a server from the dropdown or enter a custom server name."
-                      }
                       
                       Write-Host "=========================================="
                       Write-Host "Environment: $environment"
