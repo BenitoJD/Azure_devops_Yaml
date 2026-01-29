@@ -69,22 +69,29 @@ variables:
   # Load userSlot-based variable groups
   - ${{ if eq(parameters.userSlot, 'ST_Dev_ADR') }}:
       - group: ST_Dev_ADR
+  - ${{ if eq(parameters.userSlot, 'ST_FT1_ADR') }}:
+      - group: ST_FT1_ADR
+  - ${{ if eq(parameters.userSlot, 'ST_FT2_ADR') }}:
+      - group: ST_FT2_ADR
+  - ${{ if eq(parameters.userSlot, 'ST_FT3_ADR') }}:
+      - group: ST_FT3_ADR
+  - ${{ if eq(parameters.userSlot, 'ST_R1_ADR') }}:
+      - group: ST_R1_ADR
+
+  # Set destination folder based on userSlot
+  - ${{ if eq(parameters.userSlot, 'ST_Dev_ADR') }}:
       - name: destinationFolder
         value: 'G:\MasterData\AutoDataRefresh\ST_Dev_ADR'
   - ${{ if eq(parameters.userSlot, 'ST_FT1_ADR') }}:
-      - group: ST_FT1_ADR
       - name: destinationFolder
         value: 'G:\MasterData\AutoDataRefresh\ST_FT1_ADR'
   - ${{ if eq(parameters.userSlot, 'ST_FT2_ADR') }}:
-      - group: ST_FT2_ADR
       - name: destinationFolder
         value: 'G:\MasterData\AutoDataRefresh\ST_FT2_ADR'
   - ${{ if eq(parameters.userSlot, 'ST_FT3_ADR') }}:
-      - group: ST_FT3_ADR
       - name: destinationFolder
         value: 'G:\MasterData\AutoDataRefresh\ST_FT3_ADR'
   - ${{ if eq(parameters.userSlot, 'ST_R1_ADR') }}:
-      - group: ST_R1_ADR
       - name: destinationFolder
         value: 'G:\MasterData\AutoDataRefresh\ST_R1_ADR'
 
