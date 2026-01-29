@@ -67,8 +67,18 @@ variables:
       - group: Prod-WinRM-ServiceAccount
 
   # Determine target server based on environment and server selection
-  - name: targetServer
-    value: ${{ if and(eq(parameters.environment, 'prod'), eq(parameters.prodServerName, 'Custom')) }}{{ parameters.customProdServerName }}{{ elseif eq(parameters.environment, 'prod') }}{{ parameters.prodServerName }}{{ elseif and(eq(parameters.environment, 'non-prod'), eq(parameters.nonProdServerName, 'Custom')) }}{{ parameters.customNonProdServerName }}{{ else }}{{ parameters.nonProdServerName }}{{ endif }}
+  - ${{ if and(eq(parameters.environment, 'prod'), eq(parameters.prodServerName, 'Custom')) }}:
+      - name: targetServer
+        value: ${{ parameters.customProdServerName }}
+  - ${{ if and(eq(parameters.environment, 'prod'), ne(parameters.prodServerName, 'Custom')) }}:
+      - name: targetServer
+        value: ${{ parameters.prodServerName }}
+  - ${{ if and(eq(parameters.environment, 'non-prod'), eq(parameters.nonProdServerName, 'Custom')) }}:
+      - name: targetServer
+        value: ${{ parameters.customNonProdServerName }}
+  - ${{ if and(eq(parameters.environment, 'non-prod'), ne(parameters.nonProdServerName, 'Custom')) }}:
+      - name: targetServer
+        value: ${{ parameters.nonProdServerName }}
 
   # Load userSlot-based variable groups
   - ${{ if eq(parameters.userSlot, 'ST_Dev_ADR') }}:
