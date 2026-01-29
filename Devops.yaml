@@ -103,22 +103,37 @@ stages:
             displayName: Download latest AutoDataRefresh artifact
             artifact: AutoDataRefresh
 
+          - task: WindowsMachineFileCopy@2
+            displayName: Copy AutoDataRefresh.zip to target server
+            inputs:
+              SourcePath: '$(Pipeline.Workspace)\buildPipeline\AutoDataRefresh\Boots.MasterData.Application.AutoDataRefresh.zip'
+              MachineNames: "$(selectedServerName)"
+              AdminUserName: "$(winrmUserName)"
+              AdminPassword: "$(winrmPassword)"
+              TargetPath: 'C:\Temp\AutoDataRefresh'
+              Protocol: 'WinRM'
+
           - task: PowerShellOnTargetMachines@3
-            displayName: Copy and extract AutoDataRefresh on target server
+            displayName: Extract AutoDataRefresh on target server
             inputs:
               Machines: "$(selectedServerName)"
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
-              CopyFilesToMachines: |
-                $(Pipeline.Workspace)\buildPipeline\AutoDataRefresh\Boots.MasterData.Application.AutoDataRefresh.zip => C:\Temp\AutoDataRefresh\
               InlineScript: |
                 $destination = "$(destinationFolder)"
                 $tempFolder = 'C:\Temp\AutoDataRefresh'
                 $zipPath = Join-Path $tempFolder 'Boots.MasterData.Application.AutoDataRefresh.zip'
 
+                Write-Host "Checking for zip file at: $zipPath"
                 if (-not (Test-Path $zipPath)) {
+                  Write-Host "ERROR: Zip file not found at $zipPath"
+                  if (Test-Path $tempFolder) {
+                    Write-Host "Temp folder contents:"
+                    Get-ChildItem -Path $tempFolder -Recurse | ForEach-Object { Write-Host "  - $($_.FullName)" }
+                  }
                   throw "Artifact zip not found at $zipPath"
                 }
+                Write-Host "Zip file found successfully at $zipPath"
 
                 if (-not (Test-Path $destination)) {
                   Write-Host "Creating destination folder $destination"
