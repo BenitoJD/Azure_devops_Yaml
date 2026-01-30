@@ -103,6 +103,29 @@ stages:
             displayName: Download latest AutoDataRefresh artifact
             artifact: AutoDataRefresh
 
+          - task: ExtractFiles@1
+            displayName: Extract AutoDataRefresh artifact
+            inputs:
+              archiveFilePatterns: '$(Pipeline.Workspace)\buildPipeline\AutoDataRefresh\Boots.MasterData.Application.AutoDataRefresh.zip'
+              destinationFolder: '$(Pipeline.Workspace)\temp_managed'
+              cleanDestinationFolder: true
+
+          - task: FileTransform@1
+            displayName: Transform configuration files
+            inputs:
+              folderPath: '$(Pipeline.Workspace)\temp_managed'
+              fileType: "xml"
+              targetFiles: "**/Boots.MasterData.Application.AutoDataRefresh.exe.config"
+
+          - task: ArchiveFiles@2
+            displayName: Re-zip transformed artifact
+            inputs:
+              rootFolderOrFile: '$(Pipeline.Workspace)\temp_managed'
+              includeRootFolder: false
+              archiveType: "zip"
+              archiveFile: '$(Pipeline.Workspace)\buildPipeline\AutoDataRefresh\Boots.MasterData.Application.AutoDataRefresh.zip'
+              replaceExistingArchive: true
+
           - task: WindowsMachineFileCopy@2
             displayName: Copy AutoDataRefresh.zip to target server
             inputs:
@@ -111,7 +134,7 @@ stages:
               AdminUserName: "$(winrmUserName)"
               AdminPassword: "$(winrmPassword)"
               TargetPath: 'C:\Temp\AutoDataRefresh'
-              Protocol: 'WinRM'
+              Protocol: "WinRM"
 
           - task: PowerShellOnTargetMachines@3
             displayName: Extract AutoDataRefresh on target server
@@ -146,28 +169,6 @@ stages:
                 Write-Host "Extracting $zipPath to $destination"
                 Expand-Archive -LiteralPath $zipPath -DestinationPath $destination -Force
                 Write-Host "Extraction completed successfully"
-              NewPsSessionOptionArguments: >
-                -SkipCACheck
-                -SkipCNCheck
-                -SkipRevocationCheck
-                -IdleTimeout 7200000
-                -OperationTimeout 0
-                -OutputBufferingMode Block
-
-          - task: PowerShellOnTargetMachines@3
-            displayName: Apply configuration transformations
-            inputs:
-              Machines: "$(selectedServerName)"
-              UserName: "$(winrmUserName)"
-              UserPassword: "$(winrmPassword)"
-              InlineScript: |
-                $configPath = Join-Path "$(destinationFolder)" "Boots.MasterData.Application.AutoDataRefresh.exe.config"
-                if (Test-Path $configPath) {
-                  Write-Host "Configuration file found at $configPath"
-                  # FileTransform variables will be applied if configured in variable groups
-                } else {
-                  Write-Warning "Configuration file not found at $configPath"
-                }
               NewPsSessionOptionArguments: >
                 -SkipCACheck
                 -SkipCNCheck
