@@ -55,17 +55,27 @@ variables:
   - ${{ if eq(parameters.adrSlot, 'Production') }}:
       - group: Production_ADR
 
-  # Map ADR slot to target servers (from vg-shared-servers) and destination folder
+  # Map ADR slot to target servers (from vg-shared-servers)
   # Dev / FT* / R1 / QA / Demo all use the Development app server (RT01)
-  - ${{ if or(
-        eq(parameters.adrSlot, 'Dev'),
-        eq(parameters.adrSlot, 'FT1'),
-        eq(parameters.adrSlot, 'FT2'),
-        eq(parameters.adrSlot, 'FT3'),
-        eq(parameters.adrSlot, 'R1'),
-        eq(parameters.adrSlot, 'QA'),
-        eq(parameters.adrSlot, 'Demo')
-      ) }}:
+  - ${{ if eq(parameters.adrSlot, 'Dev') }}:
+      - name: selectedServerName
+        value: '$(Development-app-server)'
+  - ${{ if eq(parameters.adrSlot, 'FT1') }}:
+      - name: selectedServerName
+        value: '$(Development-app-server)'
+  - ${{ if eq(parameters.adrSlot, 'FT2') }}:
+      - name: selectedServerName
+        value: '$(Development-app-server)'
+  - ${{ if eq(parameters.adrSlot, 'FT3') }}:
+      - name: selectedServerName
+        value: '$(Development-app-server)'
+  - ${{ if eq(parameters.adrSlot, 'R1') }}:
+      - name: selectedServerName
+        value: '$(Development-app-server)'
+  - ${{ if eq(parameters.adrSlot, 'QA') }}:
+      - name: selectedServerName
+        value: '$(Development-app-server)'
+  - ${{ if eq(parameters.adrSlot, 'Demo') }}:
       - name: selectedServerName
         value: '$(Development-app-server)'
   - ${{ if eq(parameters.adrSlot, 'SIT') }}:
