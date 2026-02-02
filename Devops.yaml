@@ -1,40 +1,19 @@
 parameters:
-  - name: environment
-    displayName: Environment
+  - name: adrSlot
+    displayName: ADR Deployment Slot
     type: string
-    default: non-prod
+    default: Dev
     values:
-      - non-prod
-      - prod
-
-  - name: prodServerName
-    displayName: Production Server
-    type: string
-    default: GBRPMSMDFT01.Corp.Internal
-    values:
-      - GBRPMSMDFT01.Corp.Internal
-      - GBRPMSMDRT01.Corp.Internal
-      - GBRPMSMDST03.Corp.Internal
-
-  - name: nonProdServerName
-    displayName: Non-Production Server
-    type: string
-    default: GBRPMSMDFT01.Corp.Internal
-    values:
-      - GBRPMSMDFT01.Corp.Internal
-      - GBRPMSMDRT01.Corp.Internal
-      - GBRPMSMDST03.Corp.Internal
-
-  - name: userSlot
-    displayName: Target user slot
-    type: string
-    default: ST_Dev_ADR
-    values:
-      - ST_Dev_ADR
-      - ST_FT1_ADR
-      - ST_FT2_ADR
-      - ST_FT3_ADR
-      - ST_R1_ADR
+      - Dev
+      - FT1
+      - FT2
+      - FT3
+      - R1
+      - QA
+      - Demo
+      - SIT
+      - Pre-Prod
+      - Production
 
 pool:
   name: ccoe-nprod-windows-mdp-01
@@ -47,48 +26,89 @@ resources:
       source: MasterData.AutoDataRefresh
 
 variables:
-  # Set server name based on environment parameter
-  - ${{ if eq(parameters.environment, 'prod') }}:
-      - name: selectedServerName
-        value: ${{ parameters.prodServerName }}
-  - ${{ if eq(parameters.environment, 'non-prod') }}:
-      - name: selectedServerName
-        value: ${{ parameters.nonProdServerName }}
+  # Shared server catalog for ADR
+  - group: vg-shared-servers
 
-  # Load WinRM service account credentials based on environment parameter
-  - ${{ if eq(parameters.environment, 'non-prod') }}:
+  # Load WinRM service account credentials based on ADR slot
+  - ${{ if ne(parameters.adrSlot, 'Production') }}:
       - group: NonProd-WinRM-ServiceAccount
-  - ${{ if eq(parameters.environment, 'prod') }}:
+  - ${{ if eq(parameters.adrSlot, 'Production') }}:
       - group: Prod-WinRM-ServiceAccount
 
-  # Load userSlot-based variable groups
-  - ${{ if eq(parameters.userSlot, 'ST_Dev_ADR') }}:
-      - group: ST_Dev_ADR
-  - ${{ if eq(parameters.userSlot, 'ST_FT1_ADR') }}:
-      - group: ST_FT1_ADR
-  - ${{ if eq(parameters.userSlot, 'ST_FT2_ADR') }}:
-      - group: ST_FT2_ADR
-  - ${{ if eq(parameters.userSlot, 'ST_FT3_ADR') }}:
-      - group: ST_FT3_ADR
-  - ${{ if eq(parameters.userSlot, 'ST_R1_ADR') }}:
-      - group: ST_R1_ADR
+  # Load slot-based variable groups for ADR slots
+  - ${{ if eq(parameters.adrSlot, 'Dev') }}:
+      - group: Development_ADR
+  - ${{ if eq(parameters.adrSlot, 'FT1') }}:
+      - group: FT1_ADR
+  - ${{ if eq(parameters.adrSlot, 'FT2') }}:
+      - group: FT2_ADR
+  - ${{ if eq(parameters.adrSlot, 'FT3') }}:
+      - group: FT3_ADR
+  - ${{ if eq(parameters.adrSlot, 'R1') }}:
+      - group: R1_ADR
+  - ${{ if eq(parameters.adrSlot, 'Demo') }}:
+      - group: Demo_ADR
+  - ${{ if eq(parameters.adrSlot, 'SIT') }}:
+      - group: SIT_ADR
+  - ${{ if eq(parameters.adrSlot, 'Pre-Prod') }}:
+      - group: Pre-Prod_ADR
+  - ${{ if eq(parameters.adrSlot, 'Production') }}:
+      - group: Production_ADR
 
-  # Set destination folder based on userSlot
-  - ${{ if eq(parameters.userSlot, 'ST_Dev_ADR') }}:
+  # Map ADR slot to target servers (from vg-shared-servers) and destination folder
+  # Dev / FT* / R1 / QA / Demo all use the Development app server (RT01)
+  - ${{ if or(
+        eq(parameters.adrSlot, 'Dev'),
+        eq(parameters.adrSlot, 'FT1'),
+        eq(parameters.adrSlot, 'FT2'),
+        eq(parameters.adrSlot, 'FT3'),
+        eq(parameters.adrSlot, 'R1'),
+        eq(parameters.adrSlot, 'QA'),
+        eq(parameters.adrSlot, 'Demo')
+      ) }}:
+      - name: selectedServerName
+        value: '$(Development-app-server)'
+  - ${{ if eq(parameters.adrSlot, 'SIT') }}:
+      - name: selectedServerName
+        value: '$(SIT-app-server)'
+  - ${{ if eq(parameters.adrSlot, 'Pre-Prod') }}:
+      - name: selectedServerName
+        value: '$(Pre-prod-app1-server),$(Pre-prod-app2-server)'
+  - ${{ if eq(parameters.adrSlot, 'Production') }}:
+      - name: selectedServerName
+        value: '$(Production-app1-Server),$(Production-app2-Server)'
+
+  # Destination folder per ADR slot (D:\AutoDataRefreshMDUpgrade tree)
+  - ${{ if eq(parameters.adrSlot, 'Dev') }}:
       - name: destinationFolder
-        value: 'G:\MasterData\AutoDataRefresh\ST_Dev_ADR'
-  - ${{ if eq(parameters.userSlot, 'ST_FT1_ADR') }}:
+        value: 'D:\AutoDataRefreshMDUpgrade\ST_Dev_ADR'
+  - ${{ if eq(parameters.adrSlot, 'FT1') }}:
       - name: destinationFolder
-        value: 'G:\MasterData\AutoDataRefresh\ST_FT1_ADR'
-  - ${{ if eq(parameters.userSlot, 'ST_FT2_ADR') }}:
+        value: 'D:\AutoDataRefreshMDUpgrade\ST_FT1_ADR'
+  - ${{ if eq(parameters.adrSlot, 'FT2') }}:
       - name: destinationFolder
-        value: 'G:\MasterData\AutoDataRefresh\ST_FT2_ADR'
-  - ${{ if eq(parameters.userSlot, 'ST_FT3_ADR') }}:
+        value: 'D:\AutoDataRefreshMDUpgrade\ST_FT2_ADR'
+  - ${{ if eq(parameters.adrSlot, 'FT3') }}:
       - name: destinationFolder
-        value: 'G:\MasterData\AutoDataRefresh\ST_FT3_ADR'
-  - ${{ if eq(parameters.userSlot, 'ST_R1_ADR') }}:
+        value: 'D:\AutoDataRefreshMDUpgrade\ST_FT3_ADR'
+  - ${{ if eq(parameters.adrSlot, 'R1') }}:
       - name: destinationFolder
-        value: 'G:\MasterData\AutoDataRefresh\ST_R1_ADR'
+        value: 'D:\AutoDataRefreshMDUpgrade\ST_R1_ADR'
+  - ${{ if eq(parameters.adrSlot, 'QA') }}:
+      - name: destinationFolder
+        value: 'D:\AutoDataRefreshMDUpgrade\ST_QA_ADR'
+  - ${{ if eq(parameters.adrSlot, 'Demo') }}:
+      - name: destinationFolder
+        value: 'D:\AutoDataRefreshMDUpgrade\ST_Demo_ADR'
+  - ${{ if eq(parameters.adrSlot, 'SIT') }}:
+      - name: destinationFolder
+        value: 'D:\AutoDataRefreshMDUpgrade\SIT'
+  - ${{ if eq(parameters.adrSlot, 'Pre-Prod') }}:
+      - name: destinationFolder
+        value: 'D:\AutoDataRefreshMDUpgrade\PreProd'
+  - ${{ if eq(parameters.adrSlot, 'Production') }}:
+      - name: destinationFolder
+        value: 'D:\AutoDataRefreshMDUpgrade\Prod'
 
 stages:
   - stage: Deploy_SIT
