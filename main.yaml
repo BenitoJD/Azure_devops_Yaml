@@ -304,7 +304,8 @@ stages:
                   } catch {}
                   
                   try {
-                    & "C:\Windows\System32\inetsrv\appcmd.exe" add site /name:$siteName /physicalPath:$physicalPath /bindings:http/*:$port:
+                    $bindingString = "http/*:${port}:"
+                    & "C:\Windows\System32\inetsrv\appcmd.exe" add site /name:$siteName /physicalPath:$physicalPath /bindings:$bindingString
                     & "C:\Windows\System32\inetsrv\appcmd.exe" set app "$siteName/" /applicationPool:$appPoolName
                   } catch {}
                 } else {
@@ -319,7 +320,7 @@ stages:
                   if ($site) {
                     Set-ItemProperty "IIS:\Sites\$siteName" -Name applicationPool -Value $appPoolName
                     Set-ItemProperty "IIS:\Sites\$siteName" -Name physicalPath -Value $physicalPath
-                    $desired = "*:$port:"
+                    $desired = "*:${port}:"
                     $httpBindings = Get-WebBinding -Name $siteName -Protocol "http" -ErrorAction SilentlyContinue
                     $matching = @()
                     if ($httpBindings) { 
