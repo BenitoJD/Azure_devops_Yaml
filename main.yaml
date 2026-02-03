@@ -124,98 +124,42 @@ stages:
                 Write-Host "Web Slot: $(webSlot)"
                 Write-Host "Target Servers: $(selectedWebServers)"
 
-  - stage: AcquireArtifacts
-    displayName: 'Acquire Artifacts'
+  - stage: AcquireAndTransform
+    displayName: 'Acquire and Transform Artifacts'
     dependsOn: Initialize
     condition: succeeded()
     jobs:
-      - job: Acquire
-        displayName: 'Download and Prepare Artifacts'
+      - job: PrepareArtifacts
+        displayName: 'Download, Extract and Transform Artifacts'
         steps:
           - checkout: none
           - download: 'MasterData.Main'
             displayName: 'Download artifacts'
             artifact: 'drop'
-          - task: PowerShell@2
-            displayName: 'Verify artifact download'
-            inputs:
-              targetType: 'inline'
-              script: |
-                $artifactPath = "$(Pipeline.Workspace)/MasterData.Main/drop"
-                Write-Host "Checking artifact path: $artifactPath"
-                if (Test-Path $artifactPath) {
-                  Write-Host "Artifact directory exists. Contents:"
-                  Get-ChildItem -Path $artifactPath -Recurse | Select-Object FullName, Length | Format-Table -AutoSize
-                  $zipFiles = Get-ChildItem -Path $artifactPath -Filter "*.zip" -Recurse
-                  Write-Host "Found $($zipFiles.Count) zip file(s):"
-                  $zipFiles | ForEach-Object { Write-Host "  - $($_.FullName)" }
-                } else {
-                  Write-Host "ERROR: Artifact directory does not exist!"
-                }
           - task: ExtractFiles@1
             displayName: 'Extract artifacts'
             inputs:
-              archiveFilePatterns: '$(Pipeline.Workspace)/MasterData.Main/drop/*.zip'
-              destinationFolder: '$(Pipeline.Workspace)/temp_managed'
+              archiveFilePatterns: '$(Pipeline.Workspace)\MasterData.Main\drop\*.zip'
+              destinationFolder: '$(Pipeline.Workspace)\temp_managed'
               cleanDestinationFolder: true
-              overwriteExistingFiles: true
-          - task: PowerShell@2
-            displayName: 'Verify extraction'
-            inputs:
-              targetType: 'inline'
-              script: |
-                $extractPath = "$(Pipeline.Workspace)/temp_managed"
-                Write-Host "Verifying extraction in: $extractPath"
-                if (Test-Path $extractPath) {
-                  Write-Host "Extraction directory exists. Contents:"
-                  Get-ChildItem -Path $extractPath -Recurse | Select-Object FullName, Length | Format-Table -AutoSize
-                } else {
-                  Write-Host "ERROR: Extraction directory does not exist!"
-                }
-
-  - stage: InjectConfiguration
-    displayName: 'Inject Configuration'
-    dependsOn: AcquireArtifacts
-    condition: succeeded()
-    jobs:
-      - job: Transform_Config
-        displayName: 'Transform web.config'
-        steps:
-          - checkout: none
-          - task: PowerShell@2
-            displayName: 'Verify extracted files'
-            inputs:
-              targetType: 'inline'
-              script: |
-                $extractPath = "$(Pipeline.Workspace)/temp_managed"
-                Write-Host "Checking extracted files in: $extractPath"
-                if (Test-Path $extractPath) {
-                  Write-Host "Directory exists. Contents:"
-                  Get-ChildItem -Path $extractPath -Recurse | Select-Object FullName, Length | Format-Table -AutoSize
-                  $webConfigs = Get-ChildItem -Path $extractPath -Filter "web.config" -Recurse
-                  Write-Host "Found $($webConfigs.Count) web.config file(s):"
-                  $webConfigs | ForEach-Object { Write-Host "  - $($_.FullName)" }
-                } else {
-                  Write-Host "ERROR: Extraction directory does not exist!"
-                }
           - task: FileTransform@1
             displayName: 'Transform configuration files for $(webSlot)'
             inputs:
-              folderPath: '$(Pipeline.Workspace)/temp_managed'
+              folderPath: '$(Pipeline.Workspace)\temp_managed'
               fileType: "xml"
-              targetFiles: "**/*.config"
+              targetFiles: "**/web.config"
           - task: ArchiveFiles@2
             displayName: 'Re-zip transformed artifact'
             inputs:
-              rootFolderOrFile: '$(Pipeline.Workspace)/temp_managed'
+              rootFolderOrFile: '$(Pipeline.Workspace)\temp_managed'
               includeRootFolder: false
               archiveType: "zip"
-              archiveFile: '$(Pipeline.Workspace)/MasterData.Main/drop/transformed.zip'
+              archiveFile: '$(Pipeline.Workspace)\MasterData.Main\drop\transformed.zip'
               replaceExistingArchive: true
 
   - stage: Backup
     displayName: 'Backup Current Deployments'
-    dependsOn: InjectConfiguration
+    dependsOn: AcquireAndTransform
     condition: succeeded()
     jobs:
       - job: Backup_Site
@@ -295,7 +239,7 @@ stages:
           - task: WindowsMachineFileCopy@2
             displayName: 'Copy artifact zip to $(selectedWebServers)'
             inputs:
-              SourcePath: '$(Pipeline.Workspace)/MasterData.Main/drop/transformed.zip'
+              SourcePath: '$(Pipeline.Workspace)\MasterData.Main\drop\transformed.zip'
               MachineNames: "$(selectedWebServers)"
               AdminUserName: "$(winrmUserName)"
               AdminPassword: "$(winrmPassword)"
@@ -338,6 +282,17 @@ stages:
                 
                 $tempFolder = 'C:\Temp\WebDeploy'
                 $zipPath = Join-Path $tempFolder 'transformed.zip'
+                
+                Write-Host "Checking for zip file at: $zipPath"
+                if (-not (Test-Path $zipPath)) {
+                  Write-Host "ERROR: Zip file not found at $zipPath"
+                  if (Test-Path $tempFolder) {
+                    Write-Host "Temp folder contents:"
+                    Get-ChildItem -Path $tempFolder -Recurse | ForEach-Object { Write-Host "  - $($_.FullName)" }
+                  }
+                  throw "Artifact zip not found at $zipPath"
+                }
+                Write-Host "Zip file found successfully at $zipPath"
                 
                 Write-Host "Checking for zip file at: $zipPath"
                 if (-not (Test-Path $zipPath)) {
