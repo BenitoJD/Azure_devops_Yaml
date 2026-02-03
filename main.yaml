@@ -30,6 +30,8 @@ variables:
     value: '$(Build.SourceBranchName)'
   - name: BuildVersion
     value: '$(Build.BuildId)'
+  - name: webSlot
+    value: ${{ parameters.webSlot }}
 
   # Server catalog and paths
   - group: vg-shared-servers
