@@ -132,6 +132,7 @@ stages:
       - job: Acquire
         displayName: 'Download and Prepare Artifacts'
         steps:
+          - checkout: none
           - download: 'MasterData.Main'
             displayName: 'Download artifacts'
             artifact: 'drop'
@@ -151,6 +152,7 @@ stages:
       - job: Transform_Config
         displayName: 'Transform web.config'
         steps:
+          - checkout: none
           - task: PowerShell@2
             displayName: 'Verify extracted files'
             inputs:
@@ -190,6 +192,7 @@ stages:
       - job: Backup_Site
         displayName: 'Backup current deployment'
         steps:
+          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Backup active content'
             inputs:
@@ -259,6 +262,7 @@ stages:
       - job: Deploy_Content
         displayName: 'Copy and extract application files'
         steps:
+          - checkout: none
           - task: WindowsMachineFileCopy@2
             displayName: 'Copy artifact zip to $(selectedWebServers)'
             inputs:
@@ -344,6 +348,7 @@ stages:
       - job: Configure_IIS
         displayName: 'Ensure site and app pool'
         steps:
+          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Ensure IIS configuration'
             inputs:
@@ -452,6 +457,7 @@ stages:
       - job: Set_ACLs
         displayName: 'Grant IIS permissions'
         steps:
+          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Set folder ACLs'
             inputs:
@@ -507,6 +513,7 @@ stages:
       - job: Stop_Sites
         displayName: 'Stop site and app pool'
         steps:
+          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Stop website'
             inputs:
@@ -565,6 +572,7 @@ stages:
         displayName: 'Start site and app pool'
         dependsOn: Stop_Sites
         steps:
+          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Start website'
             inputs:
