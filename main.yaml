@@ -24,9 +24,12 @@ parameters:
       - R1
 
 variables:
-  BuildNumber: '$(Build.BuildNumber)'
-  BranchName: '$(Build.SourceBranchName)'
-  BuildVersion: '$(Build.BuildId)'
+  - name: BuildNumber
+    value: '$(Build.BuildNumber)'
+  - name: BranchName
+    value: '$(Build.SourceBranchName)'
+  - name: BuildVersion
+    value: '$(Build.BuildId)'
 
   # Server catalog and paths
   - group: vg-shared-servers
