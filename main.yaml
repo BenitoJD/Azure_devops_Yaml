@@ -251,29 +251,49 @@ stages:
               InlineScript: |
                 $webSlot = "$(webSlot)"
                 
-                # Determine prefix for IIS config variables
-                $prefix = switch ($webSlot) {
-                  "Dev" { "Dev_" }
-                  "FT1" { "FT1_" }
-                  "FT2" { "FT2_" }
-                  "FT3" { "FT3_" }
-                  "QA" { "QA_" }
-                  "Demo" { "Demo_" }
-                  "SIT" { "SIT_" }
-                  "Pre-Prod" { "Pre-Prod_" }
-                  "Prod" { "Prod_" }
-                  "R1" { "R1_" }
-                  default { "Dev_" }
+                # IIS config values passed from Azure DevOps variables (expanded before script runs)
+                $iisConfigAppPool = @{
+                  "Dev" = "$(Dev_Server_AppPool_Name)"
+                  "FT1" = "$(FT1_Server_AppPool_Name)"
+                  "FT2" = "$(FT2_Server_AppPool_Name)"
+                  "FT3" = "$(FT3_Server_AppPool_Name)"
+                  "QA" = "$(QA_Server_AppPool_Name)"
+                  "Demo" = "$(Demo_Server_AppPool_Name)"
+                  "SIT" = "$(SIT_Server_AppPool_Name)"
+                  "Pre-Prod" = "$(Pre-Prod_Server_AppPool_Name)"
+                  "Prod" = "$(Prodcuction_Server_AppPool_Name)"
+                  "R1" = "$(R1_Server_AppPool_Name)"
                 }
                 
-                # Special handling for Prod app pool name (Prodcuction typo)
-                $appPoolVar = if ($webSlot -eq "Prod") { "Prodcuction_Server_AppPool_Name" } else { "${prefix}Server_AppPool_Name" }
-                $portVar = "${prefix}Server_IIS_Port"
-                $pathVar = if ($webSlot -eq "SIT") { "SIT_DServer_Website_Path" } else { "${prefix}Server_Website_Path" }
+                $iisConfigPort = @{
+                  "Dev" = "$(Dev_Server_IIS_Port)"
+                  "FT1" = "$(FT1_Server_IIS_Port)"
+                  "FT2" = "$(FT2_Server_IIS_Port)"
+                  "FT3" = "$(FT3_Server_IIS_Port)"
+                  "QA" = "$(QA_Server_IIS_Port)"
+                  "Demo" = "$(Demo_Server_IIS_Port)"
+                  "SIT" = "$(SIT_Server_IIS_Port)"
+                  "Pre-Prod" = "$(Pre-Prod_Server_IIS_Port)"
+                  "Prod" = "$(Prod_Server_IIS_Port)"
+                  "R1" = "$(R1_Server_IIS_Port)"
+                }
                 
-                $appPoolName = (Get-Item "Env:$appPoolVar" -ErrorAction SilentlyContinue).Value
-                $port = (Get-Item "Env:$portVar" -ErrorAction SilentlyContinue).Value
-                $physicalPath = (Get-Item "Env:$pathVar" -ErrorAction SilentlyContinue).Value
+                $iisConfigPath = @{
+                  "Dev" = "$(Dev_Server_Website_Path)"
+                  "FT1" = "$(FT1_Server_Website_Path)"
+                  "FT2" = "$(FT2_Server_Website_Path)"
+                  "FT3" = "$(FT3_Server_Website_Path)"
+                  "QA" = "$(QA_Server_Website_Path)"
+                  "Demo" = "$(Demo_Server_Website_Path)"
+                  "SIT" = "$(SIT_Server_Website_Path)"
+                  "Pre-Prod" = "$(Pre-Prod_Server_Website_Path)"
+                  "Prod" = "$(Prod_Server_Website_Path)"
+                  "R1" = "$(R1_Server_Website_Path)"
+                }
+                
+                $appPoolName = $iisConfigAppPool[$webSlot]
+                $port = $iisConfigPort[$webSlot]
+                $physicalPath = $iisConfigPath[$webSlot]
                 
                 # Fallback to Web_Deployment_Path + slot if path not in IIS config
                 if (-not $physicalPath -or $physicalPath.Trim() -eq "") {
@@ -282,8 +302,13 @@ stages:
                 }
                 
                 if (-not $appPoolName -or -not $port) {
-                  throw "Required IIS configuration variables not found: AppPool=$appPoolName, Port=$port"
+                  throw "Required IIS configuration variables not found for slot '$webSlot': AppPool=$appPoolName, Port=$port"
                 }
+                
+                Write-Host "IIS Configuration for $webSlot:"
+                Write-Host "  AppPool: $appPoolName"
+                Write-Host "  Port: $port"
+                Write-Host "  Path: $physicalPath"
                 
                 Write-Host "Configuring IIS: AppPool=$appPoolName, Port=$port, Path=$physicalPath"
                 
@@ -361,27 +386,25 @@ stages:
               InlineScript: |
                 $webSlot = "$(webSlot)"
                 
-                # Determine prefix for IIS config variables
-                $prefix = switch ($webSlot) {
-                  "Dev" { "Dev_" }
-                  "FT1" { "FT1_" }
-                  "FT2" { "FT2_" }
-                  "FT3" { "FT3_" }
-                  "QA" { "QA_" }
-                  "Demo" { "Demo_" }
-                  "SIT" { "SIT_" }
-                  "Pre-Prod" { "Pre-Prod_" }
-                  "Prod" { "Prod_" }
-                  "R1" { "R1_" }
-                  default { "Dev_" }
+                # IIS config path values passed from Azure DevOps variables
+                $iisConfigPath = @{
+                  "Dev" = "$(Dev_Server_Website_Path)"
+                  "FT1" = "$(FT1_Server_Website_Path)"
+                  "FT2" = "$(FT2_Server_Website_Path)"
+                  "FT3" = "$(FT3_Server_Website_Path)"
+                  "QA" = "$(QA_Server_Website_Path)"
+                  "Demo" = "$(Demo_Server_Website_Path)"
+                  "SIT" = "$(SIT_Server_Website_Path)"
+                  "Pre-Prod" = "$(Pre-Prod_Server_Website_Path)"
+                  "Prod" = "$(Prod_Server_Website_Path)"
+                  "R1" = "$(R1_Server_Website_Path)"
                 }
                 
-                # Get physical path (prefer IIS config override, fallback to Web_Deployment_Path + slot)
-                $webDeploymentPath = "$(Web_Deployment_Path)"
-                $pathVar = if ($webSlot -eq "SIT") { "SIT_DServer_Website_Path" } else { "${prefix}Server_Website_Path" }
-                $physicalPath = (Get-Item "Env:$pathVar" -ErrorAction SilentlyContinue).Value
+                $physicalPath = $iisConfigPath[$webSlot]
                 
+                # Fallback to Web_Deployment_Path + slot if path not in IIS config
                 if (-not $physicalPath -or $physicalPath.Trim() -eq "") {
+                  $webDeploymentPath = "$(Web_Deployment_Path)"
                   $physicalPath = Join-Path $webDeploymentPath $webSlot
                 }
                 
@@ -417,24 +440,21 @@ stages:
               InlineScript: |
                 $webSlot = "$(webSlot)"
                 
-                # Determine prefix for IIS config variables
-                $prefix = switch ($webSlot) {
-                  "Dev" { "Dev_" }
-                  "FT1" { "FT1_" }
-                  "FT2" { "FT2_" }
-                  "FT3" { "FT3_" }
-                  "QA" { "QA_" }
-                  "Demo" { "Demo_" }
-                  "SIT" { "SIT_" }
-                  "Pre-Prod" { "Pre-Prod_" }
-                  "Prod" { "Prod_" }
-                  "R1" { "R1_" }
-                  default { "Dev_" }
+                # IIS config app pool values passed from Azure DevOps variables
+                $iisConfigAppPool = @{
+                  "Dev" = "$(Dev_Server_AppPool_Name)"
+                  "FT1" = "$(FT1_Server_AppPool_Name)"
+                  "FT2" = "$(FT2_Server_AppPool_Name)"
+                  "FT3" = "$(FT3_Server_AppPool_Name)"
+                  "QA" = "$(QA_Server_AppPool_Name)"
+                  "Demo" = "$(Demo_Server_AppPool_Name)"
+                  "SIT" = "$(SIT_Server_AppPool_Name)"
+                  "Pre-Prod" = "$(Pre-Prod_Server_AppPool_Name)"
+                  "Prod" = "$(Prodcuction_Server_AppPool_Name)"
+                  "R1" = "$(R1_Server_AppPool_Name)"
                 }
                 
-                # Special handling for Prod app pool name (Prodcuction typo)
-                $appPoolVar = if ($webSlot -eq "Prod") { "Prodcuction_Server_AppPool_Name" } else { "${prefix}Server_AppPool_Name" }
-                $appPoolName = (Get-Item "Env:$appPoolVar" -ErrorAction SilentlyContinue).Value
+                $appPoolName = $iisConfigAppPool[$webSlot]
                 $siteName = "MasterData-Web-$webSlot"
                 
                 Write-Host "Stopping website: $siteName, AppPool: $appPoolName"
@@ -476,24 +496,21 @@ stages:
               InlineScript: |
                 $webSlot = "$(webSlot)"
                 
-                # Determine prefix for IIS config variables
-                $prefix = switch ($webSlot) {
-                  "Dev" { "Dev_" }
-                  "FT1" { "FT1_" }
-                  "FT2" { "FT2_" }
-                  "FT3" { "FT3_" }
-                  "QA" { "QA_" }
-                  "Demo" { "Demo_" }
-                  "SIT" { "SIT_" }
-                  "Pre-Prod" { "Pre-Prod_" }
-                  "Prod" { "Prod_" }
-                  "R1" { "R1_" }
-                  default { "Dev_" }
+                # IIS config app pool values passed from Azure DevOps variables
+                $iisConfigAppPool = @{
+                  "Dev" = "$(Dev_Server_AppPool_Name)"
+                  "FT1" = "$(FT1_Server_AppPool_Name)"
+                  "FT2" = "$(FT2_Server_AppPool_Name)"
+                  "FT3" = "$(FT3_Server_AppPool_Name)"
+                  "QA" = "$(QA_Server_AppPool_Name)"
+                  "Demo" = "$(Demo_Server_AppPool_Name)"
+                  "SIT" = "$(SIT_Server_AppPool_Name)"
+                  "Pre-Prod" = "$(Pre-Prod_Server_AppPool_Name)"
+                  "Prod" = "$(Prodcuction_Server_AppPool_Name)"
+                  "R1" = "$(R1_Server_AppPool_Name)"
                 }
                 
-                # Special handling for Prod app pool name (Prodcuction typo)
-                $appPoolVar = if ($webSlot -eq "Prod") { "Prodcuction_Server_AppPool_Name" } else { "${prefix}Server_AppPool_Name" }
-                $appPoolName = (Get-Item "Env:$appPoolVar" -ErrorAction SilentlyContinue).Value
+                $appPoolName = $iisConfigAppPool[$webSlot]
                 $siteName = "MasterData-Web-$webSlot"
                 
                 Write-Host "Starting website: $siteName, AppPool: $appPoolName"
