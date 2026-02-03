@@ -156,86 +156,6 @@ stages:
               archiveType: "zip"
               archiveFile: '$(Pipeline.Workspace)\MasterData.Main\drop\transformed.zip'
               replaceExistingArchive: true
-
-  - stage: Backup
-    displayName: 'Backup Current Deployments'
-    dependsOn: AcquireAndTransform
-    condition: succeeded()
-    jobs:
-      - job: Backup_Site
-        displayName: 'Backup current deployment'
-        steps:
-          - checkout: none
-          - task: PowerShellOnTargetMachines@3
-            displayName: 'Backup active content'
-            inputs:
-              Machines: "$(selectedWebServers)"
-              UserName: "$(winrmUserName)"
-              UserPassword: "$(winrmPassword)"
-              InlineScript: |
-                $webSlot = "$(webSlot)"
-                $buildNumber = "$(BuildNumber)"
-                $branchName = "$(BranchName)"
-                $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-                
-                # Determine prefix for IIS config variables
-                $prefix = switch ($webSlot) {
-                  "Dev" { "Dev_" }
-                  "FT1" { "FT1_" }
-                  "FT2" { "FT2_" }
-                  "FT3" { "FT3_" }
-                  "QA" { "QA_" }
-                  "Demo" { "Demo_" }
-                  "SIT" { "SIT_" }
-                  "Pre-Prod" { "Pre-Prod_" }
-                  "Prod" { "Prod_" }
-                  "R1" { "R1_" }
-                  default { "Dev_" }
-                }
-                
-                # Get physical path (prefer IIS config override, fallback to Web_Deployment_Path + slot)
-                $webDeploymentPath = "$(Web_Deployment_Path)"
-                $iisPathVar = "${prefix}Server_Website_Path"
-                $iisPathValue = (Get-Item "Env:$iisPathVar" -ErrorAction SilentlyContinue).Value
-                
-                if ($iisPathValue -and $iisPathValue.Trim() -ne "") {
-                  $destinationPath = $iisPathValue
-                } else {
-                  $destinationPath = Join-Path $webDeploymentPath $webSlot
-                }
-                
-                $backupBasePath = "$(Web_Deployment_Path)\Backups"
-                if (-not (Test-Path $backupBasePath)) {
-                  New-Item -ItemType Directory -Path $backupBasePath -Force | Out-Null
-                }
-                
-                $backupPath = Join-Path $backupBasePath "${webSlot}_${branchName}_${buildNumber}_${timestamp}"
-                
-                if (Test-Path $destinationPath) {
-                  Write-Host "Backing up $destinationPath to $backupPath"
-                  New-Item -ItemType Directory -Path $backupPath -Force | Out-Null
-                  Copy-Item -Path "$destinationPath\*" -Destination $backupPath -Recurse -Force
-                  Write-Host "Backup completed successfully"
-                } else {
-                  Write-Host "No existing deployment found at $destinationPath, skipping backup"
-                }
-              NewPsSessionOptionArguments: >
-                -SkipCACheck
-                -SkipCNCheck
-                -SkipRevocationCheck
-                -IdleTimeout 7200000
-                -OperationTimeout 0
-                -OutputBufferingMode Block
-
-  - stage: DeployFiles
-    displayName: 'Deploy Files'
-    dependsOn: Backup
-    condition: succeeded()
-    jobs:
-      - job: Deploy_Content
-        displayName: 'Copy and extract application files'
-        steps:
-          - checkout: none
           - task: WindowsMachineFileCopy@2
             displayName: 'Copy artifact zip to $(selectedWebServers)'
             inputs:
@@ -294,17 +214,6 @@ stages:
                 }
                 Write-Host "Zip file found successfully at $zipPath"
                 
-                Write-Host "Checking for zip file at: $zipPath"
-                if (-not (Test-Path $zipPath)) {
-                  Write-Host "ERROR: Zip file not found at $zipPath"
-                  if (Test-Path $tempFolder) {
-                    Write-Host "Temp folder contents:"
-                    Get-ChildItem -Path $tempFolder -Recurse | ForEach-Object { Write-Host "  - $($_.FullName)" }
-                  }
-                  throw "Artifact zip not found at $zipPath"
-                }
-                Write-Host "Zip file found successfully at $zipPath"
-                
                 if (-not (Test-Path $destinationPath)) {
                   Write-Host "Creating destination folder $destinationPath"
                   New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
@@ -326,7 +235,7 @@ stages:
 
   - stage: ConfigureIIS
     displayName: 'Configure IIS'
-    dependsOn: DeployFiles
+    dependsOn: AcquireAndTransform
     condition: succeeded()
     jobs:
       - job: Configure_IIS
