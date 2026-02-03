@@ -136,6 +136,22 @@ stages:
           - download: 'MasterData.Main'
             displayName: 'Download artifacts'
             artifact: 'drop'
+          - task: PowerShell@2
+            displayName: 'Verify artifact download'
+            inputs:
+              targetType: 'inline'
+              script: |
+                $artifactPath = "$(Pipeline.Workspace)/MasterData.Main/drop"
+                Write-Host "Checking artifact path: $artifactPath"
+                if (Test-Path $artifactPath) {
+                  Write-Host "Artifact directory exists. Contents:"
+                  Get-ChildItem -Path $artifactPath -Recurse | Select-Object FullName, Length | Format-Table -AutoSize
+                  $zipFiles = Get-ChildItem -Path $artifactPath -Filter "*.zip" -Recurse
+                  Write-Host "Found $($zipFiles.Count) zip file(s):"
+                  $zipFiles | ForEach-Object { Write-Host "  - $($_.FullName)" }
+                } else {
+                  Write-Host "ERROR: Artifact directory does not exist!"
+                }
           - task: ExtractFiles@1
             displayName: 'Extract artifacts'
             inputs:
@@ -143,6 +159,19 @@ stages:
               destinationFolder: '$(Pipeline.Workspace)/temp_managed'
               cleanDestinationFolder: true
               overwriteExistingFiles: true
+          - task: PowerShell@2
+            displayName: 'Verify extraction'
+            inputs:
+              targetType: 'inline'
+              script: |
+                $extractPath = "$(Pipeline.Workspace)/temp_managed"
+                Write-Host "Verifying extraction in: $extractPath"
+                if (Test-Path $extractPath) {
+                  Write-Host "Extraction directory exists. Contents:"
+                  Get-ChildItem -Path $extractPath -Recurse | Select-Object FullName, Length | Format-Table -AutoSize
+                } else {
+                  Write-Host "ERROR: Extraction directory does not exist!"
+                }
 
   - stage: InjectConfiguration
     displayName: 'Inject Configuration'
