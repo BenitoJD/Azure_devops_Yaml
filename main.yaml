@@ -305,7 +305,7 @@ stages:
                   throw "Required IIS configuration variables not found for slot '$webSlot': AppPool=$appPoolName, Port=$port"
                 }
                 
-                Write-Host "IIS Configuration for $webSlot:"
+                Write-Host "IIS Configuration for ${webSlot}:"
                 Write-Host "  AppPool: $appPoolName"
                 Write-Host "  Port: $port"
                 Write-Host "  Path: $physicalPath"
