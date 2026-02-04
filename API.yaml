@@ -110,7 +110,6 @@ stages:
       - job: Initialize_Env
         displayName: 'Initialize'
         steps:
-          - checkout: none
           - task: PowerShell@2
             displayName: 'Build Information'
             inputs:
@@ -152,7 +151,6 @@ stages:
       - job: PrepareArtifacts
         displayName: 'Download, Extract and Transform Artifacts'
         steps:
-          - checkout: none
           - download: 'MasterData.ServiceLayer'
             displayName: 'Download artifacts'
             artifact: 'webapi-drop'
@@ -194,35 +192,80 @@ stages:
               InlineScript: |
                 $apiSlot = "$(apiSlot)"
                 
-                # Map apiSlot to IIS config prefix
-                $iisPrefixMap = @{
-                  "Development_API" = "Dev_"
-                  "Production_API" = "Prod_"
-                  "Pre-Prod_API" = "Pre-Prod_"
-                  "Demo_API" = "Demo_"
-                  "FT1_API" = "FT1_"
-                  "FT2_API" = "FT2_"
-                  "FT3_API" = "FT3_"
-                  "QA_API" = "QA_"
-                  "R1_API" = "R1_"
-                  "SIT_API" = "SIT_"
+                # Get physical path based on apiSlot
+                # Azure DevOps variables are expanded before script execution
+                $destinationPath = $null
+                
+                switch ($apiSlot) {
+                  "Development_API" {
+                    $iisPath = "$(Dev_Server_Website_Path)"
+                    if ($iisPath -and $iisPath.Trim() -ne "" -and $iisPath -notlike "*`$(*") {
+                      $destinationPath = $iisPath
+                    }
+                  }
+                  "Production_API" {
+                    $iisPath = "$(Prod_Server_Website_Path)"
+                    if ($iisPath -and $iisPath.Trim() -ne "" -and $iisPath -notlike "*`$(*") {
+                      $destinationPath = $iisPath
+                    }
+                  }
+                  "Pre-Prod_API" {
+                    $iisPath = "$(Pre-Prod_Server_Website_Path)"
+                    if ($iisPath -and $iisPath.Trim() -ne "" -and $iisPath -notlike "*`$(*") {
+                      $destinationPath = $iisPath
+                    }
+                  }
+                  "Demo_API" {
+                    $iisPath = "$(Demo_Server_Website_Path)"
+                    if ($iisPath -and $iisPath.Trim() -ne "" -and $iisPath -notlike "*`$(*") {
+                      $destinationPath = $iisPath
+                    }
+                  }
+                  "FT1_API" {
+                    $iisPath = "$(FT1_Server_Website_Path)"
+                    if ($iisPath -and $iisPath.Trim() -ne "" -and $iisPath -notlike "*`$(*") {
+                      $destinationPath = $iisPath
+                    }
+                  }
+                  "FT2_API" {
+                    $iisPath = "$(FT2_Server_Website_Path)"
+                    if ($iisPath -and $iisPath.Trim() -ne "" -and $iisPath -notlike "*`$(*") {
+                      $destinationPath = $iisPath
+                    }
+                  }
+                  "FT3_API" {
+                    $iisPath = "$(FT3_Server_Website_Path)"
+                    if ($iisPath -and $iisPath.Trim() -ne "" -and $iisPath -notlike "*`$(*") {
+                      $destinationPath = $iisPath
+                    }
+                  }
+                  "QA_API" {
+                    $iisPath = "$(QA_Server_Website_Path)"
+                    if ($iisPath -and $iisPath.Trim() -ne "" -and $iisPath -notlike "*`$(*") {
+                      $destinationPath = $iisPath
+                    }
+                  }
+                  "R1_API" {
+                    $iisPath = "$(R1_Server_Website_Path)"
+                    if ($iisPath -and $iisPath.Trim() -ne "" -and $iisPath -notlike "*`$(*") {
+                      $destinationPath = $iisPath
+                    }
+                  }
+                  "SIT_API" {
+                    $iisPath = "$(SIT_Server_Website_Path)"
+                    if ($iisPath -and $iisPath.Trim() -ne "" -and $iisPath -notlike "*`$(*") {
+                      $destinationPath = $iisPath
+                    }
+                  }
                 }
                 
-                $prefix = $iisPrefixMap[$apiSlot]
-                if (-not $prefix) { $prefix = "R1_" }
-                
-                # Get physical path (prefer IIS config, fallback to API_Deployment_Path)
-                $iisPathVar = "${prefix}Server_Website_Path"
-                $iisPathValue = (Get-Item "Env:$iisPathVar" -ErrorAction SilentlyContinue).Value
-                
-                if ($iisPathValue -and $iisPathValue.Trim() -ne "") {
-                  $destinationPath = $iisPathValue
-                } else {
+                # Fallback to API_Deployment_Path if IIS path not available
+                if (-not $destinationPath -or $destinationPath.Trim() -eq "") {
                   $apiDeploymentPath = "$(API_Deployment_Path)"
-                  if ($apiDeploymentPath -and $apiDeploymentPath.Trim() -ne "") {
+                  if ($apiDeploymentPath -and $apiDeploymentPath.Trim() -ne "" -and $apiDeploymentPath -notlike "*`$(*") {
                     $destinationPath = $apiDeploymentPath
                   } else {
-                    throw "Neither IIS path ($iisPathVar) nor API_Deployment_Path is available"
+                    throw "Neither IIS path nor API_Deployment_Path is available for slot '$apiSlot'"
                   }
                 }
                 
@@ -267,7 +310,6 @@ stages:
       - job: Configure_IIS
         displayName: 'Ensure site and app pool'
         steps:
-          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Ensure IIS configuration'
             inputs:
@@ -277,44 +319,80 @@ stages:
               InlineScript: |
                 $apiSlot = "$(apiSlot)"
                 
-                # Map apiSlot to IIS config prefix
-                $iisPrefixMap = @{
-                  "Development_API" = "Dev_"
-                  "Production_API" = "Prod_"
-                  "Pre-Prod_API" = "Pre-Prod_"
-                  "Demo_API" = "Demo_"
-                  "FT1_API" = "FT1_"
-                  "FT2_API" = "FT2_"
-                  "FT3_API" = "FT3_"
-                  "QA_API" = "QA_"
-                  "R1_API" = "R1_"
-                  "SIT_API" = "SIT_"
-                }
+                # Get IIS config values based on apiSlot using Azure DevOps variable expansion
+                $appPoolName = $null
+                $port = $null
+                $physicalPath = $null
                 
-                $prefix = $iisPrefixMap[$apiSlot]
-                if (-not $prefix) { $prefix = "R1_" }
-                
-                # Get IIS config values from environment variables
-                $appPoolNameVar = "${prefix}Server_AppPool_Name"
-                $portVar = "${prefix}Server_IIS_Port"
-                $pathVar = "${prefix}Server_Website_Path"
-                
-                $appPoolName = (Get-Item "Env:$appPoolNameVar" -ErrorAction SilentlyContinue).Value
-                $port = (Get-Item "Env:$portVar" -ErrorAction SilentlyContinue).Value
-                $physicalPath = (Get-Item "Env:$pathVar" -ErrorAction SilentlyContinue).Value
-                
-                # Fallback to API_Deployment_Path if IIS path not available
-                if (-not $physicalPath -or $physicalPath.Trim() -eq "") {
-                  $apiDeploymentPath = "$(API_Deployment_Path)"
-                  if ($apiDeploymentPath -and $apiDeploymentPath.Trim() -ne "") {
-                    $physicalPath = $apiDeploymentPath
-                  } else {
-                    throw "Neither IIS path ($pathVar) nor API_Deployment_Path is available"
+                switch ($apiSlot) {
+                  "Development_API" {
+                    $appPoolName = "$(Dev_Server_AppPool_Name)"
+                    $port = "$(Dev_Server_IIS_Port)"
+                    $physicalPath = "$(Dev_Server_Website_Path)"
+                  }
+                  "Production_API" {
+                    $appPoolName = "$(Prod_Server_AppPool_Name)"
+                    $port = "$(Prod_Server_IIS_Port)"
+                    $physicalPath = "$(Prod_Server_Website_Path)"
+                  }
+                  "Pre-Prod_API" {
+                    $appPoolName = "$(Pre-Prod_Server_AppPool_Name)"
+                    $port = "$(Pre-Prod_Server_IIS_Port)"
+                    $physicalPath = "$(Pre-Prod_Server_Website_Path)"
+                  }
+                  "Demo_API" {
+                    $appPoolName = "$(Demo_Server_AppPool_Name)"
+                    $port = "$(Demo_Server_IIS_Port)"
+                    $physicalPath = "$(Demo_Server_Website_Path)"
+                  }
+                  "FT1_API" {
+                    $appPoolName = "$(FT1_Server_AppPool_Name)"
+                    $port = "$(FT1_Server_IIS_Port)"
+                    $physicalPath = "$(FT1_Server_Website_Path)"
+                  }
+                  "FT2_API" {
+                    $appPoolName = "$(FT2_Server_AppPool_Name)"
+                    $port = "$(FT2_Server_IIS_Port)"
+                    $physicalPath = "$(FT2_Server_Website_Path)"
+                  }
+                  "FT3_API" {
+                    $appPoolName = "$(FT3_Server_AppPool_Name)"
+                    $port = "$(FT3_Server_IIS_Port)"
+                    $physicalPath = "$(FT3_Server_Website_Path)"
+                  }
+                  "QA_API" {
+                    $appPoolName = "$(QA_Server_AppPool_Name)"
+                    $port = "$(QA_Server_IIS_Port)"
+                    $physicalPath = "$(QA_Server_Website_Path)"
+                  }
+                  "R1_API" {
+                    $appPoolName = "$(R1_Server_AppPool_Name)"
+                    $port = "$(R1_Server_IIS_Port)"
+                    $physicalPath = "$(R1_Server_Website_Path)"
+                  }
+                  "SIT_API" {
+                    $appPoolName = "$(SIT_Server_AppPool_Name)"
+                    $port = "$(SIT_Server_IIS_Port)"
+                    $physicalPath = "$(SIT_Server_Website_Path)"
                   }
                 }
                 
-                if (-not $appPoolName -or -not $port) {
-                  throw "Required IIS configuration variables not found for slot '$apiSlot': AppPool=$appPoolNameVar, Port=$portVar"
+                # Check if variables were expanded (not still containing $(...))
+                if ($appPoolName -like "*`$(*" -or $appPoolName.Trim() -eq "") {
+                  throw "AppPool name not found for slot '$apiSlot'"
+                }
+                if ($port -like "*`$(*" -or $port.Trim() -eq "") {
+                  throw "Port not found for slot '$apiSlot'"
+                }
+                
+                # Fallback to API_Deployment_Path if IIS path not available
+                if ($physicalPath -like "*`$(*" -or $physicalPath.Trim() -eq "") {
+                  $apiDeploymentPath = "$(API_Deployment_Path)"
+                  if ($apiDeploymentPath -and $apiDeploymentPath.Trim() -ne "" -and $apiDeploymentPath -notlike "*`$(*") {
+                    $physicalPath = $apiDeploymentPath
+                  } else {
+                    throw "Neither IIS path nor API_Deployment_Path is available for slot '$apiSlot'"
+                  }
                 }
                 
                 Write-Host "IIS Configuration for ${apiSlot}:"
@@ -388,7 +466,6 @@ stages:
       - job: Set_ACLs
         displayName: 'Grant IIS permissions'
         steps:
-          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Set folder ACLs'
             inputs:
@@ -398,34 +475,49 @@ stages:
               InlineScript: |
                 $apiSlot = "$(apiSlot)"
                 
-                # Map apiSlot to IIS config prefix
-                $iisPrefixMap = @{
-                  "Development_API" = "Dev_"
-                  "Production_API" = "Prod_"
-                  "Pre-Prod_API" = "Pre-Prod_"
-                  "Demo_API" = "Demo_"
-                  "FT1_API" = "FT1_"
-                  "FT2_API" = "FT2_"
-                  "FT3_API" = "FT3_"
-                  "QA_API" = "QA_"
-                  "R1_API" = "R1_"
-                  "SIT_API" = "SIT_"
+                # Get physical path based on apiSlot
+                $physicalPath = $null
+                
+                switch ($apiSlot) {
+                  "Development_API" {
+                    $physicalPath = "$(Dev_Server_Website_Path)"
+                  }
+                  "Production_API" {
+                    $physicalPath = "$(Prod_Server_Website_Path)"
+                  }
+                  "Pre-Prod_API" {
+                    $physicalPath = "$(Pre-Prod_Server_Website_Path)"
+                  }
+                  "Demo_API" {
+                    $physicalPath = "$(Demo_Server_Website_Path)"
+                  }
+                  "FT1_API" {
+                    $physicalPath = "$(FT1_Server_Website_Path)"
+                  }
+                  "FT2_API" {
+                    $physicalPath = "$(FT2_Server_Website_Path)"
+                  }
+                  "FT3_API" {
+                    $physicalPath = "$(FT3_Server_Website_Path)"
+                  }
+                  "QA_API" {
+                    $physicalPath = "$(QA_Server_Website_Path)"
+                  }
+                  "R1_API" {
+                    $physicalPath = "$(R1_Server_Website_Path)"
+                  }
+                  "SIT_API" {
+                    $physicalPath = "$(SIT_Server_Website_Path)"
+                  }
                 }
                 
-                $prefix = $iisPrefixMap[$apiSlot]
-                if (-not $prefix) { $prefix = "R1_" }
-                
-                # Get physical path
-                $pathVar = "${prefix}Server_Website_Path"
-                $physicalPath = (Get-Item "Env:$pathVar" -ErrorAction SilentlyContinue).Value
-                
                 # Fallback to API_Deployment_Path if IIS path not available
-                if (-not $physicalPath -or $physicalPath.Trim() -eq "") {
+                if ($physicalPath -like "*`$(*" -or $physicalPath.Trim() -eq "") {
                   $apiDeploymentPath = "$(API_Deployment_Path)"
-                  if ($apiDeploymentPath -and $apiDeploymentPath.Trim() -ne "") {
+                  if ($apiDeploymentPath -and $apiDeploymentPath.Trim() -ne "" -and $apiDeploymentPath -notlike "*`$(*") {
                     $physicalPath = $apiDeploymentPath
                   } else {
-                    throw "Neither IIS path ($pathVar) nor API_Deployment_Path is available"
+                    throw "Neither IIS path nor API_Deployment_Path is available for slot '$apiSlot'"
                   }
                 }
                 
@@ -451,7 +543,6 @@ stages:
       - job: Stop_Sites
         displayName: 'Stop site and app pool'
         steps:
-          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Stop website'
             inputs:
@@ -461,26 +552,25 @@ stages:
               InlineScript: |
                 $apiSlot = "$(apiSlot)"
                 
-                # Map apiSlot to IIS config prefix
-                $iisPrefixMap = @{
-                  "Development_API" = "Dev_"
-                  "Production_API" = "Prod_"
-                  "Pre-Prod_API" = "Pre-Prod_"
-                  "Demo_API" = "Demo_"
-                  "FT1_API" = "FT1_"
-                  "FT2_API" = "FT2_"
-                  "FT3_API" = "FT3_"
-                  "QA_API" = "QA_"
-                  "R1_API" = "R1_"
-                  "SIT_API" = "SIT_"
+                # Get AppPool name based on apiSlot
+                $appPoolName = $null
+                
+                switch ($apiSlot) {
+                  "Development_API" { $appPoolName = "$(Dev_Server_AppPool_Name)" }
+                  "Production_API" { $appPoolName = "$(Prod_Server_AppPool_Name)" }
+                  "Pre-Prod_API" { $appPoolName = "$(Pre-Prod_Server_AppPool_Name)" }
+                  "Demo_API" { $appPoolName = "$(Demo_Server_AppPool_Name)" }
+                  "FT1_API" { $appPoolName = "$(FT1_Server_AppPool_Name)" }
+                  "FT2_API" { $appPoolName = "$(FT2_Server_AppPool_Name)" }
+                  "FT3_API" { $appPoolName = "$(FT3_Server_AppPool_Name)" }
+                  "QA_API" { $appPoolName = "$(QA_Server_AppPool_Name)" }
+                  "R1_API" { $appPoolName = "$(R1_Server_AppPool_Name)" }
+                  "SIT_API" { $appPoolName = "$(SIT_Server_AppPool_Name)" }
                 }
                 
-                $prefix = $iisPrefixMap[$apiSlot]
-                if (-not $prefix) { $prefix = "R1_" }
-                
-                # Get IIS config values
-                $appPoolNameVar = "${prefix}Server_AppPool_Name"
-                $appPoolName = (Get-Item "Env:$appPoolNameVar" -ErrorAction SilentlyContinue).Value
+                if ($appPoolName -like "*`$(*" -or $appPoolName.Trim() -eq "") {
+                  throw "AppPool name not found for slot '$apiSlot'"
+                }
                 
                 # Site name convention: MasterData-API-{Environment}
                 $envName = $apiSlot -replace '_API$', ''
@@ -515,7 +605,6 @@ stages:
         displayName: 'Start site and app pool'
         dependsOn: Stop_Sites
         steps:
-          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Start website'
             inputs:
@@ -525,26 +614,25 @@ stages:
               InlineScript: |
                 $apiSlot = "$(apiSlot)"
                 
-                # Map apiSlot to IIS config prefix
-                $iisPrefixMap = @{
-                  "Development_API" = "Dev_"
-                  "Production_API" = "Prod_"
-                  "Pre-Prod_API" = "Pre-Prod_"
-                  "Demo_API" = "Demo_"
-                  "FT1_API" = "FT1_"
-                  "FT2_API" = "FT2_"
-                  "FT3_API" = "FT3_"
-                  "QA_API" = "QA_"
-                  "R1_API" = "R1_"
-                  "SIT_API" = "SIT_"
+                # Get AppPool name based on apiSlot
+                $appPoolName = $null
+                
+                switch ($apiSlot) {
+                  "Development_API" { $appPoolName = "$(Dev_Server_AppPool_Name)" }
+                  "Production_API" { $appPoolName = "$(Prod_Server_AppPool_Name)" }
+                  "Pre-Prod_API" { $appPoolName = "$(Pre-Prod_Server_AppPool_Name)" }
+                  "Demo_API" { $appPoolName = "$(Demo_Server_AppPool_Name)" }
+                  "FT1_API" { $appPoolName = "$(FT1_Server_AppPool_Name)" }
+                  "FT2_API" { $appPoolName = "$(FT2_Server_AppPool_Name)" }
+                  "FT3_API" { $appPoolName = "$(FT3_Server_AppPool_Name)" }
+                  "QA_API" { $appPoolName = "$(QA_Server_AppPool_Name)" }
+                  "R1_API" { $appPoolName = "$(R1_Server_AppPool_Name)" }
+                  "SIT_API" { $appPoolName = "$(SIT_Server_AppPool_Name)" }
                 }
                 
-                $prefix = $iisPrefixMap[$apiSlot]
-                if (-not $prefix) { $prefix = "R1_" }
-                
-                # Get IIS config values
-                $appPoolNameVar = "${prefix}Server_AppPool_Name"
-                $appPoolName = (Get-Item "Env:$appPoolNameVar" -ErrorAction SilentlyContinue).Value
+                if ($appPoolName -like "*`$(*" -or $appPoolName.Trim() -eq "") {
+                  throw "AppPool name not found for slot '$apiSlot'"
+                }
                 
                 # Site name convention: MasterData-API-{Environment}
                 $envName = $apiSlot -replace '_API$', ''
