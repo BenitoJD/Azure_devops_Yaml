@@ -150,6 +150,28 @@ stages:
     jobs:
       - job: PrepareArtifacts
         displayName: 'Download, Extract and Transform Artifacts'
+        variables:
+          # Ensure variable groups are available at job level for FileTransform
+          - ${{ if eq(parameters.apiSlot, 'Demo_API') }}:
+              - group: Demo_API
+          - ${{ if eq(parameters.apiSlot, 'Development_API') }}:
+              - group: Development_API
+          - ${{ if eq(parameters.apiSlot, 'FT1_API') }}:
+              - group: FT1_API
+          - ${{ if eq(parameters.apiSlot, 'FT2_API') }}:
+              - group: FT2_API
+          - ${{ if eq(parameters.apiSlot, 'FT3_API') }}:
+              - group: FT3_API
+          - ${{ if eq(parameters.apiSlot, 'Pre-Prod_API') }}:
+              - group: Pre-Prod_API
+          - ${{ if eq(parameters.apiSlot, 'Production_API') }}:
+              - group: Production_API
+          - ${{ if eq(parameters.apiSlot, 'QA_API') }}:
+              - group: QA_API
+          - ${{ if eq(parameters.apiSlot, 'R1_API') }}:
+              - group: R1_API
+          - ${{ if eq(parameters.apiSlot, 'SIT_API') }}:
+              - group: SIT_API
         steps:
           - download: 'MasterData.ServiceLayer'
             displayName: 'Download artifacts'
@@ -160,12 +182,44 @@ stages:
               archiveFilePatterns: '$(Pipeline.Workspace)/MasterData.ServiceLayer/webapi-drop/*.zip'
               destinationFolder: '$(Pipeline.Workspace)/temp_managed'
               cleanDestinationFolder: true
+          - task: PowerShell@2
+            displayName: 'Verify variables for FileTransform'
+            inputs:
+              targetType: 'inline'
+              script: |
+                Write-Host "=== Available Variables for FileTransform ==="
+                Write-Host "API Slot: $(apiSlot)"
+                $envVars = Get-ChildItem Env: | Where-Object { 
+                  $_.Name -like '*MasterData*' -or 
+                  $_.Name -like '*Mongo*' -or
+                  $_.Name -like '*API*'
+                } | Sort-Object Name
+                Write-Host "Found $($envVars.Count) relevant variables:"
+                foreach ($var in $envVars) {
+                  $val = $var.Value
+                  if ($val.Length -gt 100) { $val = $val.Substring(0, 100) + "..." }
+                  Write-Host "  $($var.Name) = $val"
+                }
+                Write-Host ""
+                Write-Host "=== Checking for appsettings.json files ==="
+                $jsonFiles = Get-ChildItem -Path "$(Pipeline.Workspace)/temp_managed" -Filter "appsettings.json" -Recurse -ErrorAction SilentlyContinue
+                if ($jsonFiles) {
+                  Write-Host "Found $($jsonFiles.Count) appsettings.json file(s):"
+                  foreach ($file in $jsonFiles) {
+                    Write-Host "  - $($file.FullName)"
+                  }
+                } else {
+                  Write-Host "No appsettings.json files found in $(Pipeline.Workspace)/temp_managed"
+                }
           - task: FileTransform@1
             displayName: 'Transform appsettings.json for $(apiSlot)'
             inputs:
               folderPath: '$(Pipeline.Workspace)/temp_managed'
               fileType: "json"
               targetFiles: "**/appsettings.json"
+              xmlTransformationRules: ""
+              xmlTargetFiles: ""
+              enableXmlTransform: false
           - task: ArchiveFiles@2
             displayName: 'Re-zip transformed artifact'
             inputs:
