@@ -68,34 +68,34 @@ variables:
   # Server selection per apiSlot
   - ${{ if eq(parameters.apiSlot, 'Development_API') }}:
       - name: selectedApiServers
-        value: '$(Development-web-server)'
+        value: '$(Development-app-server)'
   - ${{ if eq(parameters.apiSlot, 'FT1_API') }}:
       - name: selectedApiServers
-        value: '$(Development-web-server)'
+        value: '$(Development-app-server)'
   - ${{ if eq(parameters.apiSlot, 'FT2_API') }}:
       - name: selectedApiServers
-        value: '$(Development-web-server)'
+        value: '$(Development-app-server)'
   - ${{ if eq(parameters.apiSlot, 'FT3_API') }}:
       - name: selectedApiServers
-        value: '$(Development-web-server)'
+        value: '$(Development-app-server)'
   - ${{ if eq(parameters.apiSlot, 'QA_API') }}:
       - name: selectedApiServers
-        value: '$(Development-web-server)'
+        value: '$(Development-app-server)'
   - ${{ if eq(parameters.apiSlot, 'Demo_API') }}:
       - name: selectedApiServers
-        value: '$(Development-web-server)'
+        value: '$(Development-app-server)'
   - ${{ if eq(parameters.apiSlot, 'R1_API') }}:
       - name: selectedApiServers
-        value: '$(Development-web-server)'
+        value: '$(Development-app-server)'
   - ${{ if eq(parameters.apiSlot, 'SIT_API') }}:
       - name: selectedApiServers
-        value: '$(SIT-web-server)'
+        value: '$(SIT-app-server)'
   - ${{ if eq(parameters.apiSlot, 'Pre-Prod_API') }}:
       - name: selectedApiServers
-        value: '$(Pre-prod-web1-server),$(Pre-prod-web2-server)'
+        value: '$(Pre-prod-app1-server),$(Pre-prod-app2-server)'
   - ${{ if eq(parameters.apiSlot, 'Production_API') }}:
       - name: selectedApiServers
-        value: '$(Production-web1-Server),$(Production-web2-Server)'
+        value: '$(Production-app1-Server),$(Production-app2-Server)'
 
 resources:
   pipelines:
