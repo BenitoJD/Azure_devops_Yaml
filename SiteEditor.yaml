@@ -1,0 +1,224 @@
+name: SiteEditor_${{ parameters.siteEditorSlot }}_$(Date:yyyyMMdd)$(Rev:.r)
+
+parameters:
+  # Controls which Site Editor environment/slot this pipeline deploys to
+  - name: siteEditorSlot
+    displayName: Site Editor Environment / Slot
+    type: string
+    default: Development
+    values:
+      - Development
+      - FT1
+      - FT2
+      - FT3
+      - QA
+      - Demo
+      - SIT
+      - Pre-Prod
+      - Production
+
+trigger: none
+
+resources:
+  pipelines:
+    - pipeline: buildPipeline
+      source: MasterData.SiteEditor
+      branch: MDVersionUpgrade/Lonestar
+
+# Site Editor slot mapping overview (siteEditorSlot -> servers)
+#   Development -> $(Development-web-server)
+#   FT1         -> $(Development-web-server)
+#   FT2         -> $(Development-web-server)
+#   FT3         -> $(Development-web-server)
+#   QA          -> $(Development-web-server)
+#   Demo        -> $(Development-web-server)
+#   SIT         -> $(SIT-web-server)
+#   Pre-Prod    -> $(Pre-prod-web1-server),$(Pre-prod-web2-server)
+#   Production  -> $(Production-web1-Server),$(Production-web2-Server)
+# Deployment path comes from vg-shared-paths variable group: SiteEditorTool_Location
+
+variables:
+  # Server catalog and paths
+  - group: vg-shared-servers
+  - group: vg-shared-paths
+
+  # WinRM service account (non-prod vs prod) based on siteEditorSlot
+  - ${{ if ne(parameters.siteEditorSlot, 'Production') }}:
+      - group: NonProd-WinRM-ServiceAccount
+  - ${{ if eq(parameters.siteEditorSlot, 'Production') }}:
+      - group: Prod-WinRM-ServiceAccount
+
+  # Server selection per siteEditorSlot (from vg-shared-servers)
+  - ${{ if eq(parameters.siteEditorSlot, 'Development') }}:
+      - name: selectedServerName
+        value: '$(Development-web-server)'
+  - ${{ if eq(parameters.siteEditorSlot, 'FT1') }}:
+      - name: selectedServerName
+        value: '$(Development-web-server)'
+  - ${{ if eq(parameters.siteEditorSlot, 'FT2') }}:
+      - name: selectedServerName
+        value: '$(Development-web-server)'
+  - ${{ if eq(parameters.siteEditorSlot, 'FT3') }}:
+      - name: selectedServerName
+        value: '$(Development-web-server)'
+  - ${{ if eq(parameters.siteEditorSlot, 'QA') }}:
+      - name: selectedServerName
+        value: '$(Development-web-server)'
+  - ${{ if eq(parameters.siteEditorSlot, 'Demo') }}:
+      - name: selectedServerName
+        value: '$(Development-web-server)'
+  - ${{ if eq(parameters.siteEditorSlot, 'SIT') }}:
+      - name: selectedServerName
+        value: '$(SIT-web-server)'
+  - ${{ if eq(parameters.siteEditorSlot, 'Pre-Prod') }}:
+      - name: selectedServerName
+        value: '$(Pre-prod-web1-server),$(Pre-prod-web2-server)'
+  - ${{ if eq(parameters.siteEditorSlot, 'Production') }}:
+      - name: selectedServerName
+        value: '$(Production-web1-Server),$(Production-web2-Server)'
+
+pool:
+  name: ccoe-nprod-windows-mdp-01
+
+stages:
+  - stage: Deploy_SiteEditor
+    displayName: "Site Editor - Deploy to $(siteEditorSlot)"
+    jobs:
+      - job: DeploySiteEditor
+        displayName: "Site Editor - Deploy to target servers for $(siteEditorSlot)"
+        pool:
+          name: ccoe-nprod-windows-mdp-01
+        steps:
+          - download: buildPipeline
+            displayName: "Site Editor - Download SiteEditor artifact"
+            artifact: SiteEditor
+
+          - download: buildPipeline
+            displayName: "Site Editor - Download SiteEditorUpdateTool artifact"
+            artifact: SiteEditorUpdateTool
+
+          - task: ExtractFiles@1
+            displayName: "Site Editor - Extract SiteEditor artifact"
+            inputs:
+              archiveFilePatterns: '$(Pipeline.Workspace)\buildPipeline\SiteEditor\MasterData.SiteEditor.zip'
+              destinationFolder: '$(Pipeline.Workspace)\temp_siteeditor'
+              cleanDestinationFolder: true
+
+          - task: ArchiveFiles@2
+            displayName: "Site Editor - Re-zip SiteEditor artifact"
+            inputs:
+              rootFolderOrFile: '$(Pipeline.Workspace)\temp_siteeditor'
+              includeRootFolder: false
+              archiveType: "zip"
+              archiveFile: '$(Pipeline.Workspace)\buildPipeline\SiteEditor\MasterData.SiteEditor.zip'
+              replaceExistingArchive: true
+
+          - task: ExtractFiles@1
+            displayName: "Site Editor - Extract SiteEditorUpdateTool artifact"
+            inputs:
+              archiveFilePatterns: '$(Pipeline.Workspace)\buildPipeline\SiteEditorUpdateTool\MasterData.SiteEditor.UpdateTool.zip'
+              destinationFolder: '$(Pipeline.Workspace)\temp_updateTool'
+              cleanDestinationFolder: true
+
+          - task: ArchiveFiles@2
+            displayName: "Site Editor - Re-zip SiteEditorUpdateTool artifact"
+            inputs:
+              rootFolderOrFile: '$(Pipeline.Workspace)\temp_updateTool'
+              includeRootFolder: false
+              archiveType: "zip"
+              archiveFile: '$(Pipeline.Workspace)\buildPipeline\SiteEditorUpdateTool\MasterData.SiteEditor.UpdateTool.zip'
+              replaceExistingArchive: true
+
+          - task: WindowsMachineFileCopy@2
+            displayName: "Site Editor - Copy SiteEditor zip to $(selectedServerName)"
+            inputs:
+              SourcePath: '$(Pipeline.Workspace)\buildPipeline\SiteEditor\MasterData.SiteEditor.zip'
+              MachineNames: "$(selectedServerName)"
+              AdminUserName: "$(winrmUserName)"
+              AdminPassword: "$(winrmPassword)"
+              TargetPath: 'C:\Temp\SiteEditor'
+              Protocol: "WinRM"
+
+          - task: WindowsMachineFileCopy@2
+            displayName: "Site Editor - Copy SiteEditorUpdateTool zip to $(selectedServerName)"
+            inputs:
+              SourcePath: '$(Pipeline.Workspace)\buildPipeline\SiteEditorUpdateTool\MasterData.SiteEditor.UpdateTool.zip'
+              MachineNames: "$(selectedServerName)"
+              AdminUserName: "$(winrmUserName)"
+              AdminPassword: "$(winrmPassword)"
+              TargetPath: 'C:\Temp\SiteEditor'
+              Protocol: "WinRM"
+
+          - task: PowerShellOnTargetMachines@3
+            displayName: "Site Editor - Extract SiteEditor on $(siteEditorSlot) servers"
+            inputs:
+              Machines: "$(selectedServerName)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $destination = "$(SiteEditorTool_Location)"
+                $tempFolder = 'C:\Temp\SiteEditor'
+                $zipPath = Join-Path $tempFolder 'MasterData.SiteEditor.zip'
+
+                Write-Host "Checking for zip file at: $zipPath"
+                if (-not (Test-Path $zipPath)) {
+                  Write-Host "ERROR: Zip file not found at $zipPath"
+                  if (Test-Path $tempFolder) {
+                    Write-Host "Temp folder contents:"
+                    Get-ChildItem -Path $tempFolder -Recurse | ForEach-Object { Write-Host "  - $($_.FullName)" }
+                  }
+                  throw "Artifact zip not found at $zipPath"
+                }
+                Write-Host "Zip file found successfully at $zipPath"
+
+                if (-not (Test-Path $destination)) {
+                  Write-Host "Creating destination folder $destination"
+                  New-Item -ItemType Directory -Path $destination -Force | Out-Null
+                } else {
+                  Write-Host "Clearing existing contents in $destination"
+                  Get-ChildItem -Path $destination -Recurse -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+                }
+
+                Write-Host "Extracting $zipPath to $destination"
+                Expand-Archive -LiteralPath $zipPath -DestinationPath $destination -Force
+                Write-Host "SiteEditor extraction completed successfully"
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
+
+          - task: PowerShellOnTargetMachines@3
+            displayName: "Site Editor - Extract SiteEditorUpdateTool on $(siteEditorSlot) servers"
+            inputs:
+              Machines: "$(selectedServerName)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $destination = "$(SiteEditorTool_Location)"
+                $tempFolder = 'C:\Temp\SiteEditor'
+                $zipPath = Join-Path $tempFolder 'MasterData.SiteEditor.UpdateTool.zip'
+
+                Write-Host "Checking for zip file at: $zipPath"
+                if (-not (Test-Path $zipPath)) {
+                  Write-Host "ERROR: Zip file not found at $zipPath"
+                  if (Test-Path $tempFolder) {
+                    Write-Host "Temp folder contents:"
+                    Get-ChildItem -Path $tempFolder -Recurse | ForEach-Object { Write-Host "  - $($_.FullName)" }
+                  }
+                  throw "Artifact zip not found at $zipPath"
+                }
+                Write-Host "Zip file found successfully at $zipPath"
+
+                Write-Host "Extracting $zipPath to $destination"
+                Expand-Archive -LiteralPath $zipPath -DestinationPath $destination -Force
+                Write-Host "SiteEditorUpdateTool extraction completed successfully"
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
