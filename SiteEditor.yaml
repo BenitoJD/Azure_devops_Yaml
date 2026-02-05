@@ -156,7 +156,9 @@ stages:
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $destination = "$(SiteEditorTool_Location)"
+                $slotName = "$(siteEditorSlot)"
+                $basePath = "$(SiteEditorTool_Location)"
+                $destination = Join-Path $basePath $slotName
                 $tempFolder = 'C:\Temp\SiteEditor'
                 $zipPath = Join-Path $tempFolder 'MasterData.SiteEditor.zip'
 
@@ -197,7 +199,9 @@ stages:
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $destination = "$(SiteEditorTool_Location)"
+                $slotName = "$(siteEditorSlot)"
+                $basePath = "$(SiteEditorTool_Location)"
+                $destination = Join-Path $basePath $slotName
                 $tempFolder = 'C:\Temp\SiteEditor'
                 $zipPath = Join-Path $tempFolder 'MasterData.SiteEditor.UpdateTool.zip'
 
