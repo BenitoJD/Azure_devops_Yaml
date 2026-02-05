@@ -41,6 +41,10 @@ variables:
   # Server catalog and paths
   - group: vg-shared-servers
   - group: vg-shared-paths
+  
+  # Convert parameter to variable for use in inline scripts
+  - name: siteEditorSlot
+    value: ${{ parameters.siteEditorSlot }}
 
   # WinRM service account (non-prod vs prod) based on siteEditorSlot
   - ${{ if ne(parameters.siteEditorSlot, 'Production') }}:
