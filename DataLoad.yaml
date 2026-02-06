@@ -1,0 +1,353 @@
+pool:
+  name: ccoe-nprod-windows-mdp-01
+
+trigger: none
+
+name: DataLoad_${{ parameters.dbSlot }}_$(Date:yyyyMMdd)$(Rev:.r)
+
+parameters:
+  - name: dbSlot
+    displayName: 'Database Environment / Slot'
+    type: string
+    default: Dev
+    values:
+      - Dev
+      - FT1
+      - FT2
+      - FT3
+      - QA
+      - R1
+      - Demo
+      - SIT
+      - Pre-Prod
+      - Production
+
+variables:
+  - name: BuildNumber
+    value: '$(Build.BuildNumber)'
+  - name: BranchName
+    value: '$(Build.SourceBranchName)'
+  - name: BuildVersion
+    value: '$(Build.BuildId)'
+  - name: dbSlot
+    value: ${{ parameters.dbSlot }}
+
+  # Server catalog and paths
+  - group: vg-shared-servers
+  - group: vg-shared-paths
+
+  # Database configuration variable groups (per slot)
+  - ${{ if eq(parameters.dbSlot, 'Dev') }}:
+      - group: Development_Dataload
+  - ${{ if eq(parameters.dbSlot, 'FT1') }}:
+      - group: FT1_Dataload
+  - ${{ if eq(parameters.dbSlot, 'FT2') }}:
+      - group: FT2_Dataload
+  - ${{ if eq(parameters.dbSlot, 'FT3') }}:
+      - group: FT3_Dataload
+  - ${{ if eq(parameters.dbSlot, 'QA') }}:
+      - group: QA_Dataload
+  - ${{ if eq(parameters.dbSlot, 'R1') }}:
+      - group: R1_Dataload
+  - ${{ if eq(parameters.dbSlot, 'Demo') }}:
+      - group: Demo_Dataload
+  - ${{ if eq(parameters.dbSlot, 'SIT') }}:
+      - group: SIT_Dataload
+  - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+      - group: Pre-Prod_Dataload
+  - ${{ if eq(parameters.dbSlot, 'Production') }}:
+      - group: Production_Dataload
+
+resources:
+  pipelines:
+    - pipeline: 'MasterData.DB.DataLoad'
+      project: 'MasterData'
+      source: 'MasterData.DB.DataLoad'
+      branch: 'MDVersionUpgrade/Lonestar'
+
+stages:
+  - stage: Initialize
+    displayName: 'Initialize and Select Targets'
+    jobs:
+      - job: Initialize_Env
+        displayName: 'Initialize'
+        steps:
+          - checkout: none
+          - task: PowerShell@2
+            displayName: 'Build Information'
+            inputs:
+              targetType: 'inline'
+              script: |
+                Write-Host "Branch: $(BranchName)"
+                Write-Host "Build: $(BuildNumber)"
+                Write-Host "Version: $(BuildVersion)"
+                Write-Host "Database Slot: $(dbSlot)"
+                Write-Host "Database Server(s): $(Server_DB_Instance)"
+                Write-Host "Database Name: $(Database_MasterData_DBName)"
+
+  - stage: AcquireAndExtract
+    displayName: 'Acquire and Extract Artifacts'
+    dependsOn: Initialize
+    condition: succeeded()
+    jobs:
+      - job: PrepareArtifacts
+        displayName: 'Download and Extract DACPAC'
+        steps:
+          - checkout: none
+          - download: 'MasterData.DB.DataLoad'
+            displayName: 'Download artifacts'
+            artifact: 'MasterData.DB.DataLoad'
+          - task: ExtractFiles@1
+            displayName: 'Extract artifacts'
+            inputs:
+              archiveFilePatterns: '$(Pipeline.Workspace)\MasterData.DB.DataLoad\MasterData.DB.DataLoad\*.zip'
+              destinationFolder: '$(Pipeline.Workspace)\temp_managed'
+              cleanDestinationFolder: true
+          - task: PowerShell@2
+            displayName: 'Verify DACPAC file exists'
+            inputs:
+              targetType: 'inline'
+              script: |
+                $dacpacPath = Join-Path "$(Pipeline.Workspace)\temp_managed" "Boots.MasterData.DB.DataLoad.dacpac"
+                Write-Host "Checking for DACPAC at: $dacpacPath"
+                if (-not (Test-Path $dacpacPath)) {
+                  Write-Host "ERROR: DACPAC file not found at $dacpacPath"
+                  Write-Host "Files in extracted folder:"
+                  if (Test-Path "$(Pipeline.Workspace)\temp_managed") {
+                    Get-ChildItem -Path "$(Pipeline.Workspace)\temp_managed" | ForEach-Object { Write-Host "  - $($_.Name)" }
+                  }
+                  throw "DACPAC file not found at expected location"
+                }
+                Write-Host "DACPAC file found successfully: $dacpacPath"
+                $fileInfo = Get-Item $dacpacPath
+                Write-Host "File size: $($fileInfo.Length) bytes"
+                Write-Host "Last modified: $($fileInfo.LastWriteTime)"
+
+  - stage: DeployDatabase
+    displayName: 'Deploy Database'
+    dependsOn: AcquireAndExtract
+    condition: succeeded()
+    variables:
+      # Load variable groups at stage level for PowerShell script access
+      - ${{ if eq(parameters.dbSlot, 'Dev') }}:
+          - group: Development_Dataload
+      - ${{ if eq(parameters.dbSlot, 'FT1') }}:
+          - group: FT1_Dataload
+      - ${{ if eq(parameters.dbSlot, 'FT2') }}:
+          - group: FT2_Dataload
+      - ${{ if eq(parameters.dbSlot, 'FT3') }}:
+          - group: FT3_Dataload
+      - ${{ if eq(parameters.dbSlot, 'QA') }}:
+          - group: QA_Dataload
+      - ${{ if eq(parameters.dbSlot, 'R1') }}:
+          - group: R1_Dataload
+      - ${{ if eq(parameters.dbSlot, 'Demo') }}:
+          - group: Demo_Dataload
+      - ${{ if eq(parameters.dbSlot, 'SIT') }}:
+          - group: SIT_Dataload
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_Dataload
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_Dataload
+    jobs:
+      - job: Deploy_DACPAC
+        displayName: 'Deploy DACPAC to Database Server(s)'
+        steps:
+          - checkout: none
+          - task: PowerShell@2
+            displayName: 'Deploy DACPAC using SqlPackage'
+            inputs:
+              targetType: 'inline'
+              script: |
+                $ErrorActionPreference = "Stop"
+                
+                # Get variables from Azure DevOps (expanded before script execution)
+                $installLocation = "$(Pipeline.Workspace)\temp_managed"
+                $serverNames = "$(Server_DB_Instance)"
+                $dbName = "$(Database_MasterData_DBName)"
+                $dacLocation = "$(Server_DAC_LibraryLocation)"
+                $sqlUser = "$(Server_DB_Admin_User)"
+                $sqlPassword = "$(Server_DB_Admin_Password)"
+                
+                # Database Details
+                $projectName = "Boots.MasterData.DB.DataLoad"
+                $dacpac = Join-Path $installLocation "$($projectName).dacpac"
+                
+                # Validate required variables
+                if ([string]::IsNullOrWhiteSpace($serverNames)) {
+                  throw "Server_DB_Instance is not set or is empty"
+                }
+                if ([string]::IsNullOrWhiteSpace($dbName)) {
+                  throw "Database_MasterData_DBName is not set or is empty"
+                }
+                if ([string]::IsNullOrWhiteSpace($dacLocation)) {
+                  throw "Server_DAC_LibraryLocation is not set or is empty"
+                }
+                if (-not (Test-Path $dacpac)) {
+                  throw "DACPAC file not found at: $dacpac"
+                }
+                if (-not (Test-Path $dacLocation)) {
+                  throw "SqlPackage.exe not found at: $dacLocation"
+                }
+                
+                Write-Host "=========================================="
+                Write-Host "Database Deployment Configuration"
+                Write-Host "=========================================="
+                Write-Host "DACPAC File: $dacpac"
+                Write-Host "SqlPackage Location: $dacLocation"
+                Write-Host "Database Name: $dbName"
+                Write-Host "Server(s): $serverNames"
+                Write-Host "SQL User: $(if ([string]::IsNullOrWhiteSpace($sqlUser)) { 'Windows Authentication' } else { $sqlUser })"
+                Write-Host "=========================================="
+                
+                # Split comma-separated server names and deploy sequentially
+                $servers = $serverNames -split ',' | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+                
+                if ($servers.Count -eq 0) {
+                  throw "No valid server names found in Server_DB_Instance"
+                }
+                
+                Write-Host "Deploying to $($servers.Count) server(s) sequentially..."
+                
+                $deploymentErrors = @()
+                $deploymentSuccess = @()
+                
+                foreach ($serverName in $servers) {
+                  Write-Host ""
+                  Write-Host "=========================================="
+                  Write-Host "Deploying to server: $serverName"
+                  Write-Host "=========================================="
+                  
+                  try {
+                    # Change to SqlPackage directory
+                    Push-Location $dacLocation
+                    
+                    # Build SqlPackage command arguments
+                    $sqlPackageArgs = @(
+                      "/Action:publish",
+                      "/SourceFile:`"$dacpac`"",
+                      "/TargetServerName:`"$serverName`"",
+                      "/TargetDatabaseName:`"$dbName`"",
+                      "/p:BlockOnPossibleDataLoss=false"
+                    )
+                    
+                    # Add SQL authentication if credentials provided
+                    if (-not [string]::IsNullOrWhiteSpace($sqlUser) -and -not [string]::IsNullOrWhiteSpace($sqlPassword)) {
+                      Write-Host "Using SQL Server Authentication"
+                      $sqlPackageArgs += "/TargetUser:`"$sqlUser`""
+                      $sqlPackageArgs += "/TargetPassword:`"$sqlPassword`""
+                    } else {
+                      Write-Host "Using Windows Authentication"
+                    }
+                    
+                    Write-Host "Executing SqlPackage.exe with arguments:"
+                    Write-Host "  $($sqlPackageArgs -join ' ')"
+                    
+                    # Execute SqlPackage
+                    $processStartInfo = New-Object System.Diagnostics.ProcessStartInfo
+                    $processStartInfo.FileName = $dacLocation
+                    $processStartInfo.Arguments = $sqlPackageArgs -join ' '
+                    $processStartInfo.UseShellExecute = $false
+                    $processStartInfo.RedirectStandardOutput = $true
+                    $processStartInfo.RedirectStandardError = $true
+                    $processStartInfo.CreateNoWindow = $true
+                    
+                    $process = New-Object System.Diagnostics.Process
+                    $process.StartInfo = $processStartInfo
+                    
+                    # Capture output
+                    $outputBuilder = New-Object System.Text.StringBuilder
+                    $errorBuilder = New-Object System.Text.StringBuilder
+                    
+                    $outputEvent = Register-ObjectEvent -InputObject $process -EventName OutputDataReceived -Action {
+                  param($sender, $e)
+                  if ($e.Data) {
+                    [void]$outputBuilder.AppendLine($e.Data)
+                    Write-Host $e.Data
+                  }
+                }
+                    
+                    $errorEvent = Register-ObjectEvent -InputObject $process -EventName ErrorDataReceived -Action {
+                  param($sender, $e)
+                  if ($e.Data) {
+                    [void]$errorBuilder.AppendLine($e.Data)
+                    Write-Host $e.Data -ForegroundColor Yellow
+                  }
+                }
+                    
+                    $process.Start() | Out-Null
+                    $process.BeginOutputReadLine()
+                    $process.BeginErrorReadLine()
+                    $process.WaitForExit()
+                    
+                    Unregister-Event -SourceIdentifier $outputEvent.Name
+                    Unregister-Event -SourceIdentifier $errorEvent.Name
+                    
+                    $exitCode = $process.ExitCode
+                    $stdOutput = $outputBuilder.ToString()
+                    $stdError = $errorBuilder.ToString()
+                    
+                    if ($exitCode -ne 0) {
+                      $errorMessage = "SqlPackage.exe failed with exit code $exitCode for server $serverName"
+                      Write-Host "ERROR: $errorMessage" -ForegroundColor Red
+                      if ($stdError) {
+                        Write-Host "Error Output:" -ForegroundColor Red
+                        Write-Host $stdError -ForegroundColor Red
+                      }
+                      if ($stdOutput) {
+                        Write-Host "Standard Output:" -ForegroundColor Yellow
+                        Write-Host $stdOutput
+                      }
+                      $deploymentErrors += "$serverName : Exit Code $exitCode - $stdError"
+                      throw $errorMessage
+                    } else {
+                      Write-Host "SUCCESS: Deployment completed successfully for server $serverName" -ForegroundColor Green
+                      if ($stdOutput) {
+                        Write-Host "Output:"
+                        Write-Host $stdOutput
+                      }
+                      $deploymentSuccess += $serverName
+                    }
+                    
+                  } catch {
+                    $errorDetails = $_.Exception.Message
+                    if ($_.Exception.InnerException) {
+                      $errorDetails += " | Inner Exception: $($_.Exception.InnerException.Message)"
+                    }
+                    Write-Host "ERROR: Deployment failed for server $serverName" -ForegroundColor Red
+                    Write-Host "Error: $errorDetails" -ForegroundColor Red
+                    Write-Host "Stack Trace: $($_.ScriptStackTrace)" -ForegroundColor Red
+                    $deploymentErrors += "$serverName : $errorDetails"
+                    throw "Deployment to $serverName failed: $errorDetails"
+                  } finally {
+                    Pop-Location
+                  }
+                }
+                
+                Write-Host ""
+                Write-Host "=========================================="
+                Write-Host "Deployment Summary"
+                Write-Host "=========================================="
+                Write-Host "Total Servers: $($servers.Count)"
+                Write-Host "Successful: $($deploymentSuccess.Count)"
+                Write-Host "Failed: $($deploymentErrors.Count)"
+                
+                if ($deploymentSuccess.Count -gt 0) {
+                  Write-Host ""
+                  Write-Host "Successfully deployed to:" -ForegroundColor Green
+                  foreach ($server in $deploymentSuccess) {
+                    Write-Host "  - $server" -ForegroundColor Green
+                  }
+                }
+                
+                if ($deploymentErrors.Count -gt 0) {
+                  Write-Host ""
+                  Write-Host "Failed deployments:" -ForegroundColor Red
+                  foreach ($error in $deploymentErrors) {
+                    Write-Host "  - $error" -ForegroundColor Red
+                  }
+                  throw "One or more deployments failed. See details above."
+                }
+                
+                Write-Host ""
+                Write-Host "All deployments completed successfully!" -ForegroundColor Green
