@@ -124,67 +124,92 @@ stages:
           - download: 'MasterData.DB.DataLoad'
             displayName: 'Download artifacts'
             artifact: 'drop'
-          - task: ExtractFiles@1
-            displayName: 'Extract artifacts'
-            inputs:
-              archiveFilePatterns: '$(Pipeline.Workspace)/MasterData.DB.DataLoad/drop/*.zip'
-              destinationFolder: '$(Pipeline.Workspace)/temp_managed'
-              cleanDestinationFolder: true
           - task: PowerShell@2
-            displayName: 'Verify DACPAC file exists'
+            displayName: 'Find zip file to copy'
             inputs:
               targetType: 'inline'
               script: |
-                $workspace = "$(Pipeline.Workspace)"
-                $tempManaged = Join-Path $workspace "temp_managed"
-                Write-Host "Checking extracted files in: $tempManaged"
+                $dropPath = "$(Pipeline.Workspace)/MasterData.DB.DataLoad/drop"
+                Write-Host "Looking for zip file in: $dropPath"
                 
-                if (Test-Path $tempManaged) {
-                  Write-Host "temp_managed folder exists!"
-                  Write-Host ""
-                  Write-Host "All files in temp_managed (recursive):"
-                  Get-ChildItem -Path $tempManaged -Recurse | ForEach-Object {
-                    $relativePath = $_.FullName.Replace($tempManaged, "").TrimStart('\')
-                    Write-Host "  - $relativePath (Size: $($_.Length) bytes)"
-                  }
-                  
-                  # Search for DACPAC file
-                  $dacpacFiles = Get-ChildItem -Path $tempManaged -Filter "*.dacpac" -Recurse -ErrorAction SilentlyContinue
-                  if ($dacpacFiles) {
-                    Write-Host ""
-                    Write-Host "Found DACPAC file(s):"
-                    foreach ($file in $dacpacFiles) {
-                      Write-Host "  - $($file.FullName)"
-                    }
-                  } else {
-                    Write-Host ""
-                    Write-Host "ERROR: No DACPAC files found!"
-                  }
-                } else {
-                  Write-Host "ERROR: temp_managed folder does not exist: $tempManaged"
+                if (-not (Test-Path $dropPath)) {
+                  throw "Drop folder does not exist: $dropPath"
                 }
                 
-                $dacpacPath = Join-Path $tempManaged "Boots.MasterData.DB.DataLoad.dacpac"
-                Write-Host ""
-                Write-Host "Expected DACPAC path: $dacpacPath"
-                if (Test-Path $dacpacPath) {
-                  Write-Host "DACPAC file found successfully!"
-                  $fileInfo = Get-Item $dacpacPath
-                  Write-Host "File size: $($fileInfo.Length) bytes"
-                  Write-Host "Last modified: $($fileInfo.LastWriteTime)"
-                } else {
-                  Write-Host "DACPAC file NOT found at expected location"
-                  throw "DACPAC file not found at expected location: $dacpacPath"
+                $zipFiles = Get-ChildItem -Path $dropPath -Filter "*.zip" -ErrorAction SilentlyContinue
+                if (-not $zipFiles -or $zipFiles.Count -eq 0) {
+                  Write-Host "ERROR: No zip files found in $dropPath"
+                  Write-Host "Contents of drop folder:"
+                  Get-ChildItem -Path $dropPath | ForEach-Object { Write-Host "  - $($_.Name)" }
+                  throw "No zip file found in drop folder"
                 }
+                
+                $zipFile = $zipFiles[0].FullName
+                Write-Host "Found zip file: $zipFile"
+                Write-Host "##vso[task.setvariable variable=ZipFilePath]$zipFile"
           - task: WindowsMachineFileCopy@2
-            displayName: 'Copy files to destination server'
+            displayName: 'Copy artifact zip to destination server'
             inputs:
-              SourcePath: '$(Pipeline.Workspace)/temp_managed'
+              SourcePath: '$(ZipFilePath)'
               MachineNames: "$(Server_DB_Instance_Name)"
               AdminUserName: "$(winrmUserName)"
               AdminPassword: "$(winrmPassword)"
-              TargetPath: '$(DataLoad_Deployment_Path)'
+              TargetPath: 'C:\Temp\DataLoadDeploy'
               Protocol: "WinRM"
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Extract files on target server'
+            inputs:
+              Machines: "$(Server_DB_Instance_Name)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $tempFolder = 'C:\Temp\DataLoadDeploy'
+                $deploymentPath = "$(DataLoad_Deployment_Path)"
+                
+                Write-Host "Checking for zip file in: $tempFolder"
+                $zipFiles = Get-ChildItem -Path $tempFolder -Filter "*.zip" -ErrorAction SilentlyContinue
+                
+                if (-not $zipFiles -or $zipFiles.Count -eq 0) {
+                  Write-Host "ERROR: No zip files found in $tempFolder"
+                  if (Test-Path $tempFolder) {
+                    Write-Host "Contents of temp folder:"
+                    Get-ChildItem -Path $tempFolder | ForEach-Object { Write-Host "  - $($_.Name)" }
+                  }
+                  throw "Zip file not found in $tempFolder"
+                }
+                
+                $zipPath = $zipFiles[0].FullName
+                Write-Host "Found zip file: $zipPath"
+                
+                if (-not (Test-Path $deploymentPath)) {
+                  Write-Host "Creating deployment folder: $deploymentPath"
+                  New-Item -ItemType Directory -Path $deploymentPath -Force | Out-Null
+                } else {
+                  Write-Host "Clearing existing contents in: $deploymentPath"
+                  Get-ChildItem -Path $deploymentPath -Recurse -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+                }
+                
+                Write-Host "Extracting $zipPath to $deploymentPath"
+                Expand-Archive -LiteralPath $zipPath -DestinationPath $deploymentPath -Force
+                Write-Host "Extraction completed successfully"
+                
+                # Verify DACPAC file exists
+                $dacpacFiles = Get-ChildItem -Path $deploymentPath -Filter "*.dacpac" -Recurse -ErrorAction SilentlyContinue
+                if ($dacpacFiles) {
+                  Write-Host "DACPAC file(s) found:"
+                  foreach ($file in $dacpacFiles) {
+                    Write-Host "  - $($file.FullName)"
+                  }
+                } else {
+                  Write-Host "WARNING: No DACPAC files found after extraction"
+                }
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
 
   - stage: DeployDatabase
     displayName: 'Deploy Database'
