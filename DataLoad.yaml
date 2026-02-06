@@ -162,7 +162,7 @@ stages:
                 
                 # Get variables from Azure DevOps environment variables
                 $installLocation = "$(Pipeline.Workspace)\temp_managed"
-                $serverNames = $env:Server_DB_Instance
+                $serverNames = $env:Server_DB_Instance_Name
                 $dbName = $env:Database_MasterData_DBName
                 $dacLocation = $env:Server_DAC_LibraryLocation
                 $sqlUser = $env:Server_DB_Admin_User
@@ -174,7 +174,7 @@ stages:
                 
                 # Validate required variables
                 if ([string]::IsNullOrWhiteSpace($serverNames)) {
-                  throw "Server_DB_Instance is not set or is empty"
+                  throw "Server_DB_Instance_Name is not set or is empty"
                 }
                 if ([string]::IsNullOrWhiteSpace($dbName)) {
                   throw "Database_MasterData_DBName is not set or is empty"
