@@ -104,8 +104,22 @@ stages:
                 Write-Host "Build: $(BuildNumber)"
                 Write-Host "Version: $(BuildVersion)"
                 Write-Host "Database Slot: $(dbSlot)"
-                Write-Host "Database Server(s): $(Server_DB_Instance)"
-                Write-Host "Database Name: $(Database_MasterData_DBName)"
+                
+                # Access Azure DevOps variables from environment (variable groups)
+                $serverInstance = $env:Server_DB_Instance
+                $dbName = $env:Database_MasterData_DBName
+                
+                if ($serverInstance) {
+                  Write-Host "Database Server(s): $serverInstance"
+                } else {
+                  Write-Host "Database Server(s): (will be loaded in deployment stage)"
+                }
+                
+                if ($dbName) {
+                  Write-Host "Database Name: $dbName"
+                } else {
+                  Write-Host "Database Name: (will be loaded in deployment stage)"
+                }
 
   - stage: AcquireAndExtract
     displayName: 'Acquire and Extract Artifacts'
