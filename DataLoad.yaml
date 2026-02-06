@@ -402,9 +402,15 @@ stages:
                     Write-Host "Executing SqlPackage.exe with arguments:"
                     Write-Host "  $($sqlPackageArgs -join ' ')"
                     
+                    # Build full path to SqlPackage.exe
+                    $sqlPackageExe = Join-Path $dacLocation "SqlPackage.exe"
+                    if (-not (Test-Path $sqlPackageExe)) {
+                      throw "SqlPackage.exe not found at: $sqlPackageExe"
+                    }
+                    
                     # Execute SqlPackage
                     $processStartInfo = New-Object System.Diagnostics.ProcessStartInfo
-                    $processStartInfo.FileName = $dacLocation
+                    $processStartInfo.FileName = $sqlPackageExe
                     $processStartInfo.Arguments = $sqlPackageArgs -join ' '
                     $processStartInfo.UseShellExecute = $false
                     $processStartInfo.RedirectStandardOutput = $true
