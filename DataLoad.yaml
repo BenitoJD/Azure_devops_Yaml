@@ -90,54 +90,40 @@ stages:
                 Write-Host "Database Slot: $(dbSlot)"
                 Write-Host "Database configuration will be loaded from variable group in deployment stage"
 
-  - stage: AcquireAndExtract
-    displayName: 'Acquire and Extract Artifacts'
+  - stage: AcquireAndCopy
+    displayName: 'Acquire, Extract and Copy Artifacts'
     dependsOn: Initialize
     condition: succeeded()
+    variables:
+      # Load variable groups at stage level for copy task
+      - ${{ if eq(parameters.dbSlot, 'Dev') }}:
+          - group: Development_Dataload
+      - ${{ if eq(parameters.dbSlot, 'FT1') }}:
+          - group: FT1_Dataload
+      - ${{ if eq(parameters.dbSlot, 'FT2') }}:
+          - group: FT2_Dataload
+      - ${{ if eq(parameters.dbSlot, 'FT3') }}:
+          - group: FT3_Dataload
+      - ${{ if eq(parameters.dbSlot, 'QA') }}:
+          - group: QA_Dataload
+      - ${{ if eq(parameters.dbSlot, 'R1') }}:
+          - group: R1_Dataload
+      - ${{ if eq(parameters.dbSlot, 'Demo') }}:
+          - group: Demo_Dataload
+      - ${{ if eq(parameters.dbSlot, 'SIT') }}:
+          - group: SIT_Dataload
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_Dataload
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_Dataload
     jobs:
-      - job: PrepareArtifacts
-        displayName: 'Download and Extract DACPAC'
+      - job: PrepareAndCopyArtifacts
+        displayName: 'Download, Extract and Copy DACPAC'
         steps:
           - checkout: none
           - download: 'MasterData.DB.DataLoad'
             displayName: 'Download artifacts'
             artifact: 'drop'
-          - task: PowerShell@2
-            displayName: 'Debug: List downloaded artifact structure'
-            inputs:
-              targetType: 'inline'
-              script: |
-                $workspace = "$(Pipeline.Workspace)"
-                Write-Host "Pipeline Workspace: $workspace"
-                Write-Host ""
-                Write-Host "Checking downloaded artifact location..."
-                $artifactPath = Join-Path $workspace "MasterData.DB.DataLoad"
-                Write-Host "Artifact folder: $artifactPath"
-                
-                if (Test-Path $artifactPath) {
-                  Write-Host "Artifact folder exists!"
-                  Write-Host ""
-                  Write-Host "Contents of artifact folder:"
-                  Get-ChildItem -Path $artifactPath -Recurse | ForEach-Object {
-                    $relativePath = $_.FullName.Replace($artifactPath, "").TrimStart('\')
-                    Write-Host "  - $relativePath (Size: $($_.Length) bytes, Type: $($_.GetType().Name))"
-                  }
-                  
-                  $dropPath = Join-Path $artifactPath "drop"
-                  Write-Host ""
-                  Write-Host "Checking 'drop' subfolder: $dropPath"
-                  if (Test-Path $dropPath) {
-                    Write-Host "Drop folder exists!"
-                    Write-Host "Contents of drop folder:"
-                    Get-ChildItem -Path $dropPath | ForEach-Object {
-                      Write-Host "  - $($_.Name) (Size: $($_.Length) bytes)"
-                    }
-                  } else {
-                    Write-Host "Drop folder does NOT exist!"
-                  }
-                } else {
-                  Write-Host "ERROR: Artifact folder does not exist: $artifactPath"
-                }
           - task: ExtractFiles@1
             displayName: 'Extract artifacts'
             inputs:
@@ -190,38 +176,6 @@ stages:
                   Write-Host "DACPAC file NOT found at expected location"
                   throw "DACPAC file not found at expected location: $dacpacPath"
                 }
-
-  - stage: CopyToDestinationServer
-    displayName: 'Copy Files to Destination Server'
-    dependsOn: AcquireAndExtract
-    condition: succeeded()
-    variables:
-      # Load variable groups at stage level
-      - ${{ if eq(parameters.dbSlot, 'Dev') }}:
-          - group: Development_Dataload
-      - ${{ if eq(parameters.dbSlot, 'FT1') }}:
-          - group: FT1_Dataload
-      - ${{ if eq(parameters.dbSlot, 'FT2') }}:
-          - group: FT2_Dataload
-      - ${{ if eq(parameters.dbSlot, 'FT3') }}:
-          - group: FT3_Dataload
-      - ${{ if eq(parameters.dbSlot, 'QA') }}:
-          - group: QA_Dataload
-      - ${{ if eq(parameters.dbSlot, 'R1') }}:
-          - group: R1_Dataload
-      - ${{ if eq(parameters.dbSlot, 'Demo') }}:
-          - group: Demo_Dataload
-      - ${{ if eq(parameters.dbSlot, 'SIT') }}:
-          - group: SIT_Dataload
-      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
-          - group: Pre-Prod_Dataload
-      - ${{ if eq(parameters.dbSlot, 'Production') }}:
-          - group: Production_Dataload
-    jobs:
-      - job: Copy_Files
-        displayName: 'Copy DACPAC files to destination server'
-        steps:
-          - checkout: none
           - task: WindowsMachineFileCopy@2
             displayName: 'Copy files to destination server'
             inputs:
@@ -234,7 +188,7 @@ stages:
 
   - stage: DeployDatabase
     displayName: 'Deploy Database'
-    dependsOn: CopyToDestinationServer
+    dependsOn: AcquireAndCopy
     condition: succeeded()
     variables:
       # Load variable groups at stage level for PowerShell script access
