@@ -161,7 +161,7 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                $dropPath = "$(Pipeline.Workspace)/MasterData.DB.DataLoad/drop"
+                $dropPath = "$(Pipeline.Workspace)\MasterData.DB.DataLoad\drop"
                 Write-Host "Looking for zip file in: $dropPath"
                 
                 if (-not (Test-Path $dropPath)) {
@@ -178,7 +178,10 @@ stages:
                 
                 $zipFile = $zipFiles[0].FullName
                 Write-Host "Found zip file: $zipFile"
-                Write-Host "##vso[task.setvariable variable=ZipFilePath]$zipFile"
+                # Normalize path separators for Windows
+                $zipFileNormalized = $zipFile -replace '/', '\'
+                Write-Host "Normalized path: $zipFileNormalized"
+                Write-Host "##vso[task.setvariable variable=ZipFilePath]$zipFileNormalized"
           - task: WindowsMachineFileCopy@2
             displayName: 'Copy artifact zip to destination server'
             inputs:
