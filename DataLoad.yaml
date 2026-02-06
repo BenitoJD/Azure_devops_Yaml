@@ -68,6 +68,28 @@ resources:
 stages:
   - stage: Initialize
     displayName: 'Initialize and Select Targets'
+    variables:
+      # Load variable groups at stage level so variables are available
+      - ${{ if eq(parameters.dbSlot, 'Dev') }}:
+          - group: Development_Dataload
+      - ${{ if eq(parameters.dbSlot, 'FT1') }}:
+          - group: FT1_Dataload
+      - ${{ if eq(parameters.dbSlot, 'FT2') }}:
+          - group: FT2_Dataload
+      - ${{ if eq(parameters.dbSlot, 'FT3') }}:
+          - group: FT3_Dataload
+      - ${{ if eq(parameters.dbSlot, 'QA') }}:
+          - group: QA_Dataload
+      - ${{ if eq(parameters.dbSlot, 'R1') }}:
+          - group: R1_Dataload
+      - ${{ if eq(parameters.dbSlot, 'Demo') }}:
+          - group: Demo_Dataload
+      - ${{ if eq(parameters.dbSlot, 'SIT') }}:
+          - group: SIT_Dataload
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_Dataload
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_Dataload
     jobs:
       - job: Initialize_Env
         displayName: 'Initialize'
