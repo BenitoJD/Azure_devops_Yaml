@@ -96,31 +96,94 @@ stages:
           - download: 'MasterData.DB.DataLoad'
             displayName: 'Download artifacts'
             artifact: 'drop'
+          - task: PowerShell@2
+            displayName: 'Debug: List downloaded artifact structure'
+            inputs:
+              targetType: 'inline'
+              script: |
+                $workspace = "$(Pipeline.Workspace)"
+                Write-Host "Pipeline Workspace: $workspace"
+                Write-Host ""
+                Write-Host "Checking downloaded artifact location..."
+                $artifactPath = Join-Path $workspace "MasterData.DB.DataLoad"
+                Write-Host "Artifact folder: $artifactPath"
+                
+                if (Test-Path $artifactPath) {
+                  Write-Host "Artifact folder exists!"
+                  Write-Host ""
+                  Write-Host "Contents of artifact folder:"
+                  Get-ChildItem -Path $artifactPath -Recurse | ForEach-Object {
+                    $relativePath = $_.FullName.Replace($artifactPath, "").TrimStart('\')
+                    Write-Host "  - $relativePath (Size: $($_.Length) bytes, Type: $($_.GetType().Name))"
+                  }
+                  
+                  $dropPath = Join-Path $artifactPath "drop"
+                  Write-Host ""
+                  Write-Host "Checking 'drop' subfolder: $dropPath"
+                  if (Test-Path $dropPath) {
+                    Write-Host "Drop folder exists!"
+                    Write-Host "Contents of drop folder:"
+                    Get-ChildItem -Path $dropPath | ForEach-Object {
+                      Write-Host "  - $($_.Name) (Size: $($_.Length) bytes)"
+                    }
+                  } else {
+                    Write-Host "Drop folder does NOT exist!"
+                  }
+                } else {
+                  Write-Host "ERROR: Artifact folder does not exist: $artifactPath"
+                }
           - task: ExtractFiles@1
             displayName: 'Extract artifacts'
             inputs:
-              archiveFilePatterns: '$(Pipeline.Workspace)\MasterData.DB.DataLoad\drop\*.zip'
-              destinationFolder: '$(Pipeline.Workspace)\temp_managed'
+              archiveFilePatterns: '$(Pipeline.Workspace)/MasterData.DB.DataLoad/drop/*.zip'
+              destinationFolder: '$(Pipeline.Workspace)/temp_managed'
               cleanDestinationFolder: true
           - task: PowerShell@2
             displayName: 'Verify DACPAC file exists'
             inputs:
               targetType: 'inline'
               script: |
-                $dacpacPath = Join-Path "$(Pipeline.Workspace)\temp_managed" "Boots.MasterData.DB.DataLoad.dacpac"
-                Write-Host "Checking for DACPAC at: $dacpacPath"
-                if (-not (Test-Path $dacpacPath)) {
-                  Write-Host "ERROR: DACPAC file not found at $dacpacPath"
-                  Write-Host "Files in extracted folder:"
-                  if (Test-Path "$(Pipeline.Workspace)\temp_managed") {
-                    Get-ChildItem -Path "$(Pipeline.Workspace)\temp_managed" | ForEach-Object { Write-Host "  - $($_.Name)" }
+                $workspace = "$(Pipeline.Workspace)"
+                $tempManaged = Join-Path $workspace "temp_managed"
+                Write-Host "Checking extracted files in: $tempManaged"
+                
+                if (Test-Path $tempManaged) {
+                  Write-Host "temp_managed folder exists!"
+                  Write-Host ""
+                  Write-Host "All files in temp_managed (recursive):"
+                  Get-ChildItem -Path $tempManaged -Recurse | ForEach-Object {
+                    $relativePath = $_.FullName.Replace($tempManaged, "").TrimStart('\')
+                    Write-Host "  - $relativePath (Size: $($_.Length) bytes)"
                   }
-                  throw "DACPAC file not found at expected location"
+                  
+                  # Search for DACPAC file
+                  $dacpacFiles = Get-ChildItem -Path $tempManaged -Filter "*.dacpac" -Recurse -ErrorAction SilentlyContinue
+                  if ($dacpacFiles) {
+                    Write-Host ""
+                    Write-Host "Found DACPAC file(s):"
+                    foreach ($file in $dacpacFiles) {
+                      Write-Host "  - $($file.FullName)"
+                    }
+                  } else {
+                    Write-Host ""
+                    Write-Host "ERROR: No DACPAC files found!"
+                  }
+                } else {
+                  Write-Host "ERROR: temp_managed folder does not exist: $tempManaged"
                 }
-                Write-Host "DACPAC file found successfully: $dacpacPath"
-                $fileInfo = Get-Item $dacpacPath
-                Write-Host "File size: $($fileInfo.Length) bytes"
-                Write-Host "Last modified: $($fileInfo.LastWriteTime)"
+                
+                $dacpacPath = Join-Path $tempManaged "Boots.MasterData.DB.DataLoad.dacpac"
+                Write-Host ""
+                Write-Host "Expected DACPAC path: $dacpacPath"
+                if (Test-Path $dacpacPath) {
+                  Write-Host "DACPAC file found successfully!"
+                  $fileInfo = Get-Item $dacpacPath
+                  Write-Host "File size: $($fileInfo.Length) bytes"
+                  Write-Host "Last modified: $($fileInfo.LastWriteTime)"
+                } else {
+                  Write-Host "DACPAC file NOT found at expected location"
+                  throw "DACPAC file not found at expected location: $dacpacPath"
+                }
 
   - stage: DeployDatabase
     displayName: 'Deploy Database'
