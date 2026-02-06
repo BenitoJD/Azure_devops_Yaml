@@ -286,14 +286,14 @@ stages:
               InlineScript: |
                 $ErrorActionPreference = "Stop"
                 
-                # Get variables from Azure DevOps environment variables
+                # Get variables from Azure DevOps (expanded before script execution)
                 $installLocation = "$(DataLoad_Deployment_Path)"
                 # Server_DB_Instance_Name from variable group = SQL Server instance name to connect to
-                $serverNames = $env:Server_DB_Instance_Name
-                $dbName = $env:Database_MasterData_DBName
-                $dacLocation = $env:Server_DAC_LibraryLocation
-                $sqlUser = $env:Server_DB_Admin_User
-                $sqlPassword = $env:Server_DB_Admin_Password
+                $serverNames = "$(Server_DB_Instance_Name)"
+                $dbName = "$(Database_MasterData_DBName)"
+                $dacLocation = "$(Server_DAC_LibraryLocation)"
+                $sqlUser = "$(Server_DB_Admin_User)"
+                $sqlPassword = "$(Server_DB_Admin_Password)"
                 
                 # Database Details
                 $projectName = "Boots.MasterData.DB.DataLoad"
