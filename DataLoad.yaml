@@ -381,24 +381,22 @@ stages:
                     # Change to SqlPackage directory
                     Push-Location $dacLocation
                     
+                    # Build connection string with TrustServerCertificate
+                    if (-not [string]::IsNullOrWhiteSpace($sqlUser) -and -not [string]::IsNullOrWhiteSpace($sqlPassword)) {
+                      Write-Host "Using SQL Server Authentication"
+                      $connectionString = "Server=$serverName;Database=$dbName;User Id=$sqlUser;Password=$sqlPassword;TrustServerCertificate=True;"
+                    } else {
+                      Write-Host "Using Windows Authentication"
+                      $connectionString = "Server=$serverName;Database=$dbName;Integrated Security=True;TrustServerCertificate=True;"
+                    }
+                    
                     # Build SqlPackage command arguments
                     $sqlPackageArgs = @(
                       "/Action:publish",
                       "/SourceFile:`"$dacpac`"",
-                      "/TargetServerName:`"$serverName`"",
-                      "/TargetDatabaseName:`"$dbName`"",
-                      "/p:BlockOnPossibleDataLoss=false",
-                      "/p:TrustServerCertificate=True"
+                      "/TargetConnectionString:`"$connectionString`"",
+                      "/p:BlockOnPossibleDataLoss=false"
                     )
-                    
-                    # Add SQL authentication if credentials provided
-                    if (-not [string]::IsNullOrWhiteSpace($sqlUser) -and -not [string]::IsNullOrWhiteSpace($sqlPassword)) {
-                      Write-Host "Using SQL Server Authentication"
-                      $sqlPackageArgs += "/TargetUser:`"$sqlUser`""
-                      $sqlPackageArgs += "/TargetPassword:`"$sqlPassword`""
-                    } else {
-                      Write-Host "Using Windows Authentication"
-                    }
                     
                     Write-Host "Executing SqlPackage.exe with arguments:"
                     Write-Host "  $($sqlPackageArgs -join ' ')"
