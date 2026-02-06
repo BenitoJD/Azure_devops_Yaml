@@ -42,6 +42,38 @@ variables:
   - ${{ if eq(parameters.dbSlot, 'Production') }}:
       - group: Prod-WinRM-ServiceAccount
 
+  # Server selection per dbSlot (from vg-shared-servers)
+  - ${{ if eq(parameters.dbSlot, 'Dev') }}:
+      - name: selectedDbServers
+        value: '$(Development-db-server)'
+  - ${{ if eq(parameters.dbSlot, 'FT1') }}:
+      - name: selectedDbServers
+        value: '$(Development-db-server)'
+  - ${{ if eq(parameters.dbSlot, 'FT2') }}:
+      - name: selectedDbServers
+        value: '$(Development-db-server)'
+  - ${{ if eq(parameters.dbSlot, 'FT3') }}:
+      - name: selectedDbServers
+        value: '$(Development-db-server)'
+  - ${{ if eq(parameters.dbSlot, 'QA') }}:
+      - name: selectedDbServers
+        value: '$(Development-db-server)'
+  - ${{ if eq(parameters.dbSlot, 'R1') }}:
+      - name: selectedDbServers
+        value: '$(Development-db-server)'
+  - ${{ if eq(parameters.dbSlot, 'Demo') }}:
+      - name: selectedDbServers
+        value: '$(Development-db-server)'
+  - ${{ if eq(parameters.dbSlot, 'SIT') }}:
+      - name: selectedDbServers
+        value: '$(SIT-db-server)'
+  - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+      - name: selectedDbServers
+        value: '$(Pre-prod-dbPrimary-server),$(Pre-prod-dbSecondary-server)'
+  - ${{ if eq(parameters.dbSlot, 'Production') }}:
+      - name: selectedDbServers
+        value: '$(Production-dbPrimary-Server),$(Production-dbSecondary-Server)'
+
   # Database configuration variable groups (per slot)
   - ${{ if eq(parameters.dbSlot, 'Dev') }}:
       - group: Development_Dataload
@@ -151,7 +183,7 @@ stages:
             displayName: 'Copy artifact zip to destination server'
             inputs:
               SourcePath: '$(ZipFilePath)'
-              MachineNames: "$(Server_DB_Instance_Name)"
+              MachineNames: "$(selectedDbServers)"
               AdminUserName: "$(winrmUserName)"
               AdminPassword: "$(winrmPassword)"
               TargetPath: 'C:\Temp\DataLoadDeploy'
@@ -159,7 +191,7 @@ stages:
           - task: PowerShellOnTargetMachines@3
             displayName: 'Extract files on target server'
             inputs:
-              Machines: "$(Server_DB_Instance_Name)"
+              Machines: "$(selectedDbServers)"
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
@@ -245,7 +277,7 @@ stages:
           - task: PowerShellOnTargetMachines@3
             displayName: 'Deploy DACPAC using SqlPackage'
             inputs:
-              Machines: "$(Server_DB_Instance_Name)"
+              Machines: "$(selectedDbServers)"
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
@@ -253,6 +285,7 @@ stages:
                 
                 # Get variables from Azure DevOps environment variables
                 $installLocation = "$(DataLoad_Deployment_Path)"
+                # Server_DB_Instance_Name from variable group = SQL Server instance name to connect to
                 $serverNames = $env:Server_DB_Instance_Name
                 $dbName = $env:Database_MasterData_DBName
                 $dacLocation = $env:Server_DAC_LibraryLocation
