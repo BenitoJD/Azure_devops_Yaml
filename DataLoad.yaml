@@ -387,7 +387,8 @@ stages:
                       "/SourceFile:`"$dacpac`"",
                       "/TargetServerName:`"$serverName`"",
                       "/TargetDatabaseName:`"$dbName`"",
-                      "/p:BlockOnPossibleDataLoss=false"
+                      "/p:BlockOnPossibleDataLoss=false",
+                      "/p:TrustServerCertificate=True"
                     )
                     
                     # Add SQL authentication if credentials provided
