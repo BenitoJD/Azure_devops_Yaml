@@ -95,11 +95,11 @@ stages:
           - checkout: none
           - download: 'MasterData.DB.DataLoad'
             displayName: 'Download artifacts'
-            artifact: 'MasterData.DB.DataLoad'
+            artifact: 'drop'
           - task: ExtractFiles@1
             displayName: 'Extract artifacts'
             inputs:
-              archiveFilePatterns: '$(Pipeline.Workspace)\MasterData.DB.DataLoad\MasterData.DB.DataLoad\*.zip'
+              archiveFilePatterns: '$(Pipeline.Workspace)\MasterData.DB.DataLoad\drop\*.zip'
               destinationFolder: '$(Pipeline.Workspace)\temp_managed'
               cleanDestinationFolder: true
           - task: PowerShell@2
