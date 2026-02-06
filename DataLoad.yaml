@@ -160,13 +160,13 @@ stages:
               script: |
                 $ErrorActionPreference = "Stop"
                 
-                # Get variables from Azure DevOps (expanded before script execution)
+                # Get variables from Azure DevOps environment variables
                 $installLocation = "$(Pipeline.Workspace)\temp_managed"
-                $serverNames = "$(Server_DB_Instance)"
-                $dbName = "$(Database_MasterData_DBName)"
-                $dacLocation = "$(Server_DAC_LibraryLocation)"
-                $sqlUser = "$(Server_DB_Admin_User)"
-                $sqlPassword = "$(Server_DB_Admin_Password)"
+                $serverNames = $env:Server_DB_Instance
+                $dbName = $env:Database_MasterData_DBName
+                $dacLocation = $env:Server_DAC_LibraryLocation
+                $sqlUser = $env:Server_DB_Admin_User
+                $sqlPassword = $env:Server_DB_Admin_Password
                 
                 # Database Details
                 $projectName = "Boots.MasterData.DB.DataLoad"
