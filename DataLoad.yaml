@@ -170,7 +170,33 @@ stages:
                 
                 # Database Details
                 $projectName = "Boots.MasterData.DB.DataLoad"
-                $dacpac = Join-Path $installLocation "$($projectName).dacpac"
+                
+                # Debug: List all files in temp_managed folder
+                Write-Host "Checking for DACPAC file in: $installLocation"
+                if (Test-Path $installLocation) {
+                  Write-Host "Files found in temp_managed folder:"
+                  Get-ChildItem -Path $installLocation -Recurse | ForEach-Object {
+                    Write-Host "  - $($_.FullName) (Size: $($_.Length) bytes)"
+                  }
+                  
+                  # Try to find DACPAC file (case-insensitive search)
+                  $dacpacFiles = Get-ChildItem -Path $installLocation -Filter "*.dacpac" -Recurse -ErrorAction SilentlyContinue
+                  if ($dacpacFiles) {
+                    Write-Host "Found DACPAC file(s):"
+                    foreach ($file in $dacpacFiles) {
+                      Write-Host "  - $($file.FullName)"
+                    }
+                    $dacpac = $dacpacFiles[0].FullName
+                    Write-Host "Using DACPAC file: $dacpac"
+                  } else {
+                    # Fallback to expected path
+                    $dacpac = Join-Path $installLocation "$($projectName).dacpac"
+                    Write-Host "No DACPAC files found, checking expected path: $dacpac"
+                  }
+                } else {
+                  $dacpac = Join-Path $installLocation "$($projectName).dacpac"
+                  Write-Host "temp_managed folder does not exist: $installLocation"
+                }
                 
                 # Validate required variables
                 if ([string]::IsNullOrWhiteSpace($serverNames)) {
@@ -183,6 +209,13 @@ stages:
                   throw "Server_DAC_LibraryLocation is not set or is empty"
                 }
                 if (-not (Test-Path $dacpac)) {
+                  Write-Host "ERROR: DACPAC file not found at: $dacpac"
+                  if (Test-Path $installLocation) {
+                    Write-Host "Contents of $installLocation :"
+                    Get-ChildItem -Path $installLocation -Recurse | ForEach-Object {
+                      Write-Host "  - $($_.FullName)"
+                    }
+                  }
                   throw "DACPAC file not found at: $dacpac"
                 }
                 if (-not (Test-Path $dacLocation)) {
