@@ -1,0 +1,2075 @@
+pool:
+  name: ccoe-nprod-windows-mdp-01
+
+trigger: none
+
+name: MasterDataDB_${{ parameters.dbSlot }}_$(Date:yyyyMMdd)$(Rev:.r)
+
+parameters:
+  - name: dbSlot
+    displayName: 'Database Environment / Slot'
+    type: string
+    default: Dev
+    values:
+      - Dev
+      - FT1
+      - FT2
+      - FT3
+      - QA
+      - R1
+      - Demo
+      - SIT
+      - Pre-Prod
+      - Production
+
+variables:
+  - name: BuildNumber
+    value: '$(Build.BuildNumber)'
+  - name: BranchName
+    value: '$(Build.SourceBranchName)'
+  - name: BuildVersion
+    value: '$(Build.BuildId)'
+  - name: dbSlot
+    value: ${{ parameters.dbSlot }}
+
+  # Server catalog and paths
+  - group: vg-shared-servers
+  - group: vg-shared-paths
+
+  # WinRM service account (non-prod vs prod) based on dbSlot
+  - ${{ if ne(parameters.dbSlot, 'Production') }}:
+      - group: NonProd-WinRM-ServiceAccount
+  - ${{ if eq(parameters.dbSlot, 'Production') }}:
+      - group: Prod-WinRM-ServiceAccount
+
+  # Server selection per dbSlot (from vg-shared-servers)
+  - ${{ if eq(parameters.dbSlot, 'Dev') }}:
+      - name: selectedDbServers
+        value: '$(Development-db-server)'
+  - ${{ if eq(parameters.dbSlot, 'FT1') }}:
+      - name: selectedDbServers
+        value: '$(Development-db-server)'
+  - ${{ if eq(parameters.dbSlot, 'FT2') }}:
+      - name: selectedDbServers
+        value: '$(Development-db-server)'
+  - ${{ if eq(parameters.dbSlot, 'FT3') }}:
+      - name: selectedDbServers
+        value: '$(Development-db-server)'
+  - ${{ if eq(parameters.dbSlot, 'QA') }}:
+      - name: selectedDbServers
+        value: '$(Development-db-server)'
+  - ${{ if eq(parameters.dbSlot, 'R1') }}:
+      - name: selectedDbServers
+        value: '$(Development-db-server)'
+  - ${{ if eq(parameters.dbSlot, 'Demo') }}:
+      - name: selectedDbServers
+        value: '$(Development-db-server)'
+  - ${{ if eq(parameters.dbSlot, 'SIT') }}:
+      - name: selectedDbServers
+        value: '$(SIT-db-server)'
+  - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+      - name: selectedDbServers
+        value: '$(Pre-prod-dbPrimary-server),$(Pre-prod-dbSecondary-server)'
+  - ${{ if eq(parameters.dbSlot, 'Production') }}:
+      - name: selectedDbServers
+        value: '$(Production-dbPrimary-Server),$(Production-dbSecondary-Server)'
+
+  # Database configuration variable groups (per slot)
+  - ${{ if eq(parameters.dbSlot, 'Dev') }}:
+      - group: Development_DBDeploy
+  - ${{ if eq(parameters.dbSlot, 'FT1') }}:
+      - group: FT1_DBDeploy
+  - ${{ if eq(parameters.dbSlot, 'FT2') }}:
+      - group: FT2_DBDeploy
+  - ${{ if eq(parameters.dbSlot, 'FT3') }}:
+      - group: FT3_DBDeploy
+  - ${{ if eq(parameters.dbSlot, 'QA') }}:
+      - group: QA_DBDeploy
+  - ${{ if eq(parameters.dbSlot, 'R1') }}:
+      - group: R1_DBDeploy
+  - ${{ if eq(parameters.dbSlot, 'Demo') }}:
+      - group: Demo_DBDeploy
+  - ${{ if eq(parameters.dbSlot, 'SIT') }}:
+      - group: SIT_DBDeploy
+  - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+      - group: Pre-Prod_DBDeploy
+  - ${{ if eq(parameters.dbSlot, 'Production') }}:
+      - group: Production_DBDeploy
+
+resources:
+  pipelines:
+    - pipeline: 'MasterData.DB'
+      project: 'MasterData'
+      source: 'MasterData.DB'
+      branch: 'MDVersionUpgrade/Lonestar'
+
+stages:
+  - stage: Initialize
+    displayName: 'Initialize and Select Targets'
+    jobs:
+      - job: Initialize_Env
+        displayName: 'Initialize'
+        steps:
+          - checkout: none
+          - task: PowerShell@2
+            displayName: 'Build Information'
+            inputs:
+              targetType: 'inline'
+              script: |
+                Write-Host "Branch: $(BranchName)"
+                Write-Host "Build: $(BuildNumber)"
+                Write-Host "Version: $(BuildVersion)"
+                Write-Host "Database Slot: $(dbSlot)"
+                Write-Host "Target Servers: $(selectedDbServers)"
+                Write-Host "Database configuration will be loaded from variable group in deployment stages"
+
+  - stage: AcquireArtifacts
+    displayName: 'Acquire and Extract Artifacts'
+    dependsOn: Initialize
+    condition: succeeded()
+    variables:
+      # Load variable groups at stage level
+      - ${{ if eq(parameters.dbSlot, 'Dev') }}:
+          - group: Development_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'FT1') }}:
+          - group: FT1_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'FT2') }}:
+          - group: FT2_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'FT3') }}:
+          - group: FT3_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'QA') }}:
+          - group: QA_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'R1') }}:
+          - group: R1_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Demo') }}:
+          - group: Demo_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'SIT') }}:
+          - group: SIT_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: PrepareArtifacts
+        displayName: 'Download and Extract DACPAC Artifacts'
+        steps:
+          - checkout: none
+          - download: 'MasterData.DB'
+            displayName: 'Download artifacts'
+            artifact: 'MasterData.DB.InitialStagingDB'
+          - download: 'MasterData.DB'
+            displayName: 'Download ManualUpgrade artifact'
+            artifact: 'MasterData.DB.ManualUpgrade'
+          - download: 'MasterData.DB'
+            displayName: 'Download MasterDataDB artifact'
+            artifact: 'MasterData.DB.MasterDataDB'
+          - task: ExtractFiles@1
+            displayName: 'Extract InitialStagingDB artifact'
+            inputs:
+              archiveFilePatterns: '$(Pipeline.Workspace)/MasterData.DB/MasterData.DB.InitialStagingDB/*.zip'
+              destinationFolder: '$(Pipeline.Workspace)/temp_managed/InitialStagingDB'
+              cleanDestinationFolder: true
+          - task: ExtractFiles@1
+            displayName: 'Extract ManualUpgrade artifact'
+            inputs:
+              archiveFilePatterns: '$(Pipeline.Workspace)/MasterData.DB/MasterData.DB.ManualUpgrade/*.zip'
+              destinationFolder: '$(Pipeline.Workspace)/temp_managed/ManualUpgrade'
+              cleanDestinationFolder: true
+          - task: ExtractFiles@1
+            displayName: 'Extract MasterDataDB artifact'
+            inputs:
+              archiveFilePatterns: '$(Pipeline.Workspace)/MasterData.DB/MasterData.DB.MasterDataDB/*.zip'
+              destinationFolder: '$(Pipeline.Workspace)/temp_managed/MasterDataDB'
+              cleanDestinationFolder: true
+          - task: WindowsMachineFileCopy@2
+            displayName: 'Copy artifacts to target servers'
+            inputs:
+              SourcePath: '$(Pipeline.Workspace)/temp_managed'
+              MachineNames: "$(selectedDbServers)"
+              AdminUserName: "$(winrmUserName)"
+              AdminPassword: "$(winrmPassword)"
+              TargetPath: 'C:\Temp\MasterDataDBDeploy'
+              Protocol: "WinRM"
+
+  - stage: ChoosePrimaryNode
+    displayName: 'Choose Primary Node (AlwaysOn Only)'
+    dependsOn: AcquireArtifacts
+    condition: and(succeeded(), or(eq(parameters.dbSlot, 'Pre-Prod'), eq(parameters.dbSlot, 'Production')))
+    variables:
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: SelectPrimaryNode
+        displayName: 'Determine Primary Node'
+        steps:
+          - checkout: none
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Find primary node in AlwaysOn cluster'
+            inputs:
+              Machines: "$(selectedDbServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
+                if ($alwaysOnEnabled -ne "true") {
+                  Write-Host "AlwaysOn is not enabled for this environment. Skipping primary node selection."
+                  exit 0
+                }
+                
+                $serverName = "$(Server_DB_Local_Instance)"
+                $sqlLogin = "$(Server_DB_Admin_User)"
+                $sqlPassword = "$(Server_DB_Admin_Password)"
+                $dbInstanceName = "$(Server_DB_Instance_Name)"
+                $currentMachineName = $env:COMPUTERNAME
+                
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
+                
+                $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
+                
+                if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
+                  if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
+                    throw "SQL Password must be specified when using SQL authentication."
+                  }
+                  Write-Host "Connecting to server using SQL authentication as $sqlLogin."
+                  $server.ConnectionContext.LoginSecure = $false
+                  $server.ConnectionContext.Login = $sqlLogin
+                  $server.ConnectionContext.Password = $sqlPassword
+                  $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
+                } else {
+                  Write-Host "Connecting to server using Windows authentication."
+                }
+                
+                try {
+                  $server.ConnectionContext.Connect()
+                } catch {
+                  Write-Error "An error occurred connecting to the database server!`r`n$($_.Exception.ToString())"
+                  exit -1
+                }
+                Write-Host "Connected to server."
+                
+                $masterDB = $server.Databases["master"]
+                
+                try {
+                  Write-Host "Attempting to discover primary node from AlwaysOn cluster"
+                  $alwaysOnQuery = "SELECT TOP 1 hags.primary_replica FROM sys.dm_hadr_availability_group_states hags INNER JOIN sys.availability_groups ag ON ag.group_id = hags.group_id WHERE ag.name = '$dbInstanceName';"
+                  $ds = $masterDB.ExecuteWithResults($alwaysOnQuery)
+                  $primaryNode = ""
+                  Foreach ($t in $ds.Tables) {
+                    Foreach ($r in $t.Rows) {
+                      Foreach ($c in $t.Columns) {
+                        $primaryNode = $r.Item($c)
+                      }
+                    }
+                  }
+                  Write-Host "Primary host is: $primaryNode"
+                  Write-Host "Current Machine is: $currentMachineName"
+                  
+                  if ($currentMachineName -like "*$primaryNode*" -or $primaryNode -like "*$currentMachineName*") {
+                    Write-Host "##vso[task.setvariable variable=ChosenMachine]$currentMachineName"
+                    Write-Host "Choosing machine: $currentMachineName"
+                  } else {
+                    Write-Host "Not choosing current machine. Primary is: $primaryNode"
+                  }
+                } catch {
+                  Write-Host "Error discovering primary node:"
+                  Write-Host $_.Exception | Format-List -Force
+                  throw "Failed to discover primary node"
+                }
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
+
+  - stage: BackupDatabases
+    displayName: 'Backup Databases (AlwaysOn Only)'
+    dependsOn: AcquireArtifacts
+    condition: and(succeeded(), or(eq(parameters.dbSlot, 'Pre-Prod'), eq(parameters.dbSlot, 'Production')))
+    variables:
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Backup_Databases
+        displayName: 'Backup InitialStaging and MasterData Databases'
+        steps:
+          - checkout: none
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Backup databases using SMO'
+            inputs:
+              Machines: "$(selectedDbServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $ErrorActionPreference = "Stop"
+                
+                $serverName = "$(Server_DB_Instance)"
+                $sqlLogin = "$(Server_DB_Admin_User)"
+                $sqlPassword = "$(Server_DB_Admin_Password)"
+                $isDbName = "$(Database_InitialStaging_DBName)"
+                $mdDbName = "$(Database_MasterData_DBName)"
+                $backupDirectory = "$(Server_DB_BackupLocation)"
+                $timestamp = Get-Date -format "yyyy-MM-dd-HHmmss"
+                
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
+                
+                $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
+                
+                if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
+                  if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
+                    throw "SQL Password must be specified when using SQL authentication."
+                  }
+                  $server.ConnectionContext.LoginSecure = $false
+                  $server.ConnectionContext.Login = $sqlLogin
+                  $server.ConnectionContext.Password = $sqlPassword
+                  $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
+                }
+                
+                try {
+                  $server.ConnectionContext.Connect()
+                } catch {
+                  Write-Error "An error occurred connecting to the database server!`r`n$($_.Exception.ToString())"
+                  throw
+                }
+                
+                if (-not (Test-Path $backupDirectory)) {
+                  Write-Host "Creating backup directory: $backupDirectory"
+                  New-Item $backupDirectory -ItemType Directory -Force | Out-Null
+                }
+                
+                function BackupDatabase {
+                  param($dbName, $backupDir, $stamp)
+                  
+                  $smoBackup = New-Object Microsoft.SqlServer.Management.Smo.Backup
+                  $backupPath = Join-Path $backupDir "$($dbName)_$($stamp).bak"
+                  $smoBackup.Devices.AddDevice($backupPath, "File")
+                  
+                  $smoBackup.Action = "Database"
+                  $smoBackup.BackupSetDescription = "Full Backup of $dbName"
+                  $smoBackup.BackupSetName = "$dbName Backup"
+                  $smoBackup.MediaDescription = "Disk"
+                  $smoBackup.CompressionOption = [Microsoft.SqlServer.Management.Smo.BackupCompressionOptions]::On
+                  $smoBackup.CopyOnly = $false
+                  $smoBackup.Initialize = $true
+                  $smoBackup.Database = $dbName
+                  
+                  Write-Host "Backing up database $dbName to $backupPath"
+                  $smoBackup.SqlBackup($server)
+                  Write-Host "Backup completed successfully for $dbName"
+                }
+                
+                BackupDatabase $isDbName $backupDirectory $timestamp
+                BackupDatabase $mdDbName $backupDirectory $timestamp
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
+
+  - stage: DisableAlwaysOn
+    displayName: 'Disable AlwaysOn (AlwaysOn Only)'
+    dependsOn: BackupDatabases
+    condition: and(succeeded(), or(eq(parameters.dbSlot, 'Pre-Prod'), eq(parameters.dbSlot, 'Production')))
+    variables:
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Disable_AlwaysOn
+        displayName: 'Remove Databases from AlwaysOn Availability Group'
+        steps:
+          - checkout: none
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Disable AlwaysOn on primary node'
+            inputs:
+              Machines: "$(selectedDbServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
+                if ($alwaysOnEnabled -ne "true") {
+                  Write-Host "AlwaysOn is not enabled. Skipping."
+                  exit 0
+                }
+                
+                $chosenMachine = "$(ChosenMachine)"
+                $currentMachine = $env:COMPUTERNAME
+                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                  Write-Host "Not selected host - exiting..."
+                  exit 0
+                }
+                
+                $serverName = "$(Server_DB_Local_Instance)"
+                $sqlLogin = "$(Server_DB_Admin_User)"
+                $sqlPassword = "$(Server_DB_Admin_Password)"
+                $isDbName = "$(Database_InitialStaging_DBName)"
+                $mdDbName = "$(Database_MasterData_DBName)"
+                $dbInstanceName = "$(Server_DB_Instance_Name)"
+                
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
+                
+                $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
+                
+                if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
+                  if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
+                    throw "SQL Password must be specified when using SQL authentication."
+                  }
+                  $server.ConnectionContext.LoginSecure = $false
+                  $server.ConnectionContext.Login = $sqlLogin
+                  $server.ConnectionContext.Password = $sqlPassword
+                  $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
+                }
+                
+                try {
+                  $server.ConnectionContext.Connect()
+                } catch {
+                  Write-Error "An error occurred connecting to the database server!`r`n$($_.Exception.ToString())"
+                  throw
+                }
+                
+                $masterDB = $server.Databases["master"]
+                
+                try {
+                  Write-Host "Attempting to remove $isDbName from AlwaysOn"
+                  $stopAlwaysOnSQL = "ALTER AVAILABILITY GROUP $dbInstanceName REMOVE DATABASE $isDbName;"
+                  Write-Host $stopAlwaysOnSQL
+                  $masterDB.ExecuteNonQuery($stopAlwaysOnSQL)
+                } catch {
+                  Write-Host "Error removing $isDbName from AlwaysOn:"
+                  Write-Host $_.Exception | Format-List -Force
+                }
+                
+                try {
+                  Write-Host "Attempting to remove $mdDbName from AlwaysOn"
+                  $stopAlwaysOnSQL = "ALTER AVAILABILITY GROUP $dbInstanceName REMOVE DATABASE $mdDbName;"
+                  Write-Host $stopAlwaysOnSQL
+                  $masterDB.ExecuteNonQuery($stopAlwaysOnSQL)
+                } catch {
+                  Write-Host "Error removing $mdDbName from AlwaysOn:"
+                  Write-Host $_.Exception | Format-List -Force
+                }
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
+
+  - stage: RestoreProductionBackups
+    displayName: 'Restore Production Backups (AlwaysOn Only)'
+    dependsOn: DisableAlwaysOn
+    condition: and(succeeded(), or(eq(parameters.dbSlot, 'Pre-Prod'), eq(parameters.dbSlot, 'Production')))
+    variables:
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Restore_Backups
+        displayName: 'Restore from Production Backups'
+        steps:
+          - checkout: none
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Restore InitialStaging database'
+            inputs:
+              Machines: "$(selectedDbServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
+                if ($alwaysOnEnabled -ne "true") {
+                  Write-Host "AlwaysOn is not enabled. Skipping."
+                  exit 0
+                }
+                
+                $chosenMachine = "$(ChosenMachine)"
+                $currentMachine = $env:COMPUTERNAME
+                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                  Write-Host "Not selected host - exiting..."
+                  exit 0
+                }
+                
+                $serverName = "$(Server_DB_Instance)"
+                $sqlLogin = "$(Server_DB_Admin_User)"
+                $sqlPassword = "$(Server_DB_Admin_Password)"
+                $dbName = "$(Database_InitialStaging_DBName)"
+                $backupFile = Join-Path "$(Server_DB_ProdBackupLocation)" "$(Server_DB_ProdBackupInitialStagingName)"
+                
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
+                
+                $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
+                
+                if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
+                  if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
+                    throw "SQL Password must be specified when using SQL authentication."
+                  }
+                  $server.ConnectionContext.LoginSecure = $false
+                  $server.ConnectionContext.Login = $sqlLogin
+                  $server.ConnectionContext.Password = $sqlPassword
+                  $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
+                }
+                
+                try {
+                  $server.ConnectionContext.Connect()
+                } catch {
+                  Write-Error "An error occurred connecting to the database server!`r`n$($_.Exception.ToString())"
+                  throw
+                }
+                
+                $masterDB = $server.Databases["master"]
+                $restorePath = Join-Path "$(Server_DB_RestoreLocation)" $dbName
+                
+                try {
+                  Write-Host "Attempting to put database into Single User mode (If it exists)"
+                  $singleUserSQL = "IF exists(select 1 from sys.databases where name = '$dbName') ALTER DATABASE $dbName SET single_user WITH ROLLBACK immediate;"
+                  $masterDB.ExecuteNonQuery($singleUserSQL)
+                } catch {
+                  Write-Host "Single user mode error: $($_.Exception.Message)"
+                }
+                
+                Write-Host "Attempting to restore database backup $backupFile to $restorePath"
+                $restoreSQL = "RESTORE DATABASE $dbName FROM DISK = '$backupFile' WITH RECOVERY, MOVE 'InitialStaging' TO '$($restorePath)_Data.mdf', MOVE 'InitialStaging_log' TO '$($restorePath)_Log.ldf', REPLACE"
+                
+                try {
+                  $masterDB.ExecuteNonQuery($restoreSQL)
+                } catch {
+                  Write-Host "Error:"
+                  Write-Host $_.Exception | Format-List -Force
+                  throw "Failed to restore."
+                }
+                
+                Write-Host "Completed Restore. Attempting to fix orphaned users..."
+                
+                $database = $server.Databases[$dbName]
+                try {
+                  $fixUsers = @"
+                    DECLARE @autoFix bit;
+                    SET @autoFix = 'TRUE';
+                    DECLARE @user sysname, @principal sysname, @sql nvarchar(500), @found int, @fixed int;
+                    DECLARE orphans CURSOR LOCAL FOR
+                        SELECT QUOTENAME(SU.[name]) AS UserName, QUOTENAME(SP.[name]) AS PrincipalName
+                        FROM sys.sysusers AS SU
+                             LEFT JOIN sys.server_principals AS SP
+                                 ON SU.[name] COLLATE Latin1_General_CI_AS = SP.[name] COLLATE Latin1_General_CI_AS
+                                    AND SP.[type] COLLATE Latin1_General_CI_AS = 'S' COLLATE Latin1_General_CI_AS
+                        WHERE SU.issqluser = 1 AND NOT SU.[sid] IS NULL AND SU.[sid] <> 0x0
+                              AND LEN(SU.[sid]) <= 16 AND SUSER_SNAME(SU.[sid]) IS NULL
+                        ORDER BY SU.[name];
+                    SET @found = 0;
+                    SET @fixed = 0;
+                    OPEN orphans;
+                    FETCH NEXT FROM orphans INTO @user, @principal;
+                    WHILE @@FETCH_STATUS = 0
+                    BEGIN
+                        IF @principal IS NULL
+                            PRINT N'Orphan: ' + @user;
+                        ELSE
+                        BEGIN
+                            PRINT N'Orphan: ' + @user + N' => Autofix possible, principal with same name found!';
+                            IF @autoFix = 'TRUE'
+                            BEGIN
+                                SET @sql = N'ALTER USER ' + @user + N' WITH LOGIN = ' + @principal + N';';
+                                EXEC sp_executesql @sql;
+                                PRINT N'        ' + @user + N' is auto fixed.';
+                                SET @fixed = @fixed + 1;
+                            END
+                        END
+                        SET @found = @found + 1;
+                        FETCH NEXT FROM orphans INTO @user, @principal;
+                    END;
+                    CLOSE orphans;
+                    DEALLOCATE orphans;
+"@
+                  $database.ExecuteNonQuery($fixUsers)
+                } catch {
+                  Write-Error "An error occurred fixing orphaned users!`r`n$($_.Exception.ToString())"
+                  throw
+                }
+                
+                $singleUserSQL = "ALTER DATABASE $dbName SET multi_user;"
+                $masterDB.ExecuteNonQuery($singleUserSQL)
+                Write-Host "Completed"
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Restore MasterData database'
+            inputs:
+              Machines: "$(selectedDbServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
+                if ($alwaysOnEnabled -ne "true") {
+                  Write-Host "AlwaysOn is not enabled. Skipping."
+                  exit 0
+                }
+                
+                $chosenMachine = "$(ChosenMachine)"
+                $currentMachine = $env:COMPUTERNAME
+                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                  Write-Host "Not selected host - exiting..."
+                  exit 0
+                }
+                
+                $serverName = "$(Server_DB_Instance)"
+                $sqlLogin = "$(Server_DB_Admin_User)"
+                $sqlPassword = "$(Server_DB_Admin_Password)"
+                $dbName = "$(Database_MasterData_DBName)"
+                $backupFile = Join-Path "$(Server_DB_ProdBackupLocation)" "$(Server_DB_ProdBackupMasterDataName)"
+                
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
+                
+                $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
+                
+                if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
+                  if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
+                    throw "SQL Password must be specified when using SQL authentication."
+                  }
+                  $server.ConnectionContext.LoginSecure = $false
+                  $server.ConnectionContext.Login = $sqlLogin
+                  $server.ConnectionContext.Password = $sqlPassword
+                  $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
+                }
+                
+                try {
+                  $server.ConnectionContext.StatementTimeout = 0
+                  $server.ConnectionContext.Connect()
+                } catch {
+                  Write-Error "An error occurred connecting to the database server!`r`n$($_.Exception.ToString())"
+                  throw
+                }
+                
+                $masterDB = $server.Databases["master"]
+                $restorePath = Join-Path "$(Server_DB_RestoreLocation)" $dbName
+                
+                try {
+                  Write-Host 'Attempting to switch the database into single user mode.'
+                  $singleUserSQL = "IF exists(select 1 from sys.databases where name = '$dbName') ALTER DATABASE $dbName SET single_user WITH ROLLBACK immediate;"
+                  $masterDB.ExecuteNonQuery($singleUserSQL)
+                } catch {
+                  Write-Host "Single user mode error: $($_.Exception.Message)"
+                }
+                
+                $restoreSQL = "RESTORE DATABASE $dbName FROM DISK = '$backupFile' WITH RECOVERY, MOVE 'MasterData' TO '$($restorePath)_Data.mdf', MOVE 'MasterData_log' TO '$($restorePath)_Log.ldf', REPLACE"
+                
+                try {
+                  Write-Host 'Beginning restore process.'
+                  $masterDB.ExecuteNonQuery($restoreSQL)
+                } catch {
+                  Write-Host "error:"
+                  Write-Host $_.Exception | Format-List -Force
+                  throw "failed to restore."
+                }
+                
+                Write-Host 'Restore process completed. Resolving orphaned users.'
+                
+                $database = $server.Databases[$dbName]
+                try {
+                  $fixUsers = @"
+                    DECLARE @autoFix bit;
+                    SET @autoFix = 'TRUE';
+                    DECLARE @user sysname, @principal sysname, @sql nvarchar(500), @found int, @fixed int;
+                    DECLARE orphans CURSOR LOCAL FOR
+                        SELECT QUOTENAME(SU.[name]) AS UserName, QUOTENAME(SP.[name]) AS PrincipalName
+                        FROM sys.sysusers AS SU
+                             LEFT JOIN sys.server_principals AS SP
+                                 ON SU.[name] COLLATE Latin1_General_CI_AS = SP.[name] COLLATE Latin1_General_CI_AS
+                                    AND SP.[type] COLLATE Latin1_General_CI_AS = 'S' COLLATE Latin1_General_CI_AS
+                        WHERE SU.issqluser = 1 AND NOT SU.[sid] IS NULL AND SU.[sid] <> 0x0
+                              AND LEN(SU.[sid]) <= 16 AND SUSER_SNAME(SU.[sid]) IS NULL
+                        ORDER BY SU.[name];
+                    SET @found = 0;
+                    SET @fixed = 0;
+                    OPEN orphans;
+                    FETCH NEXT FROM orphans INTO @user, @principal;
+                    WHILE @@FETCH_STATUS = 0
+                    BEGIN
+                        IF @principal IS NULL
+                            PRINT N'Orphan: ' + @user;
+                        ELSE
+                        BEGIN
+                            PRINT N'Orphan: ' + @user + N' => Autofix possible, principal with same name found!';
+                            IF @autoFix = 'TRUE'
+                            BEGIN
+                                SET @sql = N'ALTER USER ' + @user + N' WITH LOGIN = ' + @principal + N';';
+                                EXEC sp_executesql @sql;
+                                PRINT N'        ' + @user + N' is auto fixed.';
+                                SET @fixed = @fixed + 1;
+                            END
+                        END
+                        SET @found = @found + 1;
+                        FETCH NEXT FROM orphans INTO @user, @principal;
+                    END;
+                    CLOSE orphans;
+                    DEALLOCATE orphans;
+"@
+                  $database.ExecuteNonQuery($fixUsers)
+                } catch {
+                  Write-Error "An error occurred restoring the users!`r`n$($_.Exception.ToString())"
+                  throw
+                }
+                
+                Write-Host 'Setting database into multi user mode.'
+                $singleUserSQL = "ALTER DATABASE $dbName SET multi_user;"
+                $masterDB.ExecuteNonQuery($singleUserSQL)
+                Write-Host 'Process complete.'
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
+
+  - stage: RemoveFromSecondaryNodes
+    displayName: 'Remove Databases from Secondary Nodes (AlwaysOn Only)'
+    dependsOn: RestoreProductionBackups
+    condition: and(succeeded(), or(eq(parameters.dbSlot, 'Pre-Prod'), eq(parameters.dbSlot, 'Production')))
+    variables:
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Remove_Secondary_Databases
+        displayName: 'Drop Databases on Secondary Nodes'
+        steps:
+          - checkout: none
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Remove databases from secondary nodes'
+            inputs:
+              Machines: "$(selectedDbServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
+                if ($alwaysOnEnabled -ne "true") {
+                  Write-Host "AlwaysOn is not enabled. Skipping."
+                  exit 0
+                }
+                
+                $chosenMachine = "$(ChosenMachine)"
+                $currentMachine = $env:COMPUTERNAME
+                if ($chosenMachine -eq $currentMachine -and $chosenMachine -ne "") {
+                  Write-Host "Should not run on primary host - exiting..."
+                  exit 0
+                }
+                
+                $serverName = "$(Server_DB_Local_Instance)"
+                $sqlLogin = "$(Server_DB_Admin_User)"
+                $sqlPassword = "$(Server_DB_Admin_Password)"
+                $isDbName = "$(Database_InitialStaging_DBName)"
+                $mdDbName = "$(Database_MasterData_DBName)"
+                
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
+                
+                $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
+                
+                if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
+                  if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
+                    throw "SQL Password must be specified when using SQL authentication."
+                  }
+                  $server.ConnectionContext.LoginSecure = $false
+                  $server.ConnectionContext.Login = $sqlLogin
+                  $server.ConnectionContext.Password = $sqlPassword
+                  $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
+                }
+                
+                try {
+                  $server.ConnectionContext.Connect()
+                } catch {
+                  Write-Error "An error occurred connecting to the database server!`r`n$($_.Exception.ToString())"
+                  throw
+                }
+                
+                $masterDB = $server.Databases["master"]
+                
+                try {
+                  Write-Host "Attempting to remove $isDbName database from AlwaysOn secondary node"
+                  $backupAlwaysOnSQL = "DROP DATABASE [$isDbName];"
+                  Write-Host $backupAlwaysOnSQL
+                  $masterDB.ExecuteNonQuery($backupAlwaysOnSQL)
+                  
+                  Write-Host "Attempting to remove $mdDbName database from AlwaysOn secondary node"
+                  $backupAlwaysOnSQL = "DROP DATABASE [$mdDbName];"
+                  Write-Host $backupAlwaysOnSQL
+                  $masterDB.ExecuteNonQuery($backupAlwaysOnSQL)
+                } catch {
+                  Write-Host "error:"
+                  Write-Host $_.Exception | Format-List -Force
+                  throw "failed to drop always on database."
+                }
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
+
+  - stage: DeployDACPACs
+    displayName: 'Deploy DACPACs'
+    dependsOn: 
+      - BackupDatabases
+      - RemoveFromSecondaryNodes
+    condition: succeededOrSkipped()
+    variables:
+      - ${{ if eq(parameters.dbSlot, 'Dev') }}:
+          - group: Development_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'FT1') }}:
+          - group: FT1_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'FT2') }}:
+          - group: FT2_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'FT3') }}:
+          - group: FT3_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'QA') }}:
+          - group: QA_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'R1') }}:
+          - group: R1_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Demo') }}:
+          - group: Demo_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'SIT') }}:
+          - group: SIT_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Deploy_ManualUpgrade
+        displayName: 'Deploy ManualUpgrade DACPAC'
+        steps:
+          - checkout: none
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Deploy ManualUpgrade DACPAC'
+            inputs:
+              Machines: "$(selectedDbServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
+                $chosenMachine = "$(ChosenMachine)"
+                $currentMachine = $env:COMPUTERNAME
+                
+                if ($alwaysOnEnabled -eq "true" -and $chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                  Write-Host "Not selected host - exiting..."
+                  exit 0
+                }
+                
+                $installLocation = "C:\Temp\MasterDataDBDeploy\ManualUpgrade"
+                $serverName = "$(Server_DB_Instance)"
+                $initialStagingDBName = "$(Database_InitialStaging_DBName)"
+                $masterDataDBName = "$(Database_MasterData_DBName)"
+                $dacLocation = "$(Server_DAC_LibraryLocation)"
+                $sqlUser = "$(Server_DB_Admin_User)"
+                $sqlPassword = "$(Server_DB_Admin_Password)"
+                
+                $projectName = "Boots.MasterData.DB.ManualUpgrade"
+                $dacpac = Join-Path $installLocation "$($projectName).dacpac"
+                
+                $instanceName = "$(Instance_Name)"
+                if ([string]::IsNullOrWhiteSpace($instanceName)) {
+                  $reportFolder = "MasterData"
+                } else {
+                  $reportFolder = "MasterData_$instanceName"
+                }
+                
+                if (-not (Test-Path $dacpac)) {
+                  throw "DACPAC file not found at: $dacpac"
+                }
+                if (-not (Test-Path $dacLocation)) {
+                  throw "SqlPackage.exe not found at: $dacLocation"
+                }
+                
+                try {
+                  Push-Location $dacLocation
+                  if (-not [string]::IsNullOrWhiteSpace($sqlUser) -and -not [string]::IsNullOrWhiteSpace($sqlPassword)) {
+                    .\SqlPackage.exe /Action:publish /SourceFile:"$dacpac" /TargetServerName:"$serverName" /TargetUser:"$sqlUser" /TargetPassword:"$sqlPassword" /TargetDatabaseName:"master" /Variables:InitialStagingDB="$initialStagingDBName" /Variables:MasterDataDB="$masterDataDBName" /Variables:ReportFolder="$reportFolder" /p:BlockOnPossibleDataLoss=false
+                  } else {
+                    .\SqlPackage.exe /Action:publish /SourceFile:"$dacpac" /TargetServerName:"$serverName" /TargetDatabaseName:"master" /Variables:InitialStagingDB="$initialStagingDBName" /Variables:MasterDataDB="$masterDataDBName" /Variables:ReportFolder="$reportFolder" /p:BlockOnPossibleDataLoss=false
+                  }
+                } catch {
+                  if ($_.Exception.InnerException) {
+                    Write-Error $_.Exception.Message
+                    Write-Error $_.Exception.InnerException.Message
+                  } else {
+                    Write-Error $_.Exception.Message
+                  }
+                  throw
+                } finally {
+                  Pop-Location
+                }
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
+      - job: Deploy_InitialStagingDB
+        displayName: 'Deploy InitialStagingDB DACPAC'
+        dependsOn: Deploy_ManualUpgrade
+        steps:
+          - checkout: none
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Deploy InitialStagingDB DACPAC'
+            inputs:
+              Machines: "$(selectedDbServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
+                $chosenMachine = "$(ChosenMachine)"
+                $currentMachine = $env:COMPUTERNAME
+                
+                if ($alwaysOnEnabled -eq "true" -and $chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                  Write-Host "Not selected host - exiting..."
+                  exit 0
+                }
+                
+                $installLocation = "C:\Temp\MasterDataDBDeploy\InitialStagingDB"
+                $serverName = "$(Server_DB_Instance)"
+                $dbName = "$(Database_InitialStaging_DBName)"
+                $dacLocation = "$(Server_DAC_LibraryLocation)"
+                $sqlUser = "$(Server_DB_Admin_User)"
+                $sqlPassword = "$(Server_DB_Admin_Password)"
+                
+                $projectName = "Boots.MasterData.DB.InitialStagingDB"
+                $dacpac = Join-Path $installLocation "$($projectName).dacpac"
+                
+                $instanceName = "$(Instance_Name)"
+                if ([string]::IsNullOrWhiteSpace($instanceName)) {
+                  $reportFolder = "MasterData"
+                } else {
+                  $reportFolder = "MasterData_$instanceName"
+                }
+                
+                if (-not (Test-Path $dacpac)) {
+                  throw "DACPAC file not found at: $dacpac"
+                }
+                if (-not (Test-Path $dacLocation)) {
+                  throw "SqlPackage.exe not found at: $dacLocation"
+                }
+                
+                try {
+                  Push-Location $dacLocation
+                  if (-not [string]::IsNullOrWhiteSpace($sqlUser) -and -not [string]::IsNullOrWhiteSpace($sqlPassword)) {
+                    .\SqlPackage.exe /Action:publish /SourceFile:"$dacpac" /TargetServerName:"$serverName" /TargetUser:"$sqlUser" /TargetPassword:"$sqlPassword" /TargetDatabaseName:"$dbName" /Variables:ReportFolder="$reportFolder" /p:BlockOnPossibleDataLoss=false
+                  } else {
+                    .\SqlPackage.exe /Action:publish /SourceFile:"$dacpac" /TargetServerName:"$serverName" /TargetDatabaseName:"$dbName" /Variables:ReportFolder="$reportFolder" /p:BlockOnPossibleDataLoss=false
+                  }
+                } catch {
+                  if ($_.Exception.InnerException) {
+                    Write-Error $_.Exception.Message
+                    Write-Error $_.Exception.InnerException.Message
+                  } else {
+                    Write-Error $_.Exception.Message
+                  }
+                  throw
+                } finally {
+                  Pop-Location
+                }
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
+      - job: Deploy_MasterDataDB
+        displayName: 'Deploy MasterDataDB DACPAC'
+        dependsOn: Deploy_InitialStagingDB
+        steps:
+          - checkout: none
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Deploy MasterDataDB DACPAC'
+            inputs:
+              Machines: "$(selectedDbServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
+                $chosenMachine = "$(ChosenMachine)"
+                $currentMachine = $env:COMPUTERNAME
+                
+                if ($alwaysOnEnabled -eq "true" -and $chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                  Write-Host "Not selected host - exiting..."
+                  exit 0
+                }
+                
+                $installLocation = "C:\Temp\MasterDataDBDeploy\MasterDataDB"
+                $serverName = "$(Server_DB_Instance)"
+                $dbName = "$(Database_MasterData_DBName)"
+                $pa_dbName = "$(Database_MasterData_PublishArchive_DBName)"
+                $initialStagingDBName = "$(Database_InitialStaging_DBName)"
+                $dacLocation = "$(Server_DAC_LibraryLocation)"
+                $sqlUser = "$(Server_DB_Admin_User)"
+                $sqlPassword = "$(Server_DB_Admin_Password)"
+                
+                $projectName = "Boots.MasterData.DB.MasterDataDB"
+                $dacpac = Join-Path $installLocation "$($projectName).dacpac"
+                
+                $instanceName = "$(Instance_Name)"
+                if ([string]::IsNullOrWhiteSpace($instanceName)) {
+                  $reportFolder = "MasterData"
+                } else {
+                  $reportFolder = "MasterData_$instanceName"
+                }
+                
+                if (-not (Test-Path $dacpac)) {
+                  throw "DACPAC file not found at: $dacpac"
+                }
+                if (-not (Test-Path $dacLocation)) {
+                  throw "SqlPackage.exe not found at: $dacLocation"
+                }
+                
+                try {
+                  Push-Location $dacLocation
+                  if (-not [string]::IsNullOrWhiteSpace($sqlUser) -and -not [string]::IsNullOrWhiteSpace($sqlPassword)) {
+                    .\SqlPackage.exe /Action:publish /SourceFile:"$dacpac" /TargetServerName:"$serverName" /TargetUser:"$sqlUser" /TargetPassword:"$sqlPassword" /TargetDatabaseName:"$dbName" /Variables:InitialStagingDB="$initialStagingDBName" /Variables:PublishArchive="$pa_dbName" /Variables:ReportFolder="$reportFolder" /p:BlockOnPossibleDataLoss=false
+                  } else {
+                    .\SqlPackage.exe /Action:publish /SourceFile:"$dacpac" /TargetServerName:"$serverName" /TargetDatabaseName:"$dbName" /Variables:InitialStagingDB="$initialStagingDBName" /Variables:ReportFolder="$reportFolder" /Variables:PublishArchive="$pa_dbName" /p:BlockOnPossibleDataLoss=false
+                  }
+                } catch {
+                  if ($_.Exception.InnerException) {
+                    Write-Error $_.Exception.Message
+                    Write-Error $_.Exception.InnerException.Message
+                  } else {
+                    Write-Error $_.Exception.Message
+                  }
+                  throw
+                } finally {
+                  Pop-Location
+                }
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
+  - stage: CleanupAlwaysOnBackups
+    displayName: 'Cleanup AlwaysOn Backups (AlwaysOn Only)'
+    dependsOn: DeployDACPACs
+    condition: and(succeeded(), or(eq(parameters.dbSlot, 'Pre-Prod'), eq(parameters.dbSlot, 'Production')))
+    variables:
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Cleanup_Backups
+        displayName: 'Delete Existing AlwaysOn Transaction Log Backups'
+        steps:
+          - checkout: none
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Delete transaction log backups'
+            inputs:
+              Machines: "$(selectedDbServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
+                if ($alwaysOnEnabled -ne "true") {
+                  Write-Host "AlwaysOn is not enabled. Skipping."
+                  exit 0
+                }
+                
+                $chosenMachine = "$(ChosenMachine)"
+                $currentMachine = $env:COMPUTERNAME
+                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                  Write-Host "Not selected host - exiting..."
+                  exit 0
+                }
+                
+                $isDbName = "$(Database_InitialStaging_DBName)"
+                $mdDbName = "$(Database_MasterData_DBName)"
+                $alwaysOnFS = "$(Server_AlwaysOn_Share)"
+                
+                $backupName = Join-Path $alwaysOnFS "$isDbName.trn"
+                if (Test-Path $backupName) {
+                  Write-Host "backup exists - deleting"
+                  Remove-Item $backupName
+                }
+                
+                $backupName = Join-Path $alwaysOnFS "$mdDbName.trn"
+                if (Test-Path $backupName) {
+                  Write-Host "backup exists - deleting"
+                  Remove-Item $backupName
+                }
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
+
+  - stage: EnableAlwaysOn
+    displayName: 'Enable AlwaysOn (AlwaysOn Only)'
+    dependsOn: CleanupAlwaysOnBackups
+    condition: and(succeeded(), or(eq(parameters.dbSlot, 'Pre-Prod'), eq(parameters.dbSlot, 'Production')))
+    variables:
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Enable_AlwaysOn
+        displayName: 'Add Databases to AlwaysOn Availability Group'
+        steps:
+          - checkout: none
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Enable AlwaysOn on primary node'
+            inputs:
+              Machines: "$(selectedDbServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
+                if ($alwaysOnEnabled -ne "true") {
+                  Write-Host "AlwaysOn is not enabled. Skipping."
+                  exit 0
+                }
+                
+                $chosenMachine = "$(ChosenMachine)"
+                $currentMachine = $env:COMPUTERNAME
+                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                  Write-Host "Not selected host - exiting..."
+                  exit 0
+                }
+                
+                $serverName = "$(Server_DB_Local_Instance)"
+                $sqlLogin = "$(Server_DB_Admin_User)"
+                $sqlPassword = "$(Server_DB_Admin_Password)"
+                $isDbName = "$(Database_InitialStaging_DBName)"
+                $mdDbName = "$(Database_MasterData_DBName)"
+                $dbInstanceName = "$(Server_DB_Instance_Name)"
+                
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
+                
+                $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
+                
+                if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
+                  if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
+                    throw "SQL Password must be specified when using SQL authentication."
+                  }
+                  $server.ConnectionContext.LoginSecure = $false
+                  $server.ConnectionContext.Login = $sqlLogin
+                  $server.ConnectionContext.Password = $sqlPassword
+                  $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
+                }
+                
+                try {
+                  $server.ConnectionContext.Connect()
+                } catch {
+                  Write-Error "An error occurred connecting to the database server!`r`n$($_.Exception.ToString())"
+                  throw
+                }
+                
+                $masterDB = $server.Databases["master"]
+                
+                try {
+                  Write-Host "Attempting to add $isDbName to AlwaysOn"
+                  $addAlwaysOnSQL = "ALTER AVAILABILITY GROUP $dbInstanceName ADD DATABASE $isDbName;"
+                  Write-Host $addAlwaysOnSQL
+                  $masterDB.ExecuteNonQuery($addAlwaysOnSQL)
+                } catch {
+                  Write-Host "Error adding $isDbName to AlwaysOn:"
+                  Write-Host $_.Exception | Format-List -Force
+                  throw "failed to add always on availability."
+                }
+                
+                try {
+                  Write-Host "Attempting to add $mdDbName to AlwaysOn"
+                  $addAlwaysOnSQL = "ALTER AVAILABILITY GROUP $dbInstanceName ADD DATABASE $mdDbName;"
+                  Write-Host $addAlwaysOnSQL
+                  $masterDB.ExecuteNonQuery($addAlwaysOnSQL)
+                } catch {
+                  Write-Host "Error adding $mdDbName to AlwaysOn:"
+                  Write-Host $_.Exception | Format-List -Force
+                  throw "failed to add always on availability."
+                }
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
+
+  - stage: BackupUpgradedDatabases
+    displayName: 'Backup Upgraded Databases (AlwaysOn Only)'
+    dependsOn: EnableAlwaysOn
+    condition: and(succeeded(), or(eq(parameters.dbSlot, 'Pre-Prod'), eq(parameters.dbSlot, 'Production')))
+    variables:
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Backup_Upgraded_Databases
+        displayName: 'Backup Upgraded Databases to AlwaysOn Share'
+        steps:
+          - checkout: none
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Backup upgraded databases'
+            inputs:
+              Machines: "$(selectedDbServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
+                if ($alwaysOnEnabled -ne "true") {
+                  Write-Host "AlwaysOn is not enabled. Skipping."
+                  exit 0
+                }
+                
+                $chosenMachine = "$(ChosenMachine)"
+                $currentMachine = $env:COMPUTERNAME
+                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                  Write-Host "Not selected host - exiting..."
+                  exit 0
+                }
+                
+                $serverName = "$(Server_DB_Local_Instance)"
+                $sqlLogin = "$(Server_DB_Admin_User)"
+                $sqlPassword = "$(Server_DB_Admin_Password)"
+                $isDbName = "$(Database_InitialStaging_DBName)"
+                $mdDbName = "$(Database_MasterData_DBName)"
+                $alwaysOnFS = "$(Server_AlwaysOn_Share)"
+                
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
+                
+                $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
+                
+                if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
+                  if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
+                    throw "SQL Password must be specified when using SQL authentication."
+                  }
+                  $server.ConnectionContext.LoginSecure = $false
+                  $server.ConnectionContext.Login = $sqlLogin
+                  $server.ConnectionContext.Password = $sqlPassword
+                  $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
+                }
+                
+                try {
+                  $server.ConnectionContext.Connect()
+                } catch {
+                  Write-Error "An error occurred connecting to the database server!`r`n$($_.Exception.ToString())"
+                  throw
+                }
+                
+                $masterDB = $server.Databases["master"]
+                
+                try {
+                  Write-Host "Attempting to backup $isDbName database to AlwaysOn share location"
+                  $backupName = Join-Path $alwaysOnFS "$isDbName.bak"
+                  Write-Host "backup name: $backupName"
+                  $backupAlwaysOnSQL = "BACKUP DATABASE [$isDbName] TO  DISK = N'$backupName' WITH  COPY_ONLY, FORMAT, INIT, SKIP, REWIND, NOUNLOAD, COMPRESSION,  STATS = 5;"
+                  Write-Host "SQL: $backupAlwaysOnSQL"
+                  $masterDB.ExecuteNonQuery($backupAlwaysOnSQL)
+                } catch {
+                  Write-Host "error:"
+                  Write-Host $_.Exception | Format-List -Force
+                  throw "failed to backup always on database."
+                }
+                
+                try {
+                  Write-Host "Attempting to backup $mdDbName database to AlwaysOn share location"
+                  $backupName = Join-Path $alwaysOnFS "$mdDbName.bak"
+                  $backupAlwaysOnSQL = "BACKUP DATABASE [$mdDbName] TO  DISK = N'$backupName' WITH  COPY_ONLY, FORMAT, INIT, SKIP, REWIND, NOUNLOAD, COMPRESSION,  STATS = 5;"
+                  Write-Host $backupAlwaysOnSQL
+                  $masterDB.ExecuteNonQuery($backupAlwaysOnSQL)
+                } catch {
+                  Write-Host "error:"
+                  Write-Host $_.Exception | Format-List -Force
+                  throw "failed to backup always on database."
+                }
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
+
+  - stage: RestoreOnSecondaryNodes
+    displayName: 'Restore on Secondary Nodes (AlwaysOn Only)'
+    dependsOn: BackupUpgradedDatabases
+    condition: and(succeeded(), or(eq(parameters.dbSlot, 'Pre-Prod'), eq(parameters.dbSlot, 'Production')))
+    variables:
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Restore_Secondary_Databases
+        displayName: 'Restore Databases on Secondary Nodes'
+        steps:
+          - checkout: none
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Restore databases on secondary nodes'
+            inputs:
+              Machines: "$(selectedDbServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
+                if ($alwaysOnEnabled -ne "true") {
+                  Write-Host "AlwaysOn is not enabled. Skipping."
+                  exit 0
+                }
+                
+                $chosenMachine = "$(ChosenMachine)"
+                $currentMachine = $env:COMPUTERNAME
+                if ($chosenMachine -eq $currentMachine -and $chosenMachine -ne "") {
+                  Write-Host "Should not run on primary host - exiting..."
+                  exit 0
+                }
+                
+                $serverName = "$(Server_DB_Local_Instance)"
+                $sqlLogin = "$(Server_DB_Admin_User)"
+                $sqlPassword = "$(Server_DB_Admin_Password)"
+                $isDbName = "$(Database_InitialStaging_DBName)"
+                $mdDbName = "$(Database_MasterData_DBName)"
+                $alwaysOnFS = "$(Server_AlwaysOn_Share)"
+                
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
+                
+                $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
+                
+                if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
+                  if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
+                    throw "SQL Password must be specified when using SQL authentication."
+                  }
+                  $server.ConnectionContext.LoginSecure = $false
+                  $server.ConnectionContext.Login = $sqlLogin
+                  $server.ConnectionContext.Password = $sqlPassword
+                  $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
+                }
+                
+                try {
+                  $server.ConnectionContext.Connect()
+                } catch {
+                  Write-Error "An error occurred connecting to the database server!`r`n$($_.Exception.ToString())"
+                  throw
+                }
+                
+                $masterDB = $server.Databases["master"]
+                
+                try {
+                  Write-Host "Attempting to restore $isDbName database from AlwaysOn share location"
+                  $backupName = Join-Path $alwaysOnFS "$isDbName.bak"
+                  $backupAlwaysOnSQL = "RESTORE DATABASE [$isDbName] FROM  DISK = N'$backupName' WITH  NORECOVERY,  NOUNLOAD,  STATS = 5;"
+                  Write-Host $backupAlwaysOnSQL
+                  $masterDB.ExecuteNonQuery($backupAlwaysOnSQL)
+                } catch {
+                  Write-Host "error:"
+                  Write-Host $_.Exception | Format-List -Force
+                  throw "failed to restore always on database."
+                }
+                
+                try {
+                  Write-Host "Attempting to restore $mdDbName database from AlwaysOn share location"
+                  $backupName = Join-Path $alwaysOnFS "$mdDbName.bak"
+                  $backupAlwaysOnSQL = "RESTORE DATABASE [$mdDbName] FROM  DISK = N'$backupName' WITH  NORECOVERY,  NOUNLOAD,  STATS = 5;"
+                  Write-Host $backupAlwaysOnSQL
+                  $masterDB.ExecuteNonQuery($backupAlwaysOnSQL)
+                } catch {
+                  Write-Host "error:"
+                  Write-Host $_.Exception | Format-List -Force
+                  throw "failed to restore always on database."
+                }
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
+
+  - stage: BackupTransactionLogs
+    displayName: 'Backup Transaction Logs (AlwaysOn Only)'
+    dependsOn: RestoreOnSecondaryNodes
+    condition: and(succeeded(), or(eq(parameters.dbSlot, 'Pre-Prod'), eq(parameters.dbSlot, 'Production')))
+    variables:
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Backup_Transaction_Logs
+        displayName: 'Backup Transaction Logs to AlwaysOn Share'
+        steps:
+          - checkout: none
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Backup transaction logs'
+            inputs:
+              Machines: "$(selectedDbServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
+                if ($alwaysOnEnabled -ne "true") {
+                  Write-Host "AlwaysOn is not enabled. Skipping."
+                  exit 0
+                }
+                
+                $chosenMachine = "$(ChosenMachine)"
+                $currentMachine = $env:COMPUTERNAME
+                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                  Write-Host "Not selected host - exiting..."
+                  exit 0
+                }
+                
+                $serverName = "$(Server_DB_Local_Instance)"
+                $sqlLogin = "$(Server_DB_Admin_User)"
+                $sqlPassword = "$(Server_DB_Admin_Password)"
+                $isDbName = "$(Database_InitialStaging_DBName)"
+                $mdDbName = "$(Database_MasterData_DBName)"
+                $alwaysOnFS = "$(Server_AlwaysOn_Share)"
+                
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
+                
+                $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
+                
+                if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
+                  if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
+                    throw "SQL Password must be specified when using SQL authentication."
+                  }
+                  $server.ConnectionContext.LoginSecure = $false
+                  $server.ConnectionContext.Login = $sqlLogin
+                  $server.ConnectionContext.Password = $sqlPassword
+                  $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
+                }
+                
+                try {
+                  $server.ConnectionContext.Connect()
+                } catch {
+                  Write-Error "An error occurred connecting to the database server!`r`n$($_.Exception.ToString())"
+                  throw
+                }
+                
+                $masterDB = $server.Databases["master"]
+                
+                try {
+                  Write-Host "Attempting to backup $isDbName log to AlwaysOn share location"
+                  $backupName = Join-Path $alwaysOnFS "$isDbName.trn"
+                  $backupAlwaysOnSQL = "BACKUP LOG [$isDbName] TO  DISK = N'$backupName' WITH NOFORMAT, NOINIT, NOSKIP, REWIND, NOUNLOAD, COMPRESSION,  STATS = 5;"
+                  Write-Host $backupAlwaysOnSQL
+                  $masterDB.ExecuteNonQuery($backupAlwaysOnSQL)
+                } catch {
+                  Write-Host "error:"
+                  Write-Host $_.Exception | Format-List -Force
+                  throw "failed to backup always on database."
+                }
+                
+                try {
+                  Write-Host "Attempting to backup $mdDbName log to AlwaysOn share location"
+                  $backupName = Join-Path $alwaysOnFS "$mdDbName.trn"
+                  $backupAlwaysOnSQL = "BACKUP LOG [$mdDbName] TO  DISK = N'$backupName' WITH NOFORMAT, NOINIT, NOSKIP, REWIND, NOUNLOAD, COMPRESSION,  STATS = 5;"
+                  Write-Host $backupAlwaysOnSQL
+                  $masterDB.ExecuteNonQuery($backupAlwaysOnSQL)
+                } catch {
+                  Write-Host "error:"
+                  Write-Host $_.Exception | Format-List -Force
+                  throw "failed to backup always on database."
+                }
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
+
+  - stage: RestoreTransactionLogs
+    displayName: 'Restore Transaction Logs (AlwaysOn Only)'
+    dependsOn: BackupTransactionLogs
+    condition: and(succeeded(), or(eq(parameters.dbSlot, 'Pre-Prod'), eq(parameters.dbSlot, 'Production')))
+    variables:
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Restore_Transaction_Logs
+        displayName: 'Restore Transaction Logs on Secondary Nodes'
+        steps:
+          - checkout: none
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Restore transaction logs'
+            inputs:
+              Machines: "$(selectedDbServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
+                if ($alwaysOnEnabled -ne "true") {
+                  Write-Host "AlwaysOn is not enabled. Skipping."
+                  exit 0
+                }
+                
+                $chosenMachine = "$(ChosenMachine)"
+                $currentMachine = $env:COMPUTERNAME
+                if ($chosenMachine -eq $currentMachine -and $chosenMachine -ne "") {
+                  Write-Host "Should not run on primary host - exiting..."
+                  exit 0
+                }
+                
+                $serverName = "$(Server_DB_Local_Instance)"
+                $sqlLogin = "$(Server_DB_Admin_User)"
+                $sqlPassword = "$(Server_DB_Admin_Password)"
+                $isDbName = "$(Database_InitialStaging_DBName)"
+                $mdDbName = "$(Database_MasterData_DBName)"
+                $alwaysOnFS = "$(Server_AlwaysOn_Share)"
+                
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
+                
+                $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
+                
+                if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
+                  if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
+                    throw "SQL Password must be specified when using SQL authentication."
+                  }
+                  $server.ConnectionContext.LoginSecure = $false
+                  $server.ConnectionContext.Login = $sqlLogin
+                  $server.ConnectionContext.Password = $sqlPassword
+                  $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
+                }
+                
+                try {
+                  $server.ConnectionContext.Connect()
+                } catch {
+                  Write-Error "An error occurred connecting to the database server!`r`n$($_.Exception.ToString())"
+                  throw
+                }
+                
+                $masterDB = $server.Databases["master"]
+                
+                try {
+                  Write-Host "Attempting to restore $isDbName log from AlwaysOn share location"
+                  $backupName = Join-Path $alwaysOnFS "$isDbName.trn"
+                  $backupAlwaysOnSQL = "RESTORE LOG [$isDbName] FROM  DISK = N'$backupName' WITH  NORECOVERY,  NOUNLOAD,  STATS = 5;"
+                  Write-Host $backupAlwaysOnSQL
+                  $masterDB.ExecuteNonQuery($backupAlwaysOnSQL)
+                } catch {
+                  Write-Host "error:"
+                  Write-Host $_.Exception | Format-List -Force
+                  throw "failed to restore always on database."
+                }
+                
+                try {
+                  Write-Host "Attempting to restore $mdDbName log from AlwaysOn share location"
+                  $backupName = Join-Path $alwaysOnFS "$mdDbName.trn"
+                  $backupAlwaysOnSQL = "RESTORE LOG [$mdDbName] FROM  DISK = N'$backupName' WITH  NORECOVERY,  NOUNLOAD,  STATS = 5;"
+                  Write-Host $backupAlwaysOnSQL
+                  $masterDB.ExecuteNonQuery($backupAlwaysOnSQL)
+                } catch {
+                  Write-Host "error:"
+                  Write-Host $_.Exception | Format-List -Force
+                  throw "failed to restore always on database."
+                }
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
+
+  - stage: EnableHADRReplication
+    displayName: 'Enable HADR Replication (AlwaysOn Only)'
+    dependsOn: RestoreTransactionLogs
+    condition: and(succeeded(), or(eq(parameters.dbSlot, 'Pre-Prod'), eq(parameters.dbSlot, 'Production')))
+    variables:
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Enable_HADR
+        displayName: 'Enable HADR Replication on Secondary Nodes'
+        steps:
+          - checkout: none
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Enable HADR replication'
+            inputs:
+              Machines: "$(selectedDbServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
+                if ($alwaysOnEnabled -ne "true") {
+                  Write-Host "AlwaysOn is not enabled. Skipping."
+                  exit 0
+                }
+                
+                $chosenMachine = "$(ChosenMachine)"
+                $currentMachine = $env:COMPUTERNAME
+                if ($chosenMachine -eq $currentMachine -and $chosenMachine -ne "") {
+                  Write-Host "Should not run on primary host - exiting..."
+                  exit 0
+                }
+                
+                $serverName = "$(Server_DB_Local_Instance)"
+                $sqlLogin = "$(Server_DB_Admin_User)"
+                $sqlPassword = "$(Server_DB_Admin_Password)"
+                $isDbName = "$(Database_InitialStaging_DBName)"
+                $mdDbName = "$(Database_MasterData_DBName)"
+                $dbInstanceName = "$(Server_DB_Instance_Name)"
+                
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
+                
+                $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
+                
+                if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
+                  if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
+                    throw "SQL Password must be specified when using SQL authentication."
+                  }
+                  $server.ConnectionContext.LoginSecure = $false
+                  $server.ConnectionContext.Login = $sqlLogin
+                  $server.ConnectionContext.Password = $sqlPassword
+                  $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
+                }
+                
+                try {
+                  $server.ConnectionContext.Connect()
+                } catch {
+                  Write-Error "An error occurred connecting to the database server!`r`n$($_.Exception.ToString())"
+                  throw
+                }
+                
+                $masterDB = $server.Databases["master"]
+                
+                try {
+                  Write-Host "Attempting to enable HADR replication"
+                  $enableAlwaysOnSQL = @"
+                    begin try 
+                      declare @conn bit
+                      declare @count int
+                      declare @replica_id uniqueidentifier 
+                      declare @group_id uniqueidentifier
+                      set @conn = 0
+                      set @count = 30
+                      
+                      if (serverproperty('IsHadrEnabled') = 1)
+                      	and (isnull((select member_state from master.sys.dm_hadr_cluster_members where upper(member_name COLLATE Latin1_General_CI_AS) = upper(cast(serverproperty('ComputerNamePhysicalNetBIOS') as nvarchar(256)) COLLATE Latin1_General_CI_AS)), 0) <> 0)
+                      	and (isnull((select state from master.sys.database_mirroring_endpoints), 1) = 0)
+                      begin
+                          select @group_id = ags.group_id from master.sys.availability_groups as ags where name = N'$dbInstanceName'
+                      	select @replica_id = replicas.replica_id from master.sys.availability_replicas as replicas where upper(replicas.replica_server_name COLLATE Latin1_General_CI_AS) = upper(@@SERVERNAME COLLATE Latin1_General_CI_AS) and group_id = @group_id
+                      	while @conn <> 1 and @count > 0
+                      	begin
+                      		set @conn = isnull((select connected_state from master.sys.dm_hadr_availability_replica_states as states where states.replica_id = @replica_id), 1)
+                      		if @conn = 1
+                      		begin
+                      			break
+                      		end
+                      		waitfor delay '00:00:10'
+                      		set @count = @count - 1
+                      	end
+                      end
+                      end try
+                      begin catch
+                      	-- If the wait loop fails, do not stop execution of the alter database statement
+                      end catch
+                      ALTER DATABASE [$isDbName] SET HADR AVAILABILITY GROUP = [$dbInstanceName];
+                      ALTER DATABASE [$mdDbName] SET HADR AVAILABILITY GROUP = [$dbInstanceName];
+"@
+                  Write-Host $enableAlwaysOnSQL
+                  $masterDB.ExecuteNonQuery($enableAlwaysOnSQL)
+                } catch {
+                  Write-Host "error:"
+                  Write-Host $_.Exception | Format-List -Force
+                  throw "failed to restore always on database."
+                }
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
+
+  - stage: PostDeploymentConfiguration
+    displayName: 'Post-Deployment Configuration'
+    dependsOn: 
+      - DeployDACPACs
+      - EnableHADRReplication
+    condition: succeeded()
+    variables:
+      - ${{ if eq(parameters.dbSlot, 'Dev') }}:
+          - group: Development_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'FT1') }}:
+          - group: FT1_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'FT2') }}:
+          - group: FT2_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'FT3') }}:
+          - group: FT3_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'QA') }}:
+          - group: QA_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'R1') }}:
+          - group: R1_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Demo') }}:
+          - group: Demo_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'SIT') }}:
+          - group: SIT_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Update_DB_Owner
+        displayName: 'Update DB Owner to SA'
+        steps:
+          - checkout: none
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Set database owner to SA'
+            inputs:
+              Machines: "$(selectedDbServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
+                $chosenMachine = "$(ChosenMachine)"
+                $currentMachine = $env:COMPUTERNAME
+                
+                if ($alwaysOnEnabled -eq "true" -and $chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                  Write-Host "Not selected host - exiting..."
+                  exit 0
+                }
+                
+                $serverName = "$(Server_DB_Local_Instance)"
+                $sqlLogin = "$(Server_DB_Admin_User)"
+                $sqlPassword = "$(Server_DB_Admin_Password)"
+                $isDbName = "$(Database_InitialStaging_DBName)"
+                $mdDbName = "$(Database_MasterData_DBName)"
+                
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
+                
+                $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
+                
+                if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
+                  if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
+                    throw "SQL Password must be specified when using SQL authentication."
+                  }
+                  $server.ConnectionContext.LoginSecure = $false
+                  $server.ConnectionContext.Login = $sqlLogin
+                  $server.ConnectionContext.Password = $sqlPassword
+                  $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
+                }
+                
+                try {
+                  $server.ConnectionContext.Connect()
+                } catch {
+                  Write-Error "An error occurred connecting to the database server!`r`n$($_.Exception.ToString())"
+                  throw
+                }
+                
+                $masterDB = $server.Databases["master"]
+                
+                try {
+                  Write-Host "Attempting to set owner of InitialStaging database to sa"
+                  $sql = "ALTER AUTHORIZATION ON DATABASE::$isDbName TO sa;"
+                  Write-Host $sql
+                  $masterDB.ExecuteNonQuery($sql)
+                } catch {
+                  Write-Host "error:"
+                  Write-Host $_.Exception | Format-List -Force
+                  throw "failed to set dbOwner to SA."
+                }
+                
+                try {
+                  Write-Host "Attempting to set owner of MasterData database to sa"
+                  $sql = "ALTER AUTHORIZATION ON DATABASE::$mdDbName TO sa;"
+                  Write-Host $sql
+                  $masterDB.ExecuteNonQuery($sql)
+                } catch {
+                  Write-Host "error:"
+                  Write-Host $_.Exception | Format-List -Force
+                  throw "failed to set dbOwner to SA."
+                }
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
+      - job: Grant_SmartScript_Access
+        displayName: 'Grant SmartScript User Readonly Access'
+        dependsOn: Update_DB_Owner
+        steps:
+          - checkout: none
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Grant SmartScript user readonly access'
+            inputs:
+              Machines: "$(selectedDbServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
+                $chosenMachine = "$(ChosenMachine)"
+                $currentMachine = $env:COMPUTERNAME
+                
+                if ($alwaysOnEnabled -eq "true" -and $chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                  Write-Host "Not selected host - exiting..."
+                  exit 0
+                }
+                
+                $serverName = "$(Server_DB_Local_Instance)"
+                $sqlLogin = "$(Server_DB_Admin_User)"
+                $sqlPassword = "$(Server_DB_Admin_Password)"
+                $mdDbName = "$(Database_MasterData_DBName)"
+                
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
+                
+                $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
+                
+                if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
+                  if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
+                    throw "SQL Password must be specified when using SQL authentication."
+                  }
+                  $server.ConnectionContext.LoginSecure = $false
+                  $server.ConnectionContext.Login = $sqlLogin
+                  $server.ConnectionContext.Password = $sqlPassword
+                  $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
+                }
+                
+                try {
+                  $server.ConnectionContext.Connect()
+                } catch {
+                  Write-Error "An error occurred connecting to the database server!`r`n$($_.Exception.ToString())"
+                  throw
+                }
+                
+                $masterDB = $server.Databases["$mdDbName"]
+                
+                try {
+                  Write-Host "Attempting to set permissions for user 'Smartscript_MD_RO'"
+                  $sql = "ALTER ROLE [db_datareader] ADD MEMBER [Smartscript_MD_RO];"
+                  Write-Host $sql
+                  $masterDB.ExecuteNonQuery($sql)
+                  $sql = "ALTER ROLE [db_denydatawriter] ADD MEMBER [Smartscript_MD_RO];"
+                  Write-Host $sql
+                  $masterDB.ExecuteNonQuery($sql)
+                } catch {
+                  Write-Host "Error setting permissions (user may not exist):"
+                  Write-Host $_.Exception | Format-List -Force
+                }
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
+      - job: Update_Report_Status
+        displayName: 'Update Report Status Data'
+        dependsOn: Grant_SmartScript_Access
+        steps:
+          - checkout: none
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Update report status data'
+            inputs:
+              Machines: "$(selectedDbServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
+                $chosenMachine = "$(ChosenMachine)"
+                $currentMachine = $env:COMPUTERNAME
+                
+                if ($alwaysOnEnabled -eq "true" -and $chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                  Write-Host "Not selected host - exiting..."
+                  exit 0
+                }
+                
+                $serverName = "$(Server_DB_Local_Instance)"
+                $sqlLogin = "$(Server_DB_Admin_User)"
+                $sqlPassword = "$(Server_DB_Admin_Password)"
+                $mdDbName = "$(Database_MasterData_DBName)"
+                
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
+                
+                $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
+                
+                if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
+                  if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
+                    throw "SQL Password must be specified when using SQL authentication."
+                  }
+                  $server.ConnectionContext.LoginSecure = $false
+                  $server.ConnectionContext.Login = $sqlLogin
+                  $server.ConnectionContext.Password = $sqlPassword
+                  $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
+                }
+                
+                try {
+                  $server.ConnectionContext.Connect()
+                } catch {
+                  Write-Error "An error occurred connecting to the database server!`r`n$($_.Exception.ToString())"
+                  throw
+                }
+                
+                $masterDB = $server.Databases["$mdDbName"]
+                
+                try {
+                  Write-Host "Attempting to update report status data for current environment"
+                  $sql = "update reporting.ReportStatus set Name = REPLACE(name,'MasterData', '$mdDbName')"
+                  Write-Host $sql
+                  $masterDB.ExecuteNonQuery($sql)
+                } catch {
+                  Write-Host "Error updating report status (table may not exist):"
+                  Write-Host $_.Exception | Format-List -Force
+                }
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
+      - job: Grant_Super_Access
+        displayName: 'Grant Super User Access (Conditional)'
+        dependsOn: Update_Report_Status
+        steps:
+          - checkout: none
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Grant super user access'
+            inputs:
+              Machines: "$(selectedDbServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
+                $chosenMachine = "$(ChosenMachine)"
+                $currentMachine = $env:COMPUTERNAME
+                $dbSlot = "$(dbSlot)"
+                
+                if ($alwaysOnEnabled -eq "true" -and $chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                  Write-Host "Not selected host - exiting..."
+                  exit 0
+                }
+                
+                $serverName = "$(Server_DB_Local_Instance)"
+                $sqlLogin = "$(Server_DB_Admin_User)"
+                $sqlPassword = "$(Server_DB_Admin_Password)"
+                $mdDbName = "$(Database_MasterData_DBName)"
+                
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
+                
+                $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
+                
+                if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
+                  if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
+                    throw "SQL Password must be specified when using SQL authentication."
+                  }
+                  $server.ConnectionContext.LoginSecure = $false
+                  $server.ConnectionContext.Login = $sqlLogin
+                  $server.ConnectionContext.Password = $sqlPassword
+                  $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
+                }
+                
+                try {
+                  $server.ConnectionContext.Connect()
+                } catch {
+                  Write-Error "An error occurred connecting to the database server!`r`n$($_.Exception.ToString())"
+                  throw
+                }
+                
+                $masterDB = $server.Databases["$mdDbName"]
+                
+                # Grant super user access based on environment
+                if ($dbSlot -eq "SIT") {
+                  try {
+                    Write-Host "Granting superuser access for Azure E2E environment"
+                    $sql = "exec mdsecurity.grantsuperuseraccess 'WORKGROUPznewcmbmd1$';"
+                    Write-Host $sql
+                    $masterDB.ExecuteNonQuery($sql)
+                  } catch {
+                    Write-Host "Error granting super user access:"
+                    Write-Host $_.Exception | Format-List -Force
+                  }
+                } elseif ($dbSlot -match "^(Dev|FT1|FT2|FT3|QA|R1|Demo)$") {
+                  try {
+                    Write-Host "Granting superuser access for test environment"
+                    $sql = "exec mdsecurity.grantsuperuseraccess 'CORP-INT\\GBRPMSMDFT01$';"
+                    Write-Host $sql
+                    $masterDB.ExecuteNonQuery($sql)
+                  } catch {
+                    Write-Host "Error granting super user access:"
+                    Write-Host $_.Exception | Format-List -Force
+                  }
+                } else {
+                  Write-Host "Skipping super user access grant for environment: $dbSlot"
+                }
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
