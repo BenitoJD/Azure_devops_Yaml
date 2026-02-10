@@ -1068,7 +1068,8 @@ stages:
                 $installLocation = "C:\Temp\MasterDataDBDeploy\MasterDataDB"
                 $serverName = "$(Server_DB_Instance)"
                 $dbName = "$(Database_MasterData_DBName)"
-                $pa_dbName = "$(Database_MasterData_PublishArchive_DBName)"
+                $pa_dbName = '$(Database_MasterData_PublishArchive_DBName)'
+                if ($pa_dbName -eq '$(Database_MasterData_PublishArchive_DBName)') { $pa_dbName = "" }
                 $initialStagingDBName = "$(Database_InitialStaging_DBName)"
                 $dacLocation = "$(Server_DAC_LibraryLocation)"
                 $sqlUser = "$(Server_DB_Admin_User)"
@@ -1095,11 +1096,29 @@ stages:
                 
                 try {
                   Push-Location $dacLocation
-                  if (-not [string]::IsNullOrWhiteSpace($sqlUser) -and -not [string]::IsNullOrWhiteSpace($sqlPassword)) {
-                    .\SqlPackage.exe /Action:publish /SourceFile:"$dacpac" /TargetServerName:"$serverName" /TargetUser:"$sqlUser" /TargetPassword:"$sqlPassword" /TargetDatabaseName:"$dbName" /TargetTrustServerCertificate:True /Variables:InitialStagingDB="$initialStagingDBName" /Variables:PublishArchive="$pa_dbName" /Variables:ReportFolder="$reportFolder" /p:BlockOnPossibleDataLoss=false
+                  $sqlPackageArgs = @(
+                    "/Action:publish"
+                    "/SourceFile:$dacpac"
+                    "/TargetServerName:$serverName"
+                    "/TargetDatabaseName:$dbName"
+                    "/TargetTrustServerCertificate:True"
+                    "/Variables:InitialStagingDB=$initialStagingDBName"
+                    "/Variables:ReportFolder=$reportFolder"
+                    "/p:BlockOnPossibleDataLoss=false"
+                  )
+                  
+                  if (-not [string]::IsNullOrWhiteSpace($pa_dbName)) {
+                    $sqlPackageArgs += "/Variables:PublishArchive=$pa_dbName"
                   } else {
-                    .\SqlPackage.exe /Action:publish /SourceFile:"$dacpac" /TargetServerName:"$serverName" /TargetDatabaseName:"$dbName" /TargetTrustServerCertificate:True /Variables:InitialStagingDB="$initialStagingDBName" /Variables:ReportFolder="$reportFolder" /Variables:PublishArchive="$pa_dbName" /p:BlockOnPossibleDataLoss=false
+                    Write-Host "PublishArchive variable not set; skipping /Variables:PublishArchive."
                   }
+                  
+                  if (-not [string]::IsNullOrWhiteSpace($sqlUser) -and -not [string]::IsNullOrWhiteSpace($sqlPassword)) {
+                    $sqlPackageArgs += "/TargetUser:$sqlUser"
+                    $sqlPackageArgs += "/TargetPassword:$sqlPassword"
+                  }
+                  
+                  & .\SqlPackage.exe @sqlPackageArgs
                 } catch {
                   if ($_.Exception.InnerException) {
                     Write-Error $_.Exception.Message
