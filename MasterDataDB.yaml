@@ -948,9 +948,9 @@ stages:
                 try {
                   Push-Location $dacLocation
                   if (-not [string]::IsNullOrWhiteSpace($sqlUser) -and -not [string]::IsNullOrWhiteSpace($sqlPassword)) {
-                    .\SqlPackage.exe /Action:publish /SourceFile:"$dacpac" /TargetServerName:"$serverName" /TargetUser:"$sqlUser" /TargetPassword:"$sqlPassword" /TargetDatabaseName:"master" /Variables:InitialStagingDB="$initialStagingDBName" /Variables:MasterDataDB="$masterDataDBName" /Variables:ReportFolder="$reportFolder" /p:BlockOnPossibleDataLoss=false
+                    .\SqlPackage.exe /Action:publish /SourceFile:"$dacpac" /TargetServerName:"$serverName" /TargetUser:"$sqlUser" /TargetPassword:"$sqlPassword" /TargetDatabaseName:"master" /TargetTrustServerCertificate:True /Variables:InitialStagingDB="$initialStagingDBName" /Variables:MasterDataDB="$masterDataDBName" /Variables:ReportFolder="$reportFolder" /p:BlockOnPossibleDataLoss=false
                   } else {
-                    .\SqlPackage.exe /Action:publish /SourceFile:"$dacpac" /TargetServerName:"$serverName" /TargetDatabaseName:"master" /Variables:InitialStagingDB="$initialStagingDBName" /Variables:MasterDataDB="$masterDataDBName" /Variables:ReportFolder="$reportFolder" /p:BlockOnPossibleDataLoss=false
+                    .\SqlPackage.exe /Action:publish /SourceFile:"$dacpac" /TargetServerName:"$serverName" /TargetDatabaseName:"master" /TargetTrustServerCertificate:True /Variables:InitialStagingDB="$initialStagingDBName" /Variables:MasterDataDB="$masterDataDBName" /Variables:ReportFolder="$reportFolder" /p:BlockOnPossibleDataLoss=false
                   }
                 } catch {
                   if ($_.Exception.InnerException) {
@@ -1021,9 +1021,9 @@ stages:
                 try {
                   Push-Location $dacLocation
                   if (-not [string]::IsNullOrWhiteSpace($sqlUser) -and -not [string]::IsNullOrWhiteSpace($sqlPassword)) {
-                    .\SqlPackage.exe /Action:publish /SourceFile:"$dacpac" /TargetServerName:"$serverName" /TargetUser:"$sqlUser" /TargetPassword:"$sqlPassword" /TargetDatabaseName:"$dbName" /Variables:ReportFolder="$reportFolder" /p:BlockOnPossibleDataLoss=false
+                    .\SqlPackage.exe /Action:publish /SourceFile:"$dacpac" /TargetServerName:"$serverName" /TargetUser:"$sqlUser" /TargetPassword:"$sqlPassword" /TargetDatabaseName:"$dbName" /TargetTrustServerCertificate:True /Variables:ReportFolder="$reportFolder" /p:BlockOnPossibleDataLoss=false
                   } else {
-                    .\SqlPackage.exe /Action:publish /SourceFile:"$dacpac" /TargetServerName:"$serverName" /TargetDatabaseName:"$dbName" /Variables:ReportFolder="$reportFolder" /p:BlockOnPossibleDataLoss=false
+                    .\SqlPackage.exe /Action:publish /SourceFile:"$dacpac" /TargetServerName:"$serverName" /TargetDatabaseName:"$dbName" /TargetTrustServerCertificate:True /Variables:ReportFolder="$reportFolder" /p:BlockOnPossibleDataLoss=false
                   }
                 } catch {
                   if ($_.Exception.InnerException) {
@@ -1096,9 +1096,9 @@ stages:
                 try {
                   Push-Location $dacLocation
                   if (-not [string]::IsNullOrWhiteSpace($sqlUser) -and -not [string]::IsNullOrWhiteSpace($sqlPassword)) {
-                    .\SqlPackage.exe /Action:publish /SourceFile:"$dacpac" /TargetServerName:"$serverName" /TargetUser:"$sqlUser" /TargetPassword:"$sqlPassword" /TargetDatabaseName:"$dbName" /Variables:InitialStagingDB="$initialStagingDBName" /Variables:PublishArchive="$pa_dbName" /Variables:ReportFolder="$reportFolder" /p:BlockOnPossibleDataLoss=false
+                    .\SqlPackage.exe /Action:publish /SourceFile:"$dacpac" /TargetServerName:"$serverName" /TargetUser:"$sqlUser" /TargetPassword:"$sqlPassword" /TargetDatabaseName:"$dbName" /TargetTrustServerCertificate:True /Variables:InitialStagingDB="$initialStagingDBName" /Variables:PublishArchive="$pa_dbName" /Variables:ReportFolder="$reportFolder" /p:BlockOnPossibleDataLoss=false
                   } else {
-                    .\SqlPackage.exe /Action:publish /SourceFile:"$dacpac" /TargetServerName:"$serverName" /TargetDatabaseName:"$dbName" /Variables:InitialStagingDB="$initialStagingDBName" /Variables:ReportFolder="$reportFolder" /Variables:PublishArchive="$pa_dbName" /p:BlockOnPossibleDataLoss=false
+                    .\SqlPackage.exe /Action:publish /SourceFile:"$dacpac" /TargetServerName:"$serverName" /TargetDatabaseName:"$dbName" /TargetTrustServerCertificate:True /Variables:InitialStagingDB="$initialStagingDBName" /Variables:ReportFolder="$reportFolder" /Variables:PublishArchive="$pa_dbName" /p:BlockOnPossibleDataLoss=false
                   }
                 } catch {
                   if ($_.Exception.InnerException) {
