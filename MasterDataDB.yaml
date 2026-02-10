@@ -848,7 +848,7 @@ stages:
     dependsOn: 
       - BackupDatabases
       - RemoveFromSecondaryNodes
-    condition: succeededOrSkipped()
+    condition: and(in(dependencies.BackupDatabases.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.RemoveFromSecondaryNodes.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
     variables:
       - ${{ if eq(parameters.dbSlot, 'Dev') }}:
           - group: Development_DBDeploy
