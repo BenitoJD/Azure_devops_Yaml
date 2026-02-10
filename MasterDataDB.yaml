@@ -31,6 +31,8 @@ variables:
     value: '$(Build.BuildId)'
   - name: dbSlot
     value: ${{ parameters.dbSlot }}
+  - name: ChosenMachine
+    value: ''
 
   # Server catalog and paths
   - group: vg-shared-servers
@@ -206,6 +208,7 @@ stages:
         steps:
           - checkout: none
           - task: PowerShellOnTargetMachines@3
+            name: SetPrimaryNode
             displayName: 'Find primary node in AlwaysOn cluster'
             inputs:
               Machines: "$(selectedDbServers)"
@@ -274,7 +277,7 @@ stages:
                   Write-Host "Current Machine is: $currentMachineName"
                   
                   if ($currentMachineName -like "*$primaryNode*" -or $primaryNode -like "*$currentMachineName*") {
-                    Write-Host "##vso[task.setvariable variable=ChosenMachine]$currentMachineName"
+                    Write-Host "##vso[task.setvariable variable=ChosenMachine;isOutput=true]$currentMachineName"
                     Write-Host "Choosing machine: $currentMachineName"
                   } else {
                     Write-Host "Not choosing current machine. Primary is: $primaryNode"
@@ -385,9 +388,13 @@ stages:
 
   - stage: DisableAlwaysOn
     displayName: 'Disable AlwaysOn (AlwaysOn Only)'
-    dependsOn: BackupDatabases
+    dependsOn:
+      - BackupDatabases
+      - ChoosePrimaryNode
     condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
     variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
       - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
           - group: Pre-Prod_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'Production') }}:
@@ -410,7 +417,9 @@ stages:
                   exit 0
                 }
                 
-                $chosenMachine = "$(ChosenMachine)"
+                $chosenMachine = '$(ChosenMachine)'
+                
+                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
                 if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
                   Write-Host "Not selected host - exiting..."
@@ -479,9 +488,13 @@ stages:
 
   - stage: RestoreProductionBackups
     displayName: 'Restore Production Backups (AlwaysOn Only)'
-    dependsOn: DisableAlwaysOn
+    dependsOn:
+      - DisableAlwaysOn
+      - ChoosePrimaryNode
     condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
     variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
       - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
           - group: Pre-Prod_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'Production') }}:
@@ -504,7 +517,9 @@ stages:
                   exit 0
                 }
                 
-                $chosenMachine = "$(ChosenMachine)"
+                $chosenMachine = '$(ChosenMachine)'
+                
+                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
                 if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
                   Write-Host "Not selected host - exiting..."
@@ -634,7 +649,9 @@ stages:
                   exit 0
                 }
                 
-                $chosenMachine = "$(ChosenMachine)"
+                $chosenMachine = '$(ChosenMachine)'
+                
+                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
                 if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
                   Write-Host "Not selected host - exiting..."
@@ -756,9 +773,13 @@ stages:
 
   - stage: RemoveFromSecondaryNodes
     displayName: 'Remove Databases from Secondary Nodes (AlwaysOn Only)'
-    dependsOn: RestoreProductionBackups
+    dependsOn:
+      - RestoreProductionBackups
+      - ChoosePrimaryNode
     condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
     variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
       - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
           - group: Pre-Prod_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'Production') }}:
@@ -781,7 +802,9 @@ stages:
                   exit 0
                 }
                 
-                $chosenMachine = "$(ChosenMachine)"
+                $chosenMachine = '$(ChosenMachine)'
+                
+                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
                 if ($chosenMachine -eq $currentMachine -and $chosenMachine -ne "") {
                   Write-Host "Should not run on primary host - exiting..."
@@ -848,8 +871,11 @@ stages:
     dependsOn: 
       - BackupDatabases
       - RemoveFromSecondaryNodes
-    condition: and(in(dependencies.BackupDatabases.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.RemoveFromSecondaryNodes.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
+      - ChoosePrimaryNode
+    condition: and(in(dependencies.BackupDatabases.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.RemoveFromSecondaryNodes.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.ChoosePrimaryNode.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
     variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
       - ${{ if eq(parameters.dbSlot, 'Dev') }}:
           - group: Development_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'FT1') }}:
@@ -883,7 +909,8 @@ stages:
               UserPassword: "$(winrmPassword)"
               InlineScript: |
                 $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
-                $chosenMachine = "$(ChosenMachine)"
+                $chosenMachine = '$(ChosenMachine)'
+                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
                 
                 if ($alwaysOnEnabled -eq "true" -and $chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
@@ -902,7 +929,9 @@ stages:
                 $projectName = "Boots.MasterData.DB.ManualUpgrade"
                 $dacpac = Join-Path $installLocation "$($projectName).dacpac"
                 
-                $instanceName = "$(Instance_Name)"
+                $instanceName = '$(Instance_Name)'
+                
+                if ($instanceName -eq '$(Instance_Name)') { $instanceName = "" }
                 if ([string]::IsNullOrWhiteSpace($instanceName)) {
                   $reportFolder = "MasterData"
                 } else {
@@ -954,7 +983,8 @@ stages:
               UserPassword: "$(winrmPassword)"
               InlineScript: |
                 $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
-                $chosenMachine = "$(ChosenMachine)"
+                $chosenMachine = '$(ChosenMachine)'
+                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
                 
                 if ($alwaysOnEnabled -eq "true" -and $chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
@@ -972,7 +1002,9 @@ stages:
                 $projectName = "Boots.MasterData.DB.InitialStagingDB"
                 $dacpac = Join-Path $installLocation "$($projectName).dacpac"
                 
-                $instanceName = "$(Instance_Name)"
+                $instanceName = '$(Instance_Name)'
+                
+                if ($instanceName -eq '$(Instance_Name)') { $instanceName = "" }
                 if ([string]::IsNullOrWhiteSpace($instanceName)) {
                   $reportFolder = "MasterData"
                 } else {
@@ -1024,7 +1056,8 @@ stages:
               UserPassword: "$(winrmPassword)"
               InlineScript: |
                 $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
-                $chosenMachine = "$(ChosenMachine)"
+                $chosenMachine = '$(ChosenMachine)'
+                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
                 
                 if ($alwaysOnEnabled -eq "true" -and $chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
@@ -1044,7 +1077,9 @@ stages:
                 $projectName = "Boots.MasterData.DB.MasterDataDB"
                 $dacpac = Join-Path $installLocation "$($projectName).dacpac"
                 
-                $instanceName = "$(Instance_Name)"
+                $instanceName = '$(Instance_Name)'
+                
+                if ($instanceName -eq '$(Instance_Name)') { $instanceName = "" }
                 if ([string]::IsNullOrWhiteSpace($instanceName)) {
                   $reportFolder = "MasterData"
                 } else {
@@ -1085,9 +1120,13 @@ stages:
                 -OutputBufferingMode Block
   - stage: CleanupAlwaysOnBackups
     displayName: 'Cleanup AlwaysOn Backups (AlwaysOn Only)'
-    dependsOn: DeployDACPACs
+    dependsOn:
+      - DeployDACPACs
+      - ChoosePrimaryNode
     condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
     variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
       - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
           - group: Pre-Prod_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'Production') }}:
@@ -1110,7 +1149,9 @@ stages:
                   exit 0
                 }
                 
-                $chosenMachine = "$(ChosenMachine)"
+                $chosenMachine = '$(ChosenMachine)'
+                
+                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
                 if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
                   Write-Host "Not selected host - exiting..."
@@ -1142,9 +1183,13 @@ stages:
 
   - stage: EnableAlwaysOn
     displayName: 'Enable AlwaysOn (AlwaysOn Only)'
-    dependsOn: CleanupAlwaysOnBackups
+    dependsOn:
+      - CleanupAlwaysOnBackups
+      - ChoosePrimaryNode
     condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
     variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
       - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
           - group: Pre-Prod_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'Production') }}:
@@ -1167,7 +1212,9 @@ stages:
                   exit 0
                 }
                 
-                $chosenMachine = "$(ChosenMachine)"
+                $chosenMachine = '$(ChosenMachine)'
+                
+                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
                 if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
                   Write-Host "Not selected host - exiting..."
@@ -1238,9 +1285,13 @@ stages:
 
   - stage: BackupUpgradedDatabases
     displayName: 'Backup Upgraded Databases (AlwaysOn Only)'
-    dependsOn: EnableAlwaysOn
+    dependsOn:
+      - EnableAlwaysOn
+      - ChoosePrimaryNode
     condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
     variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
       - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
           - group: Pre-Prod_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'Production') }}:
@@ -1263,7 +1314,9 @@ stages:
                   exit 0
                 }
                 
-                $chosenMachine = "$(ChosenMachine)"
+                $chosenMachine = '$(ChosenMachine)'
+                
+                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
                 if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
                   Write-Host "Not selected host - exiting..."
@@ -1337,9 +1390,13 @@ stages:
 
   - stage: RestoreOnSecondaryNodes
     displayName: 'Restore on Secondary Nodes (AlwaysOn Only)'
-    dependsOn: BackupUpgradedDatabases
+    dependsOn:
+      - BackupUpgradedDatabases
+      - ChoosePrimaryNode
     condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
     variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
       - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
           - group: Pre-Prod_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'Production') }}:
@@ -1362,7 +1419,9 @@ stages:
                   exit 0
                 }
                 
-                $chosenMachine = "$(ChosenMachine)"
+                $chosenMachine = '$(ChosenMachine)'
+                
+                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
                 if ($chosenMachine -eq $currentMachine -and $chosenMachine -ne "") {
                   Write-Host "Should not run on primary host - exiting..."
@@ -1435,9 +1494,13 @@ stages:
 
   - stage: BackupTransactionLogs
     displayName: 'Backup Transaction Logs (AlwaysOn Only)'
-    dependsOn: RestoreOnSecondaryNodes
+    dependsOn:
+      - RestoreOnSecondaryNodes
+      - ChoosePrimaryNode
     condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
     variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
       - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
           - group: Pre-Prod_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'Production') }}:
@@ -1460,7 +1523,9 @@ stages:
                   exit 0
                 }
                 
-                $chosenMachine = "$(ChosenMachine)"
+                $chosenMachine = '$(ChosenMachine)'
+                
+                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
                 if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
                   Write-Host "Not selected host - exiting..."
@@ -1533,9 +1598,13 @@ stages:
 
   - stage: RestoreTransactionLogs
     displayName: 'Restore Transaction Logs (AlwaysOn Only)'
-    dependsOn: BackupTransactionLogs
+    dependsOn:
+      - BackupTransactionLogs
+      - ChoosePrimaryNode
     condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
     variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
       - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
           - group: Pre-Prod_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'Production') }}:
@@ -1558,7 +1627,9 @@ stages:
                   exit 0
                 }
                 
-                $chosenMachine = "$(ChosenMachine)"
+                $chosenMachine = '$(ChosenMachine)'
+                
+                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
                 if ($chosenMachine -eq $currentMachine -and $chosenMachine -ne "") {
                   Write-Host "Should not run on primary host - exiting..."
@@ -1631,9 +1702,13 @@ stages:
 
   - stage: EnableHADRReplication
     displayName: 'Enable HADR Replication (AlwaysOn Only)'
-    dependsOn: RestoreTransactionLogs
+    dependsOn:
+      - RestoreTransactionLogs
+      - ChoosePrimaryNode
     condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
     variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
       - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
           - group: Pre-Prod_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'Production') }}:
@@ -1656,7 +1731,9 @@ stages:
                   exit 0
                 }
                 
-                $chosenMachine = "$(ChosenMachine)"
+                $chosenMachine = '$(ChosenMachine)'
+                
+                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
                 if ($chosenMachine -eq $currentMachine -and $chosenMachine -ne "") {
                   Write-Host "Should not run on primary host - exiting..."
@@ -1751,8 +1828,11 @@ stages:
     dependsOn: 
       - DeployDACPACs
       - EnableHADRReplication
+      - ChoosePrimaryNode
     condition: succeeded()
     variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
       - ${{ if eq(parameters.dbSlot, 'Dev') }}:
           - group: Development_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'FT1') }}:
@@ -1786,7 +1866,8 @@ stages:
               UserPassword: "$(winrmPassword)"
               InlineScript: |
                 $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
-                $chosenMachine = "$(ChosenMachine)"
+                $chosenMachine = '$(ChosenMachine)'
+                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
                 
                 if ($alwaysOnEnabled -eq "true" -and $chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
@@ -1867,7 +1948,8 @@ stages:
               UserPassword: "$(winrmPassword)"
               InlineScript: |
                 $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
-                $chosenMachine = "$(ChosenMachine)"
+                $chosenMachine = '$(ChosenMachine)'
+                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
                 
                 if ($alwaysOnEnabled -eq "true" -and $chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
@@ -1938,7 +2020,8 @@ stages:
               UserPassword: "$(winrmPassword)"
               InlineScript: |
                 $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
-                $chosenMachine = "$(ChosenMachine)"
+                $chosenMachine = '$(ChosenMachine)'
+                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
                 
                 if ($alwaysOnEnabled -eq "true" -and $chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
@@ -2006,7 +2089,8 @@ stages:
               UserPassword: "$(winrmPassword)"
               InlineScript: |
                 $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
-                $chosenMachine = "$(ChosenMachine)"
+                $chosenMachine = '$(ChosenMachine)'
+                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
                 $dbSlot = "$(dbSlot)"
                 
