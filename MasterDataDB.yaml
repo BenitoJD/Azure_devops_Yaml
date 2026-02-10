@@ -33,6 +33,8 @@ variables:
     value: ${{ parameters.dbSlot }}
   - name: ChosenMachine
     value: ''
+  - name: Database_MasterData_PublishArchive_DBName
+    value: ''
 
   # Server catalog and paths
   - group: vg-shared-servers
@@ -324,7 +326,48 @@ stages:
                 $isDbName = "$(Database_InitialStaging_DBName)"
                 $mdDbName = "$(Database_MasterData_DBName)"
                 $backupDirectory = "$(Server_DB_BackupLocation)"
-                $timestamp = Get-Date -format "yyyy-MM-dd-HHmmss"
+                
+                $compressionRaw = '$(Compression)'
+                $devicesRaw = '$(Devices)'
+                $stampRaw = '$(Stamp)'
+                $connectionTimeoutRaw = '$(ConnectionTimeout)'
+                $incrementalRaw = '$(Incremental)'
+                $copyOnlyRaw = '$(CopyOnly)'
+                
+                $devices = 1
+                if ($devicesRaw -ne '$(Devices)' -and -not [string]::IsNullOrWhiteSpace($devicesRaw)) {
+                  $devices = [int]$devicesRaw
+                }
+                
+                if ($stampRaw -ne '$(Stamp)' -and -not [string]::IsNullOrWhiteSpace($stampRaw)) {
+                  $timestamp = $stampRaw
+                } else {
+                  $timestamp = Get-Date -format "yyyy-MM-dd-HHmmss"
+                }
+                
+                $connectionTimeout = 0
+                if ($connectionTimeoutRaw -ne '$(ConnectionTimeout)' -and -not [string]::IsNullOrWhiteSpace($connectionTimeoutRaw)) {
+                  $connectionTimeout = [int]$connectionTimeoutRaw
+                }
+                
+                $incremental = $false
+                if ($incrementalRaw -ne '$(Incremental)' -and -not [string]::IsNullOrWhiteSpace($incrementalRaw)) {
+                  $incremental = [boolean]::Parse($incrementalRaw)
+                }
+                
+                $copyOnly = $false
+                if ($copyOnlyRaw -ne '$(CopyOnly)' -and -not [string]::IsNullOrWhiteSpace($copyOnlyRaw)) {
+                  $copyOnly = [boolean]::Parse($copyOnlyRaw)
+                }
+                
+                $compressionOption = [Microsoft.SqlServer.Management.Smo.BackupCompressionOptions]::On
+                if ($compressionRaw -ne '$(Compression)' -and -not [string]::IsNullOrWhiteSpace($compressionRaw)) {
+                  try {
+                    $compressionOption = [Microsoft.SqlServer.Management.Smo.BackupCompressionOptions]([int]$compressionRaw)
+                  } catch {
+                    $compressionOption = [Microsoft.SqlServer.Management.Smo.BackupCompressionOptions]::On
+                  }
+                }
                 
                 [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
                 [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
@@ -343,6 +386,7 @@ stages:
                   $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
                 }
                 
+                $server.ConnectionContext.StatementTimeout = $connectionTimeout
                 try {
                   $server.ConnectionContext.Connect()
                 } catch {
@@ -355,29 +399,88 @@ stages:
                   New-Item $backupDirectory -ItemType Directory -Force | Out-Null
                 }
                 
+                function AddPercentHandler {
+                  param($smoBackupRestore, $action)
+                
+                  $percentEventHandler = [Microsoft.SqlServer.Management.Smo.PercentCompleteEventHandler] { Write-Host $dbName $action $_.Percent "%" }
+                  $completedEventHandler = [Microsoft.SqlServer.Management.Common.ServerMessageEventHandler] { Write-Host $_.Error.Message }
+                  
+                  $smoBackupRestore.add_PercentComplete($percentEventHandler)
+                  $smoBackupRestore.add_Complete($completedEventHandler)
+                  $smoBackupRestore.PercentCompleteNotification=10
+                }
+                
+                function CreateDevice {
+                  param($smoBackupRestore, $directory, $name)
+                
+                  $devicePath = Join-Path $directory ($name)
+                  $smoBackupRestore.Devices.AddDevice($devicePath, "File")
+                  return $devicePath
+                }
+                
+                function CreateDevices {
+                  param($smoBackupRestore, $devices, $directory, $dbName, $incremental)
+                  
+                  $targetPaths = New-Object System.Collections.Generic.List[System.String]
+                  
+                  $extension = ".bak"
+                  if ($incremental -eq $true){
+                    $extension = ".trn"
+                  }
+                  
+                  if ($devices -eq 1){
+                    $deviceName = $dbName + "_" + $timestamp + $extension
+                    $targetPath = CreateDevice $smoBackupRestore $directory $deviceName
+                    $targetPaths.Add($targetPath)
+                  } else {
+                    for ($i=1; $i -le $devices; $i++){
+                      $deviceName = $dbName + "_" + $timestamp + "_" + $i + $extension
+                      $targetPath = CreateDevice $smoBackupRestore $directory $deviceName
+                      $targetPaths.Add($targetPath)
+                    }
+                  }
+                  return $targetPaths
+                }
+                
                 function BackupDatabase {
-                  param($dbName, $backupDir, $stamp)
+                  param($dbName, $devices, $compressionOption, $incremental, $copyOnly)
                   
                   $smoBackup = New-Object Microsoft.SqlServer.Management.Smo.Backup
-                  $backupPath = Join-Path $backupDir "$($dbName)_$($stamp).bak"
-                  $smoBackup.Devices.AddDevice($backupPath, "File")
+                  $targetPaths = CreateDevices $smoBackup $devices $backupDirectory $dbName $incremental
                   
-                  $smoBackup.Action = "Database"
-                  $smoBackup.BackupSetDescription = "Full Backup of $dbName"
-                  $smoBackup.BackupSetName = "$dbName Backup"
+                  Write-Host "Attempting to backup database $serverName.$dbName to:"
+                  $targetPaths
+                  Write-Host ""
+                  
+                  if ($incremental -eq $true){
+                    $smoBackup.Action = "Log"
+                    $smoBackup.BackupSetDescription = "Log backup of " + $dbName
+                    $smoBackup.LogTruncation = "Truncate"
+                  } else {
+                    $smoBackup.Action = "Database"
+                    $smoBackup.BackupSetDescription = "Full Backup of " + $dbName
+                  }
+                  
+                  $smoBackup.BackupSetName = $dbName + " Backup"
                   $smoBackup.MediaDescription = "Disk"
-                  $smoBackup.CompressionOption = [Microsoft.SqlServer.Management.Smo.BackupCompressionOptions]::On
-                  $smoBackup.CopyOnly = $false
+                  $smoBackup.CompressionOption = $compressionOption
+                  $smoBackup.CopyOnly = $copyOnly
                   $smoBackup.Initialize = $true
                   $smoBackup.Database = $dbName
                   
-                  Write-Host "Backing up database $dbName to $backupPath"
-                  $smoBackup.SqlBackup($server)
-                  Write-Host "Backup completed successfully for $dbName"
+                  try {
+                    AddPercentHandler $smoBackup "backed up"
+                    $smoBackup.SqlBackup($server)
+                  } catch {
+                    Write-Error "An error occurred backing up the database!`r`n$($_.Exception.ToString())"
+                    throw
+                  }
+                  
+                  Write-Host "Backup completed successfully."
                 }
                 
-                BackupDatabase $isDbName $backupDirectory $timestamp
-                BackupDatabase $mdDbName $backupDirectory $timestamp
+                BackupDatabase $isDbName $devices $compressionOption $incremental $copyOnly
+                BackupDatabase $mdDbName $devices $compressionOption $incremental $copyOnly
               NewPsSessionOptionArguments: >
                 -SkipCACheck
                 -SkipCNCheck
@@ -560,6 +663,14 @@ stages:
                 $restorePath = Join-Path "$(Server_DB_RestoreLocation)" $dbName
                 
                 try {
+                  Write-Host "Attempting to stop CDC jobs (If they exist)"
+                  $stopSQL = "IF exists(select 1 from sys.databases where is_cdc_enabled = 1 and name = '$dbName') EXEC $dbName.sys.sp_cdc_stop_job;"
+                  $masterDB.ExecuteNonQuery($stopSQL)
+                } catch {
+                  Write-Host "CDC stop job error: $($_.Exception.Message)"
+                }
+                
+                try {
                   Write-Host "Attempting to put database into Single User mode (If it exists)"
                   $singleUserSQL = "IF exists(select 1 from sys.databases where name = '$dbName') ALTER DATABASE $dbName SET single_user WITH ROLLBACK immediate;"
                   $masterDB.ExecuteNonQuery($singleUserSQL)
@@ -693,6 +804,14 @@ stages:
                 $restorePath = Join-Path "$(Server_DB_RestoreLocation)" $dbName
                 
                 try {
+                  Write-Host "Attempting to stop CDC jobs (If they exist)"
+                  $stopSQL = "IF exists(select 1 from sys.databases where is_cdc_enabled = 1 and name = '$dbName') EXEC $dbName.sys.sp_cdc_stop_job;"
+                  $masterDB.ExecuteNonQuery($stopSQL)
+                } catch {
+                  Write-Host "CDC stop job error: $($_.Exception.Message)"
+                }
+                
+                try {
                   Write-Host 'Attempting to switch the database into single user mode.'
                   $singleUserSQL = "IF exists(select 1 from sys.databases where name = '$dbName') ALTER DATABASE $dbName SET single_user WITH ROLLBACK immediate;"
                   $masterDB.ExecuteNonQuery($singleUserSQL)
@@ -700,7 +819,7 @@ stages:
                   Write-Host "Single user mode error: $($_.Exception.Message)"
                 }
                 
-                $restoreSQL = "RESTORE DATABASE $dbName FROM DISK = '$backupFile' WITH RECOVERY, MOVE 'MasterData' TO '$($restorePath)_Data.mdf', MOVE 'MasterData_log' TO '$($restorePath)_Log.ldf', REPLACE"
+                $restoreSQL = "RESTORE DATABASE $dbName FROM DISK = '$backupFile' WITH RECOVERY, MOVE 'MasterData' TO '$($restorePath)_Data.mdf', MOVE 'MasterData_log' TO '$($restorePath)_Log.ldf', MOVE 'MDChangeTracker.ndf' TO '$($restorePath)_cdc.ndf', KEEP_CDC, REPLACE"
                 
                 try {
                   Write-Host 'Beginning restore process.'
@@ -1069,7 +1188,6 @@ stages:
                 $serverName = "$(Server_DB_Instance)"
                 $dbName = "$(Database_MasterData_DBName)"
                 $pa_dbName = '$(Database_MasterData_PublishArchive_DBName)'
-                if ($pa_dbName -eq '$(Database_MasterData_PublishArchive_DBName)') { $pa_dbName = "" }
                 $initialStagingDBName = "$(Database_InitialStaging_DBName)"
                 $dacLocation = "$(Server_DAC_LibraryLocation)"
                 $sqlUser = "$(Server_DB_Admin_User)"
@@ -1103,15 +1221,12 @@ stages:
                     "/TargetDatabaseName:$dbName"
                     "/TargetTrustServerCertificate:True"
                     "/Variables:InitialStagingDB=$initialStagingDBName"
+                    "/Variables:CDC=$dbName"
                     "/Variables:ReportFolder=$reportFolder"
                     "/p:BlockOnPossibleDataLoss=false"
                   )
                   
-                  if (-not [string]::IsNullOrWhiteSpace($pa_dbName)) {
-                    $sqlPackageArgs += "/Variables:PublishArchive=$pa_dbName"
-                  } else {
-                    Write-Host "PublishArchive variable not set; skipping /Variables:PublishArchive."
-                  }
+                  $sqlPackageArgs += "/Variables:PublishArchive=$pa_dbName"
                   
                   if (-not [string]::IsNullOrWhiteSpace($sqlUser) -and -not [string]::IsNullOrWhiteSpace($sqlPassword)) {
                     $sqlPackageArgs += "/TargetUser:$sqlUser"
@@ -2153,7 +2268,7 @@ stages:
                 if ($dbSlot -eq "SIT") {
                   try {
                     Write-Host "Granting superuser access for Azure E2E environment"
-                    $sql = "exec mdsecurity.grantsuperuseraccess 'WORKGROUPznewcmbmd1$';"
+                    $sql = "exec mdsecurity.grantsuperuseraccess 'WORKGROUP\\aznewcmbmd1$';"
                     Write-Host $sql
                     $masterDB.ExecuteNonQuery($sql)
                   } catch {
