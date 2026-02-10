@@ -29,6 +29,8 @@ variables:
     value: '$(Build.SourceBranchName)'
   - name: BuildVersion
     value: '$(Build.BuildId)'
+  - name: ChosenMachine
+    value: ''
   - name: dbSlot
     value: ${{ parameters.dbSlot }}
 
