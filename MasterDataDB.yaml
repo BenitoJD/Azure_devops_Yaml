@@ -266,6 +266,10 @@ stages:
                       }
                     }
                   }
+                  if ([string]::IsNullOrWhiteSpace($primaryNode)) {
+                    Write-Host "ERROR: Could not determine primary replica for availability group '$dbInstanceName'."
+                    throw "Primary node detection failed for availability group '$dbInstanceName'. Aborting AlwaysOn deployment."
+                  }
                   Write-Host "Primary host is: $primaryNode"
                   Write-Host "Current Machine is: $currentMachineName"
                   
