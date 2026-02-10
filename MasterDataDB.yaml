@@ -604,7 +604,7 @@ stages:
                     END;
                     CLOSE orphans;
                     DEALLOCATE orphans;
-"@
+                  "@
                   $database.ExecuteNonQuery($fixUsers)
                 } catch {
                   Write-Error "An error occurred fixing orphaned users!`r`n$($_.Exception.ToString())"
@@ -735,7 +735,7 @@ stages:
                     END;
                     CLOSE orphans;
                     DEALLOCATE orphans;
-"@
+                  "@
                   $database.ExecuteNonQuery($fixUsers)
                 } catch {
                   Write-Error "An error occurred restoring the users!`r`n$($_.Exception.ToString())"
@@ -1730,7 +1730,7 @@ stages:
                       end catch
                       ALTER DATABASE [$isDbName] SET HADR AVAILABILITY GROUP = [$dbInstanceName];
                       ALTER DATABASE [$mdDbName] SET HADR AVAILABILITY GROUP = [$dbInstanceName];
-"@
+                  "@
                   Write-Host $enableAlwaysOnSQL
                   $masterDB.ExecuteNonQuery($enableAlwaysOnSQL)
                 } catch {
