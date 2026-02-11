@@ -1056,6 +1056,21 @@ stages:
                 } else {
                   $reportFolder = "MasterData_$instanceName"
                 }
+
+                Write-Host "=== Deploy_MasterDataDB Debug ==="
+                Write-Host "AlwaysOnEnabled: $alwaysOnEnabled"
+                Write-Host "ChosenMachine: $chosenMachine"
+                Write-Host "CurrentMachine: $currentMachine"
+                Write-Host "ServerName: $serverName"
+                Write-Host "DatabaseName: $dbName"
+                Write-Host "InitialStagingDB: $initialStagingDBName"
+                Write-Host "ReportFolder: $reportFolder"
+                Write-Host "DacLocation: $dacLocation"
+                Write-Host "Dacpac: $dacpac"
+                Write-Host "SQLUser: $sqlUser"
+                $sqlPasswordProvided = -not [string]::IsNullOrWhiteSpace($sqlPassword)
+                Write-Host "SQLPassword provided: $sqlPasswordProvided"
+                Write-Host "SqlPackage.exe exists: $([bool](Test-Path (Join-Path $dacLocation 'SqlPackage.exe')))"
                 
                 if (-not (Test-Path $dacpac)) {
                   throw "DACPAC file not found at: $dacpac"
@@ -1218,6 +1233,8 @@ stages:
                 [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
                 
                 $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
+                $authMode = if (-not [string]::IsNullOrWhiteSpace($sqlUser)) { "SQL" } else { "Windows" }
+                Write-Host "Connecting to SQL using $authMode authentication"
                 
                 if ($sqlUser -ne $null -and $sqlUser -ne "" -and $sqlUser -notlike "*`$(*") {
                   if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
@@ -1234,6 +1251,18 @@ stages:
                 } catch {
                   Write-Error "An error occurred connecting to the database server!`r`n$($_.Exception.ToString())"
                   throw
+                }
+
+                try {
+                  $dbCheck = $server.ConnectionContext.ExecuteWithResults("SELECT name, is_cdc_enabled FROM sys.databases WHERE name = '$dbName';")
+                  if ($dbCheck.Tables.Count -gt 0 -and $dbCheck.Tables[0].Rows.Count -gt 0) {
+                    $row = $dbCheck.Tables[0].Rows[0]
+                    Write-Host "DB exists: $($row.name) | CDC enabled: $($row.is_cdc_enabled)"
+                  } else {
+                    Write-Host "DB check returned no rows for $dbName"
+                  }
+                } catch {
+                  Write-Host "DB check failed: $($_.Exception.Message)"
                 }
                 
                 $masterDB = $server.Databases["master"]
@@ -1254,6 +1283,8 @@ stages:
                   LEFT JOIN sys.filegroups fg ON ct.filegroup_id = fg.data_space_id
                   WHERE ct.source_object_id = OBJECT_ID(N'$cdcSchema.$cdcTable');
                 "@
+                  Write-Host "CDC lookup query:" 
+                  Write-Host $cdcQuery
                   $server.ConnectionContext.DatabaseName = $dbName
                   $ds = $server.ConnectionContext.ExecuteWithResults($cdcQuery)
                   $server.ConnectionContext.DatabaseName = 'master'
@@ -1269,6 +1300,7 @@ stages:
                   }
                 } catch {
                   Write-Host "CDC lookup failed; continuing without CDC changes. $($_.Exception.Message)"
+                  Write-Host $_.Exception | Format-List -Force
                 }
                 
                 if ($cdcInfo -ne $null -and -not [string]::IsNullOrWhiteSpace($cdcInfo.CaptureInstance)) {
@@ -1290,6 +1322,11 @@ stages:
                   $pushed = $false
                   Push-Location $dacLocation
                   $pushed = $true
+                  try {
+                    & .\SqlPackage.exe /Version
+                  } catch {
+                    Write-Host "SqlPackage version check failed: $($_.Exception.Message)"
+                  }
                   $sqlPackageArgs = @(
                     "/Action:publish"
                     "/SourceFile:$dacpac"
@@ -1308,6 +1345,9 @@ stages:
                     $sqlPackageArgs += "/TargetUser:$sqlUser"
                     $sqlPackageArgs += "/TargetPassword:$sqlPassword"
                   }
+
+                  $logArgs = $sqlPackageArgs | ForEach-Object { if ($_ -like '/TargetPassword:*') { '/TargetPassword:****' } else { $_ } }
+                  Write-Host "SqlPackage args: $($logArgs -join ' ')"
                   
                   & .\SqlPackage.exe @sqlPackageArgs
                 } catch {
