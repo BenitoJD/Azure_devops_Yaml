@@ -594,10 +594,26 @@ stages:
     dependsOn:
       - DisableAlwaysOn
       - ChoosePrimaryNode
-    condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
+    condition: and(ne('${{ parameters.dbSlot }}', 'Production'), in(dependencies.DisableAlwaysOn.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.ChoosePrimaryNode.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - ${{ if eq(parameters.dbSlot, 'Dev') }}:
+          - group: Development_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'FT1') }}:
+          - group: FT1_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'FT2') }}:
+          - group: FT2_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'FT3') }}:
+          - group: FT3_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'QA') }}:
+          - group: QA_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'R1') }}:
+          - group: R1_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Demo') }}:
+          - group: Demo_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'SIT') }}:
+          - group: SIT_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
           - group: Pre-Prod_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'Production') }}:
@@ -615,16 +631,11 @@ stages:
               UserPassword: "$(winrmPassword)"
               InlineScript: |
                 $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
-                if ($alwaysOnEnabled -ne "true") {
-                  Write-Host "AlwaysOn is not enabled. Skipping."
-                  exit 0
-                }
-                
                 $chosenMachine = '$(ChosenMachine)'
                 
                 if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
-                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                if ($alwaysOnEnabled -eq "true" -and $chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
                   Write-Host "Not selected host - exiting..."
                   exit 0
                 }
@@ -755,16 +766,11 @@ stages:
               UserPassword: "$(winrmPassword)"
               InlineScript: |
                 $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
-                if ($alwaysOnEnabled -ne "true") {
-                  Write-Host "AlwaysOn is not enabled. Skipping."
-                  exit 0
-                }
-                
                 $chosenMachine = '$(ChosenMachine)'
                 
                 if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
-                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                if ($alwaysOnEnabled -eq "true" -and $chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
                   Write-Host "Not selected host - exiting..."
                   exit 0
                 }
