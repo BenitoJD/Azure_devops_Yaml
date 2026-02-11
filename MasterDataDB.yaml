@@ -1285,17 +1285,21 @@ stages:
                 "@
                   Write-Host "CDC lookup query:" 
                   Write-Host $cdcQuery
-                  $server.ConnectionContext.DatabaseName = $dbName
-                  $ds = $server.ConnectionContext.ExecuteWithResults($cdcQuery)
-                  $server.ConnectionContext.DatabaseName = 'master'
-                  if ($ds.Tables.Count -gt 0 -and $ds.Tables[0].Rows.Count -gt 0) {
-                    $row = $ds.Tables[0].Rows[0]
-                    $cdcInfo = [pscustomobject]@{
-                      CaptureInstance   = [string]$row.capture_instance
-                      SupportsNetChanges = [int]$row.supports_net_changes
-                      IndexName         = [string]$row.index_name
-                      RoleName          = [string]$row.role_name
-                      FilegroupName     = [string]$row.filegroup_name
+                  $dbObj = $server.Databases[$dbName]
+                  if ($dbObj -eq $null) {
+                    Write-Host "Database object not found for $dbName; skipping CDC lookup."
+                  } else {
+                    Write-Host "Database object found; IsCdcEnabled: $($dbObj.IsCdcEnabled)"
+                    $ds = $dbObj.ExecuteWithResults($cdcQuery)
+                    if ($ds.Tables.Count -gt 0 -and $ds.Tables[0].Rows.Count -gt 0) {
+                      $row = $ds.Tables[0].Rows[0]
+                      $cdcInfo = [pscustomobject]@{
+                        CaptureInstance   = [string]$row.capture_instance
+                        SupportsNetChanges = [int]$row.supports_net_changes
+                        IndexName         = [string]$row.index_name
+                        RoleName          = [string]$row.role_name
+                        FilegroupName     = [string]$row.filegroup_name
+                      }
                     }
                   }
                 } catch {
