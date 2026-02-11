@@ -730,7 +730,7 @@ stages:
                     END;
                     CLOSE orphans;
                     DEALLOCATE orphans;
-                  "@
+                "@
                   $database.ExecuteNonQuery($fixUsers)
                 } catch {
                   Write-Error "An error occurred fixing orphaned users!`r`n$($_.Exception.ToString())"
@@ -871,7 +871,7 @@ stages:
                     END;
                     CLOSE orphans;
                     DEALLOCATE orphans;
-                  "@
+                "@
                   $database.ExecuteNonQuery($fixUsers)
                 } catch {
                   Write-Error "An error occurred restoring the users!`r`n$($_.Exception.ToString())"
@@ -1245,16 +1245,16 @@ stages:
                 
                 try {
                   $cdcQuery = @"
-USE [$dbName];
-SELECT ct.capture_instance,
-       ct.supports_net_changes,
-       ct.index_name,
-       ct.role_name,
-       fg.name AS filegroup_name
-FROM cdc.change_tables ct
-LEFT JOIN sys.filegroups fg ON ct.filegroup_id = fg.data_space_id
-WHERE ct.source_object_id = OBJECT_ID(N'$cdcSchema.$cdcTable');
-"@
+                  USE [$dbName];
+                  SELECT ct.capture_instance,
+                         ct.supports_net_changes,
+                         ct.index_name,
+                         ct.role_name,
+                         fg.name AS filegroup_name
+                  FROM cdc.change_tables ct
+                  LEFT JOIN sys.filegroups fg ON ct.filegroup_id = fg.data_space_id
+                  WHERE ct.source_object_id = OBJECT_ID(N'$cdcSchema.$cdcTable');
+                "@
                   $ds = $masterDB.ExecuteWithResults($cdcQuery)
                   if ($ds.Tables.Count -gt 0 -and $ds.Tables[0].Rows.Count -gt 0) {
                     $row = $ds.Tables[0].Rows[0]
@@ -2034,7 +2034,7 @@ WHERE ct.source_object_id = OBJECT_ID(N'$cdcSchema.$cdcTable');
                       end catch
                       ALTER DATABASE [$isDbName] SET HADR AVAILABILITY GROUP = [$dbInstanceName];
                       ALTER DATABASE [$mdDbName] SET HADR AVAILABILITY GROUP = [$dbInstanceName];
-                  "@
+                "@
                   Write-Host $enableAlwaysOnSQL
                   $masterDB.ExecuteNonQuery($enableAlwaysOnSQL)
                 } catch {
