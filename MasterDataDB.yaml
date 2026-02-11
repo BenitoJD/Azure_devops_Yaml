@@ -218,8 +218,18 @@ stages:
               UserPassword: "$(winrmPassword)"
               InlineScript: |
                 $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
+                $chosenMachine = '$(ChosenMachine)'
+                $currentMachineName = $env:COMPUTERNAME
+                
+                if ($chosenMachine -ne '$(ChosenMachine)' -and -not [string]::IsNullOrWhiteSpace($chosenMachine)) {
+                  Write-Host "Machine already chosen - skipping"
+                  Write-Host "##vso[task.setvariable variable=ChosenMachine;isOutput=true]$chosenMachine"
+                  exit 0
+                }
+                
                 if ($alwaysOnEnabled -ne "true") {
-                  Write-Host "AlwaysOn is not enabled for this environment. Skipping primary node selection."
+                  Write-Host "AlwaysOn is not enabled. Choosing current machine: $currentMachineName"
+                  Write-Host "##vso[task.setvariable variable=ChosenMachine;isOutput=true]$currentMachineName"
                   exit 0
                 }
                 
@@ -227,7 +237,6 @@ stages:
                 $sqlLogin = "$(Server_DB_Admin_User)"
                 $sqlPassword = "$(Server_DB_Admin_Password)"
                 $dbInstanceName = "$(Server_DB_Instance_Name)"
-                $currentMachineName = $env:COMPUTERNAME
                 
                 [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
                 [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
@@ -299,9 +308,13 @@ stages:
 
   - stage: BackupDatabases
     displayName: 'Backup Databases (AlwaysOn Only)'
-    dependsOn: AcquireArtifacts
+    dependsOn:
+      - AcquireArtifacts
+      - ChoosePrimaryNode
     condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
     variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
       - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
           - group: Pre-Prod_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'Production') }}:
@@ -326,6 +339,14 @@ stages:
                 $isDbName = "$(Database_InitialStaging_DBName)"
                 $mdDbName = "$(Database_MasterData_DBName)"
                 $backupDirectory = "$(Server_DB_BackupLocation)"
+                $chosenMachine = '$(ChosenMachine)'
+                
+                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
+                $currentMachine = $env:COMPUTERNAME
+                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                  Write-Host "Not selected host - exiting..."
+                  exit 0
+                }
                 
                 $compressionRaw = '$(Compression)'
                 $devicesRaw = '$(Devices)'
@@ -514,12 +535,6 @@ stages:
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
-                if ($alwaysOnEnabled -ne "true") {
-                  Write-Host "AlwaysOn is not enabled. Skipping."
-                  exit 0
-                }
-                
                 $chosenMachine = '$(ChosenMachine)'
                 
                 if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
@@ -630,12 +645,11 @@ stages:
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
                 $chosenMachine = '$(ChosenMachine)'
                 
                 if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
-                if ($alwaysOnEnabled -eq "true" -and $chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
                   Write-Host "Not selected host - exiting..."
                   exit 0
                 }
@@ -765,12 +779,11 @@ stages:
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
                 $chosenMachine = '$(ChosenMachine)'
                 
                 if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
-                if ($alwaysOnEnabled -eq "true" -and $chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
                   Write-Host "Not selected host - exiting..."
                   exit 0
                 }
@@ -921,12 +934,6 @@ stages:
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
-                if ($alwaysOnEnabled -ne "true") {
-                  Write-Host "AlwaysOn is not enabled. Skipping."
-                  exit 0
-                }
-                
                 $chosenMachine = '$(ChosenMachine)'
                 
                 if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
@@ -1038,7 +1045,7 @@ stages:
                 if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
                 
-                if ($alwaysOnEnabled -eq "true" -and $chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
                   Write-Host "Not selected host - exiting..."
                   exit 0
                 }
@@ -1127,7 +1134,7 @@ stages:
                 if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
                 
-                if ($alwaysOnEnabled -eq "true" -and $chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
                   Write-Host "Not selected host - exiting..."
                   exit 0
                 }
@@ -1200,7 +1207,7 @@ stages:
                 if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
                 
-                if ($alwaysOnEnabled -eq "true" -and $chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
                   Write-Host "Not selected host - exiting..."
                   exit 0
                 }
@@ -1231,101 +1238,6 @@ stages:
                 }
                 if (-not (Test-Path $dacLocation)) {
                   throw "SqlPackage.exe not found at: $dacLocation"
-                }
-                
-                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
-                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
-                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
-                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
-                
-                $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
-                $authMode = if (-not [string]::IsNullOrWhiteSpace($sqlUser)) { "SQL" } else { "Windows" }
-                Write-Host "Connecting to SQL using $authMode authentication"
-                
-                if ($sqlUser -ne $null -and $sqlUser -ne "" -and $sqlUser -notlike "*`$(*") {
-                  if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
-                    throw "SQL Password must be specified when using SQL authentication."
-                  }
-                  $server.ConnectionContext.LoginSecure = $false
-                  $server.ConnectionContext.Login = $sqlUser
-                  $server.ConnectionContext.Password = $sqlPassword
-                  $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
-                }
-                
-                try {
-                  $server.ConnectionContext.Connect()
-                } catch {
-                  Write-Error "An error occurred connecting to the database server!`r`n$($_.Exception.ToString())"
-                  throw
-                }
-
-                try {
-                  $dbCheck = $server.ConnectionContext.ExecuteWithResults("SELECT name, is_cdc_enabled FROM sys.databases WHERE name = '$dbName';")
-                  if ($dbCheck.Tables.Count -gt 0 -and $dbCheck.Tables[0].Rows.Count -gt 0) {
-                    $row = $dbCheck.Tables[0].Rows[0]
-                    Write-Host "DB exists: $($row.name) | CDC enabled: $($row.is_cdc_enabled)"
-                  } else {
-                    Write-Host "DB check returned no rows for $dbName"
-                  }
-                } catch {
-                  Write-Host "DB check failed: $($_.Exception.Message)"
-                }
-                
-                $masterDB = $server.Databases["master"]
-                
-                $cdcSchema = "Reporting"
-                $cdcTable = "DU_DPPStatusReportLatest"
-                $cdcInfo = $null
-                $cdcDisabled = $false
-                
-                try {
-                  $cdcQuery = @"
-                  SELECT ct.capture_instance,
-                         ct.supports_net_changes,
-                         ct.index_name,
-                         ct.role_name,
-                         fg.name AS filegroup_name
-                  FROM cdc.change_tables ct
-                  LEFT JOIN sys.filegroups fg ON ct.filegroup_id = fg.data_space_id
-                  WHERE ct.source_object_id = OBJECT_ID(N'$cdcSchema.$cdcTable');
-                "@
-                  Write-Host "CDC lookup query:" 
-                  Write-Host $cdcQuery
-                  $dbObj = $server.Databases[$dbName]
-                  if ($dbObj -eq $null) {
-                    Write-Host "Database object not found for $dbName; skipping CDC lookup."
-                  } else {
-                    Write-Host "Database object found; IsCdcEnabled: $($dbObj.IsCdcEnabled)"
-                    $ds = $dbObj.ExecuteWithResults($cdcQuery)
-                    if ($ds.Tables.Count -gt 0 -and $ds.Tables[0].Rows.Count -gt 0) {
-                      $row = $ds.Tables[0].Rows[0]
-                      $cdcInfo = [pscustomobject]@{
-                        CaptureInstance   = [string]$row.capture_instance
-                        SupportsNetChanges = [int]$row.supports_net_changes
-                        IndexName         = [string]$row.index_name
-                        RoleName          = [string]$row.role_name
-                        FilegroupName     = [string]$row.filegroup_name
-                      }
-                    }
-                  }
-                } catch {
-                  Write-Host "CDC lookup failed; continuing without CDC changes. $($_.Exception.Message)"
-                  Write-Host $_.Exception | Format-List -Force
-                }
-                
-                if ($cdcInfo -ne $null -and -not [string]::IsNullOrWhiteSpace($cdcInfo.CaptureInstance)) {
-                  $capInstance = $cdcInfo.CaptureInstance.Replace("'", "''")
-                  $disableSql = "EXEC [$dbName].sys.sp_cdc_disable_table @source_schema = N'$cdcSchema', @source_name = N'$cdcTable', @capture_instance = N'$capInstance';"
-                  try {
-                    Write-Host "Disabling CDC for [$cdcSchema].[$cdcTable] (capture_instance: $($cdcInfo.CaptureInstance))"
-                    $masterDB.ExecuteNonQuery($disableSql)
-                    $cdcDisabled = $true
-                  } catch {
-                    Write-Host "Failed to disable CDC for [$cdcSchema].[$cdcTable]: $($_.Exception.Message)"
-                    throw
-                  }
-                } else {
-                  Write-Host "CDC not enabled for [$cdcSchema].[$cdcTable] or capture instance not found."
                 }
                 
                 try {
@@ -1369,22 +1281,6 @@ stages:
                   }
                   throw
                 } finally {
-                  if ($cdcDisabled) {
-                    $roleSql = if ([string]::IsNullOrWhiteSpace($cdcInfo.RoleName)) { "NULL" } else { "N'" + $cdcInfo.RoleName.Replace("'", "''") + "'" }
-                    $indexSql = if ([string]::IsNullOrWhiteSpace($cdcInfo.IndexName)) { "NULL" } else { "N'" + $cdcInfo.IndexName.Replace("'", "''") + "'" }
-                    $filegroupSql = if ([string]::IsNullOrWhiteSpace($cdcInfo.FilegroupName)) { "NULL" } else { "N'" + $cdcInfo.FilegroupName.Replace("'", "''") + "'" }
-                    $supportsNetChangesSql = if ($cdcInfo.SupportsNetChanges -eq 1) { 1 } else { 0 }
-                    
-                    $enableSql = "EXEC [$dbName].sys.sp_cdc_enable_table @source_schema = N'$cdcSchema', @source_name = N'$cdcTable', @role_name = $roleSql, @supports_net_changes = $supportsNetChangesSql, @index_name = $indexSql, @filegroup_name = $filegroupSql;"
-                    try {
-                      Write-Host "Re-enabling CDC for [$cdcSchema].[$cdcTable]"
-                      $masterDB.ExecuteNonQuery($enableSql)
-                    } catch {
-                      Write-Host "Failed to re-enable CDC for [$cdcSchema].[$cdcTable]: $($_.Exception.Message)"
-                      throw
-                    }
-                  }
-                  
                   if ($pushed) {
                     Pop-Location
                   }
@@ -1421,12 +1317,6 @@ stages:
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
-                if ($alwaysOnEnabled -ne "true") {
-                  Write-Host "AlwaysOn is not enabled. Skipping."
-                  exit 0
-                }
-                
                 $chosenMachine = '$(ChosenMachine)'
                 
                 if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
@@ -1484,12 +1374,6 @@ stages:
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
-                if ($alwaysOnEnabled -ne "true") {
-                  Write-Host "AlwaysOn is not enabled. Skipping."
-                  exit 0
-                }
-                
                 $chosenMachine = '$(ChosenMachine)'
                 
                 if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
@@ -1586,12 +1470,6 @@ stages:
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
-                if ($alwaysOnEnabled -ne "true") {
-                  Write-Host "AlwaysOn is not enabled. Skipping."
-                  exit 0
-                }
-                
                 $chosenMachine = '$(ChosenMachine)'
                 
                 if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
@@ -1691,12 +1569,6 @@ stages:
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
-                if ($alwaysOnEnabled -ne "true") {
-                  Write-Host "AlwaysOn is not enabled. Skipping."
-                  exit 0
-                }
-                
                 $chosenMachine = '$(ChosenMachine)'
                 
                 if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
@@ -1795,12 +1667,6 @@ stages:
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
-                if ($alwaysOnEnabled -ne "true") {
-                  Write-Host "AlwaysOn is not enabled. Skipping."
-                  exit 0
-                }
-                
                 $chosenMachine = '$(ChosenMachine)'
                 
                 if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
@@ -1899,12 +1765,6 @@ stages:
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
-                if ($alwaysOnEnabled -ne "true") {
-                  Write-Host "AlwaysOn is not enabled. Skipping."
-                  exit 0
-                }
-                
                 $chosenMachine = '$(ChosenMachine)'
                 
                 if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
@@ -2003,12 +1863,6 @@ stages:
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
-                if ($alwaysOnEnabled -ne "true") {
-                  Write-Host "AlwaysOn is not enabled. Skipping."
-                  exit 0
-                }
-                
                 $chosenMachine = '$(ChosenMachine)'
                 
                 if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
@@ -2143,12 +1997,11 @@ stages:
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
                 $chosenMachine = '$(ChosenMachine)'
                 if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
                 
-                if ($alwaysOnEnabled -eq "true" -and $chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
                   Write-Host "Not selected host - exiting..."
                   exit 0
                 }
@@ -2225,12 +2078,11 @@ stages:
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
                 $chosenMachine = '$(ChosenMachine)'
                 if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
                 
-                if ($alwaysOnEnabled -eq "true" -and $chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
                   Write-Host "Not selected host - exiting..."
                   exit 0
                 }
@@ -2297,12 +2149,11 @@ stages:
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
                 $chosenMachine = '$(ChosenMachine)'
                 if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
                 
-                if ($alwaysOnEnabled -eq "true" -and $chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
                   Write-Host "Not selected host - exiting..."
                   exit 0
                 }
@@ -2366,13 +2217,12 @@ stages:
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
                 $chosenMachine = '$(ChosenMachine)'
                 if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
                 $dbSlot = "$(dbSlot)"
                 
-                if ($alwaysOnEnabled -eq "true" -and $chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
                   Write-Host "Not selected host - exiting..."
                   exit 0
                 }
