@@ -1212,8 +1212,83 @@ stages:
                   throw "SqlPackage.exe not found at: $dacLocation"
                 }
                 
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
+                
+                $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
+                
+                if ($sqlUser -ne $null -and $sqlUser -ne "" -and $sqlUser -notlike "*`$(*") {
+                  if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
+                    throw "SQL Password must be specified when using SQL authentication."
+                  }
+                  $server.ConnectionContext.LoginSecure = $false
+                  $server.ConnectionContext.Login = $sqlUser
+                  $server.ConnectionContext.Password = $sqlPassword
+                  $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
+                }
+                
                 try {
+                  $server.ConnectionContext.Connect()
+                } catch {
+                  Write-Error "An error occurred connecting to the database server!`r`n$($_.Exception.ToString())"
+                  throw
+                }
+                
+                $masterDB = $server.Databases["master"]
+                
+                $cdcSchema = "Reporting"
+                $cdcTable = "DU_DPPStatusReportLatest"
+                $cdcInfo = $null
+                $cdcDisabled = $false
+                
+                try {
+                  $cdcQuery = @"
+USE [$dbName];
+SELECT ct.capture_instance,
+       ct.supports_net_changes,
+       ct.index_name,
+       ct.role_name,
+       fg.name AS filegroup_name
+FROM cdc.change_tables ct
+LEFT JOIN sys.filegroups fg ON ct.filegroup_id = fg.data_space_id
+WHERE ct.source_object_id = OBJECT_ID(N'$cdcSchema.$cdcTable');
+"@
+                  $ds = $masterDB.ExecuteWithResults($cdcQuery)
+                  if ($ds.Tables.Count -gt 0 -and $ds.Tables[0].Rows.Count -gt 0) {
+                    $row = $ds.Tables[0].Rows[0]
+                    $cdcInfo = [pscustomobject]@{
+                      CaptureInstance   = [string]$row.capture_instance
+                      SupportsNetChanges = [int]$row.supports_net_changes
+                      IndexName         = [string]$row.index_name
+                      RoleName          = [string]$row.role_name
+                      FilegroupName     = [string]$row.filegroup_name
+                    }
+                  }
+                } catch {
+                  Write-Host "CDC lookup failed; continuing without CDC changes. $($_.Exception.Message)"
+                }
+                
+                if ($cdcInfo -ne $null -and -not [string]::IsNullOrWhiteSpace($cdcInfo.CaptureInstance)) {
+                  $capInstance = $cdcInfo.CaptureInstance.Replace("'", "''")
+                  $disableSql = "EXEC [$dbName].sys.sp_cdc_disable_table @source_schema = N'$cdcSchema', @source_name = N'$cdcTable', @capture_instance = N'$capInstance';"
+                  try {
+                    Write-Host "Disabling CDC for [$cdcSchema].[$cdcTable] (capture_instance: $($cdcInfo.CaptureInstance))"
+                    $masterDB.ExecuteNonQuery($disableSql)
+                    $cdcDisabled = $true
+                  } catch {
+                    Write-Host "Failed to disable CDC for [$cdcSchema].[$cdcTable]: $($_.Exception.Message)"
+                    throw
+                  }
+                } else {
+                  Write-Host "CDC not enabled for [$cdcSchema].[$cdcTable] or capture instance not found."
+                }
+                
+                try {
+                  $pushed = $false
                   Push-Location $dacLocation
+                  $pushed = $true
                   $sqlPackageArgs = @(
                     "/Action:publish"
                     "/SourceFile:$dacpac"
@@ -1243,7 +1318,25 @@ stages:
                   }
                   throw
                 } finally {
-                  Pop-Location
+                  if ($cdcDisabled) {
+                    $roleSql = if ([string]::IsNullOrWhiteSpace($cdcInfo.RoleName)) { "NULL" } else { "N'" + $cdcInfo.RoleName.Replace("'", "''") + "'" }
+                    $indexSql = if ([string]::IsNullOrWhiteSpace($cdcInfo.IndexName)) { "NULL" } else { "N'" + $cdcInfo.IndexName.Replace("'", "''") + "'" }
+                    $filegroupSql = if ([string]::IsNullOrWhiteSpace($cdcInfo.FilegroupName)) { "NULL" } else { "N'" + $cdcInfo.FilegroupName.Replace("'", "''") + "'" }
+                    $supportsNetChangesSql = if ($cdcInfo.SupportsNetChanges -eq 1) { 1 } else { 0 }
+                    
+                    $enableSql = "EXEC [$dbName].sys.sp_cdc_enable_table @source_schema = N'$cdcSchema', @source_name = N'$cdcTable', @role_name = $roleSql, @supports_net_changes = $supportsNetChangesSql, @index_name = $indexSql, @filegroup_name = $filegroupSql;"
+                    try {
+                      Write-Host "Re-enabling CDC for [$cdcSchema].[$cdcTable]"
+                      $masterDB.ExecuteNonQuery($enableSql)
+                    } catch {
+                      Write-Host "Failed to re-enable CDC for [$cdcSchema].[$cdcTable]: $($_.Exception.Message)"
+                      throw
+                    }
+                  }
+                  
+                  if ($pushed) {
+                    Pop-Location
+                  }
                 }
               NewPsSessionOptionArguments: >
                 -SkipCACheck
