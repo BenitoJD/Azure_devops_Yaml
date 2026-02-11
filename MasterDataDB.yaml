@@ -1245,7 +1245,6 @@ stages:
                 
                 try {
                   $cdcQuery = @"
-                  USE [$dbName];
                   SELECT ct.capture_instance,
                          ct.supports_net_changes,
                          ct.index_name,
@@ -1255,7 +1254,9 @@ stages:
                   LEFT JOIN sys.filegroups fg ON ct.filegroup_id = fg.data_space_id
                   WHERE ct.source_object_id = OBJECT_ID(N'$cdcSchema.$cdcTable');
                 "@
-                  $ds = $masterDB.ExecuteWithResults($cdcQuery)
+                  $server.ConnectionContext.DatabaseName = $dbName
+                  $ds = $server.ConnectionContext.ExecuteWithResults($cdcQuery)
+                  $server.ConnectionContext.DatabaseName = 'master'
                   if ($ds.Tables.Count -gt 0 -and $ds.Tables[0].Rows.Count -gt 0) {
                     $row = $ds.Tables[0].Rows[0]
                     $cdcInfo = [pscustomobject]@{
