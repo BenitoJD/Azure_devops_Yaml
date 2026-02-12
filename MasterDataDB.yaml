@@ -489,7 +489,6 @@ stages:
                 -OutputBufferingMode Block
 
 
-          - checkout: none
 
           - task: PowerShellOnTargetMachines@3
             displayName: 'Restore InitialStaging database'
@@ -766,7 +765,6 @@ stages:
                 -OutputBufferingMode Block
 
 
-          - checkout: none
 
           - task: PowerShellOnTargetMachines@3
             displayName: 'Remove databases from secondary nodes'
@@ -841,7 +839,6 @@ stages:
                 -OutputBufferingMode Block
 
 
-          - checkout: none
 
           - task: PowerShellOnTargetMachines@3
             displayName: 'Deploy ManualUpgrade DACPAC'
@@ -928,7 +925,6 @@ stages:
                 -OperationTimeout 0
                 -OutputBufferingMode Block
 
-          - checkout: none
 
           - task: PowerShellOnTargetMachines@3
             displayName: 'Deploy InitialStagingDB DACPAC'
@@ -999,7 +995,6 @@ stages:
                 -OperationTimeout 0
                 -OutputBufferingMode Block
 
-          - checkout: none
 
           - task: PowerShellOnTargetMachines@3
             displayName: 'Deploy MasterDataDB DACPAC'
@@ -1099,7 +1094,6 @@ stages:
                 -OperationTimeout 0
                 -OutputBufferingMode Block
 
-          - checkout: none
 
           - task: PowerShellOnTargetMachines@3
             displayName: 'Delete transaction log backups'
@@ -1142,7 +1136,6 @@ stages:
                 -OutputBufferingMode Block
 
 
-          - checkout: none
 
           - task: PowerShellOnTargetMachines@3
             displayName: 'Enable AlwaysOn on primary node'
@@ -1224,7 +1217,6 @@ stages:
                 -OutputBufferingMode Block
 
 
-          - checkout: none
 
           - task: PowerShellOnTargetMachines@3
             displayName: 'Backup upgraded databases'
@@ -1309,7 +1301,6 @@ stages:
                 -OutputBufferingMode Block
 
 
-          - checkout: none
 
           - task: PowerShellOnTargetMachines@3
             displayName: 'Restore databases on secondary nodes'
@@ -1393,7 +1384,6 @@ stages:
                 -OutputBufferingMode Block
 
 
-          - checkout: none
 
           - task: PowerShellOnTargetMachines@3
             displayName: 'Backup transaction logs'
@@ -1477,7 +1467,6 @@ stages:
                 -OutputBufferingMode Block
 
 
-          - checkout: none
 
           - task: PowerShellOnTargetMachines@3
             displayName: 'Restore transaction logs'
@@ -1561,7 +1550,6 @@ stages:
                 -OutputBufferingMode Block
 
 
-          - checkout: none
 
           - task: PowerShellOnTargetMachines@3
             displayName: 'Enable HADR replication'
@@ -1664,7 +1652,6 @@ stages:
                 -OutputBufferingMode Block
 
 
-          - checkout: none
 
           - task: PowerShellOnTargetMachines@3
             displayName: 'Set database owner to SA'
@@ -1743,7 +1730,6 @@ stages:
                 -OperationTimeout 0
                 -OutputBufferingMode Block
 
-          - checkout: none
 
           - task: PowerShellOnTargetMachines@3
             displayName: 'Grant SmartScript user readonly access'
@@ -1812,7 +1798,6 @@ stages:
                 -OperationTimeout 0
                 -OutputBufferingMode Block
 
-          - checkout: none
 
           - task: PowerShellOnTargetMachines@3
             displayName: 'Update report status data'
@@ -1878,7 +1863,6 @@ stages:
                 -OperationTimeout 0
                 -OutputBufferingMode Block
 
-          - checkout: none
 
           - task: PowerShellOnTargetMachines@3
             displayName: 'Grant super user access'
