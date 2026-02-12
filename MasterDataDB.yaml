@@ -172,56 +172,96 @@ stages:
               Protocol: "WinRM"
 
 
-          - task: PowerShell@2
-            displayName: 'Determine Primary Node (Agent)'
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Determine Primary Node (Target Machines)'
             condition: and(or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')), eq(variables['Server_AlwaysOn_Enabled'], 'true'))
             inputs:
-              targetType: 'inline'
-              script: |
-                $serversRaw = "$(selectedDbServers)"
-                $servers = $serversRaw -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }
-                if (-not $servers -or $servers.Count -eq 0) { throw "selectedDbServers is empty" }
-                $target = $servers[0]
-                $user = "$(winrmUserName)"
-                $password = "$(winrmPassword)" | ConvertTo-SecureString -AsPlainText -Force
-                $cred = New-Object System.Management.Automation.PSCredential($user, $password)
-                $dbInstanceName = "$(Server_DB_Instance_Name)"
+              Machines: "$(selectedDbServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $chosenMachine = '$(ChosenMachine)'
+                if ($chosenMachine -ne $null -and $chosenMachine -ne '' -and $chosenMachine -ne '$(ChosenMachine)') {
+                  Write-Host "Machine already chosen - skipping"
+                  exit 0
+                }
+
+                $alwaysOn = "$(Server_AlwaysOn_Enabled)"
+                $currentMachine = $env:COMPUTERNAME
+                if ($alwaysOn -ne "true") {
+                  Write-Host "AlwaysOn disabled. Choosing current machine: $currentMachine"
+                  Write-Host "##vso[task.setvariable variable=ChosenMachine]$currentMachine"
+                  exit 0
+                }
+
                 $localInstance = "$(Server_DB_Local_Instance)"
+                $dbInstanceName = "$(Server_DB_Instance_Name)"
                 $sqlLogin = "$(Server_DB_Admin_User)"
                 $sqlPassword = "$(Server_DB_Admin_Password)"
-                $primaryNode = Invoke-Command -ComputerName $target -Credential $cred -ScriptBlock {
-                  param($dbInstanceName, $localInstance, $sqlLogin, $sqlPassword)
-                  if ($localInstance -like "*,*") {
-                    $localInstance = ($localInstance -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })[0]
-                  }
-                  [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
-                  [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
-                  [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
-                  [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
-                  $server = New-Object Microsoft.SqlServer.Management.Smo.Server $localInstance
-                  if ($sqlLogin -ne $null -and $sqlLogin -ne "") {
-                    if ($sqlPassword -eq $null -or $sqlPassword -eq "") {
-                      throw "SQL Password must be specified when using SQL authentication."
+
+                if ([string]::IsNullOrWhiteSpace($dbInstanceName) -or $dbInstanceName -eq '$(Server_DB_Instance_Name)') {
+                  throw "Server_DB_Instance_Name is required to detect primary node."
+                }
+
+                if ($localInstance -match '^[^,]+,\\s*\\d+$') {
+                  # Host,Port format - keep as-is
+                } elseif ($localInstance -like "*,*") {
+                  $parts = $localInstance -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+                  if ($parts.Count -gt 1) {
+                    $match = $parts | Where-Object { $_ -like "$currentMachine*" -or $_ -like "$currentMachine.*" -or $_ -like "$currentMachine\\*" }
+                    if ($match) {
+                      $localInstance = $match[0]
+                    } else {
+                      $localInstance = $parts[0]
                     }
-                    $server.ConnectionContext.LoginSecure = $false
-                    $server.ConnectionContext.Login = $sqlLogin
-                    $server.ConnectionContext.Password = $sqlPassword
-                    $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
                   }
+                }
+
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
+
+                $server = New-Object Microsoft.SqlServer.Management.Smo.Server $localInstance
+                if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
+                  if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
+                    throw "SQL Password must be specified when using SQL authentication."
+                  }
+                  $server.ConnectionContext.LoginSecure = $false
+                  $server.ConnectionContext.Login = $sqlLogin
+                  $server.ConnectionContext.Password = $sqlPassword
+                  $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
+                }
+
+                try {
                   $server.ConnectionContext.Connect()
-                  $masterDB = $server.Databases["master"]
-                  $alwaysOnQuery = "SELECT TOP 1 hags.primary_replica FROM sys.dm_hadr_availability_group_states hags INNER JOIN sys.availability_groups ag ON ag.group_id = hags.group_id WHERE ag.name = '$dbInstanceName';"
-                  $ds = $masterDB.ExecuteWithResults($alwaysOnQuery)
-                  $primaryNode = ""
-                  foreach ($t in $ds.Tables) { foreach ($r in $t.Rows) { foreach ($c in $t.Columns) { $primaryNode = $r.Item($c) } } }
-                  return $primaryNode
-                } -ArgumentList $dbInstanceName, $localInstance, $sqlLogin, $sqlPassword
-                if ([string]::IsNullOrWhiteSpace($primaryNode)) { throw "Primary node not found for AG '$dbInstanceName'" }
+                } catch {
+                  Write-Error "An error occurred connecting to the database server!`r`n$($_.Exception.ToString())"
+                  throw
+                }
+
+                $masterDB = $server.Databases["master"]
+                $alwaysOnQuery = "SELECT TOP 1 hags.primary_replica FROM sys.dm_hadr_availability_group_states hags INNER JOIN sys.availability_groups ag ON ag.group_id = hags.group_id WHERE ag.name = '$dbInstanceName';"
+                $ds = $masterDB.ExecuteWithResults($alwaysOnQuery)
+                $primaryNode = ""
+                foreach ($t in $ds.Tables) { foreach ($r in $t.Rows) { foreach ($c in $t.Columns) { $primaryNode = $r.Item($c) } } }
+
+                if ([string]::IsNullOrWhiteSpace($primaryNode)) {
+                  throw "Primary node not found for AG '$dbInstanceName'"
+                }
+
                 $primaryShort = $primaryNode.Split('.')[0]
+                Write-Host "Primary host is: $primaryNode"
+                Write-Host "Current Machine is: $currentMachine"
                 Write-Host "##vso[task.setvariable variable=ChosenMachine]$primaryShort"
                 Write-Host "ChosenMachine set to $primaryShort"
-
-          - checkout: none
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
 
           - task: PowerShellOnTargetMachines@3
             displayName: 'Backup databases using SMO'
