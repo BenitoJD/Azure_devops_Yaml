@@ -198,7 +198,7 @@ stages:
   - stage: ChoosePrimaryNode
     displayName: 'Choose Primary Node (AlwaysOn Only)'
     dependsOn: AcquireArtifacts
-    condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
+    condition: succeeded()
     variables:
       - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
           - group: Pre-Prod_DBDeploy
@@ -1961,7 +1961,7 @@ stages:
       - DeployDACPACs
       - EnableHADRReplication
       - ChoosePrimaryNode
-    condition: succeeded()
+    condition: and(in(dependencies.DeployDACPACs.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.EnableHADRReplication.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.ChoosePrimaryNode.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
