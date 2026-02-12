@@ -287,12 +287,9 @@ stages:
                   Write-Host "Primary host is: $primaryNode"
                   Write-Host "Current Machine is: $currentMachineName"
                   
-                  if ($currentMachineName -like "*$primaryNode*" -or $primaryNode -like "*$currentMachineName*") {
-                    Write-Host "##vso[task.setvariable variable=ChosenMachine;isOutput=true]$currentMachineName"
-                    Write-Host "Choosing machine: $currentMachineName"
-                  } else {
-                    Write-Host "Not choosing current machine. Primary is: $primaryNode"
-                  }
+                  $primaryShort = $primaryNode.Split('.')[0]
+                  Write-Host "##vso[task.setvariable variable=ChosenMachine;isOutput=true]$primaryShort"
+                  Write-Host "Choosing machine: $primaryShort"
                 } catch {
                   Write-Host "Error discovering primary node:"
                   Write-Host $_.Exception | Format-List -Force
