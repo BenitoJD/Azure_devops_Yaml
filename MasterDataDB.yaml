@@ -108,66 +108,8 @@ resources:
       branch: 'MDVersionUpgrade/Lonestar'
 
 stages:
-  - stage: ProdPreCheckApproval
-    displayName: 'Production/Pre-Prod Pre-Check Approval'
-    condition: or(eq('${{ parameters.dbSlot }}', 'Production'), eq('${{ parameters.dbSlot }}', 'Pre-Prod'))
-    jobs:
-      - deployment: ProductionApprovalCheck
-        displayName: 'Production Environment Approval'
-        condition: eq('${{ parameters.dbSlot }}', 'Production')
-        environment: 'PROD'
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - checkout: none
-                - task: PowerShell@2
-                  displayName: 'Production Pre-Deployment Check'
-                  inputs:
-                    targetType: 'inline'
-                    script: |
-                      Write-Host "=========================================="
-                      Write-Host "Production Environment Pre-Deployment Approval"
-                      Write-Host "=========================================="
-                      Write-Host "Branch: $(BranchName)"
-                      Write-Host "Build: $(BuildNumber)"
-                      Write-Host "Version: $(BuildVersion)"
-                      Write-Host "Database Slot: $(dbSlot)"
-                      Write-Host "Target Servers: $(selectedDbServers)"
-                      Write-Host "=========================================="
-                      Write-Host "Waiting for approval to proceed with Production deployment..."
-                      Write-Host "This deployment will proceed after approval."
-      - deployment: PreProdApprovalCheck
-        displayName: 'Pre-Prod Environment Approval'
-        condition: eq('${{ parameters.dbSlot }}', 'Pre-Prod')
-        environment: 'PRE-PROD'
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - checkout: none
-                - task: PowerShell@2
-                  displayName: 'Pre-Prod Pre-Deployment Check'
-                  inputs:
-                    targetType: 'inline'
-                    script: |
-                      Write-Host "=========================================="
-                      Write-Host "Pre-Prod Environment Pre-Deployment Approval"
-                      Write-Host "=========================================="
-                      Write-Host "Branch: $(BranchName)"
-                      Write-Host "Build: $(BuildNumber)"
-                      Write-Host "Version: $(BuildVersion)"
-                      Write-Host "Database Slot: $(dbSlot)"
-                      Write-Host "Target Servers: $(selectedDbServers)"
-                      Write-Host "=========================================="
-                      Write-Host "Waiting for approval to proceed with Pre-Prod deployment..."
-                      Write-Host "This deployment will proceed after approval."
-
   - stage: Initialize
     displayName: 'Initialize and Select Targets'
-    dependsOn: 
-      - ProdPreCheckApproval
-    condition: or(and(ne('${{ parameters.dbSlot }}', 'Production'), ne('${{ parameters.dbSlot }}', 'Pre-Prod')), in(dependencies.ProdPreCheckApproval.result, 'Succeeded', 'SucceededWithIssues'))
     jobs:
       - job: Initialize_Env
         displayName: 'Initialize'
