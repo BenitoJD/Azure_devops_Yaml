@@ -305,6 +305,70 @@ stages:
                 -IdleTimeout 7200000
                 -OperationTimeout 0
                 -OutputBufferingMode Block
+      - job: ResolveTargetLists
+        displayName: 'Resolve Primary/Secondary Target Lists'
+        dependsOn: SelectPrimaryNode
+        variables:
+          - name: ChosenMachine
+            value: $[ dependencies.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+        steps:
+          - checkout: none
+          - task: PowerShell@2
+            name: SetTargets
+            displayName: 'Set PrimaryServer and SecondaryServers'
+            inputs:
+              targetType: 'inline'
+              script: |
+                $selected = "$(selectedDbServers)"
+                $chosen = "$(ChosenMachine)"
+                
+                Write-Host "SelectedDbServers (raw): $selected"
+                Write-Host "ChosenMachine (raw): $chosen"
+                
+                function Normalize-Host {
+                  param([string]$name)
+                  if ([string]::IsNullOrWhiteSpace($name)) { return "" }
+                  return ($name.Split('.')[0]).ToUpperInvariant()
+                }
+                
+                $servers = @()
+                if (-not [string]::IsNullOrWhiteSpace($selected)) {
+                  $servers = $selected -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+                }
+                
+                $chosenShort = Normalize-Host $chosen
+                $primary = $null
+                foreach ($s in $servers) {
+                  if ($chosenShort -ne "" -and (Normalize-Host $s) -eq $chosenShort) {
+                    $primary = $s
+                    break
+                  }
+                }
+                
+                if (-not $primary) {
+                  if ($servers.Count -gt 0) {
+                    $primary = $servers[0]
+                    Write-Host "ChosenMachine not matched. Defaulting PrimaryServer to first server: $primary"
+                  } else {
+                    $primary = $chosen
+                    Write-Host "SelectedDbServers empty. Falling back PrimaryServer to ChosenMachine: $primary"
+                  }
+                }
+                
+                $secondary = @()
+                foreach ($s in $servers) {
+                  if ($primary -and $s -ne $primary) {
+                    $secondary += $s
+                  }
+                }
+                
+                $secondaryList = $secondary -join ','
+                
+                Write-Host "PrimaryServer: $primary"
+                Write-Host "SecondaryServers: $secondaryList"
+                
+                Write-Host "##vso[task.setvariable variable=PrimaryServer;isOutput=true]$primary"
+                Write-Host "##vso[task.setvariable variable=SecondaryServers;isOutput=true]$secondaryList"
 
   - stage: BackupDatabases
     displayName: 'Backup Databases (AlwaysOn Only)'
@@ -315,6 +379,10 @@ stages:
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - name: PrimaryServer
+        value: $[ stageDependencies.ChoosePrimaryNode.ResolveTargetLists.outputs['SetTargets.PrimaryServer'] ]
+      - name: SecondaryServers
+        value: $[ stageDependencies.ChoosePrimaryNode.ResolveTargetLists.outputs['SetTargets.SecondaryServers'] ]
       - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
           - group: Pre-Prod_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'Production') }}:
@@ -327,7 +395,7 @@ stages:
           - task: PowerShellOnTargetMachines@3
             displayName: 'Backup databases using SMO'
             inputs:
-              Machines: "$(selectedDbServers)"
+              Machines: "$(PrimaryServer)"
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
@@ -339,79 +407,6 @@ stages:
                 $isDbName = "$(Database_InitialStaging_DBName)"
                 $mdDbName = "$(Database_MasterData_DBName)"
                 $backupDirectory = "$(Server_DB_BackupLocation)"
-                $chosenMachine = '$(ChosenMachine)'
-                $currentMachine = $env:COMPUTERNAME
-                $selectedDbServers = "$(selectedDbServers)"
-                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
-                
-                function Normalize-Host {
-                  param([string]$name)
-                  if ([string]::IsNullOrWhiteSpace($name)) { return "" }
-                  return ($name.Split('.')[0]).ToUpperInvariant()
-                }
-                
-                $currentMachineNorm = Normalize-Host $currentMachine
-                $chosenMachineNorm = Normalize-Host $chosenMachine
-                
-                if ([string]::IsNullOrWhiteSpace($chosenMachineNorm) -or $chosenMachine -eq '$(ChosenMachine)') {
-                  Write-Host "ChosenMachine not set in pipeline output."
-                  if ($alwaysOnEnabled -ne "true") {
-                    if (-not [string]::IsNullOrWhiteSpace($selectedDbServers)) {
-                      $chosenMachineNorm = Normalize-Host (($selectedDbServers -split ',')[0])
-                      Write-Host "AlwaysOn disabled. Defaulting ChosenMachine to first server: $chosenMachineNorm"
-                    }
-                  } else {
-                    Write-Host "AlwaysOn enabled. Attempting to discover primary replica."
-                    try {
-                      $serverName = "$(Server_DB_Local_Instance)"
-                      $sqlLogin = "$(Server_DB_Admin_User)"
-                      $sqlPassword = "$(Server_DB_Admin_Password)"
-                      $dbInstanceName = "$(Server_DB_Instance_Name)"
-                      
-                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
-                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
-                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
-                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
-                      
-                      $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
-                      if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
-                        if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
-                          throw "SQL Password must be specified when using SQL authentication."
-                        }
-                        $server.ConnectionContext.LoginSecure = $false
-                        $server.ConnectionContext.Login = $sqlLogin
-                        $server.ConnectionContext.Password = $sqlPassword
-                        $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
-                      }
-                      $server.ConnectionContext.Connect()
-                      $masterDB = $server.Databases["master"]
-                      $alwaysOnQuery = "SELECT TOP 1 hags.primary_replica FROM sys.dm_hadr_availability_group_states hags INNER JOIN sys.availability_groups ag ON ag.group_id = hags.group_id WHERE ag.name = '$dbInstanceName';"
-                      $ds = $masterDB.ExecuteWithResults($alwaysOnQuery)
-                      $primaryNode = ""
-                      foreach ($t in $ds.Tables) {
-                        foreach ($r in $t.Rows) {
-                          foreach ($c in $t.Columns) {
-                            $primaryNode = $r.Item($c)
-                          }
-                        }
-                      }
-                      $chosenMachineNorm = Normalize-Host $primaryNode
-                      Write-Host "Discovered primary replica: $chosenMachineNorm"
-                    } catch {
-                      Write-Host "Failed to discover primary replica: $($_.Exception.Message)"
-                    }
-                  }
-                }
-                
-                Write-Host "SelectedDbServers: $selectedDbServers"
-                Write-Host "AlwaysOnEnabled: $alwaysOnEnabled"
-                Write-Host "ChosenMachine: $chosenMachineNorm"
-                Write-Host "CurrentMachine: $currentMachineNorm"
-                
-                if ($chosenMachineNorm -ne $currentMachineNorm -and $chosenMachineNorm -ne "") {
-                  Write-Host "Not selected host - exiting..."
-                  exit 0
-                }
                 
                 $compressionRaw = '$(Compression)'
                 $devicesRaw = '$(Devices)'
@@ -584,6 +579,10 @@ stages:
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - name: PrimaryServer
+        value: $[ stageDependencies.ChoosePrimaryNode.ResolveTargetLists.outputs['SetTargets.PrimaryServer'] ]
+      - name: SecondaryServers
+        value: $[ stageDependencies.ChoosePrimaryNode.ResolveTargetLists.outputs['SetTargets.SecondaryServers'] ]
       - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
           - group: Pre-Prod_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'Production') }}:
@@ -596,84 +595,10 @@ stages:
           - task: PowerShellOnTargetMachines@3
             displayName: 'Disable AlwaysOn on primary node'
             inputs:
-              Machines: "$(selectedDbServers)"
+              Machines: "$(PrimaryServer)"
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $chosenMachine = '$(ChosenMachine)'
-                $currentMachine = $env:COMPUTERNAME
-                $selectedDbServers = "$(selectedDbServers)"
-                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
-                
-                function Normalize-Host {
-                  param([string]$name)
-                  if ([string]::IsNullOrWhiteSpace($name)) { return "" }
-                  return ($name.Split('.')[0]).ToUpperInvariant()
-                }
-                
-                $currentMachineNorm = Normalize-Host $currentMachine
-                $chosenMachineNorm = Normalize-Host $chosenMachine
-                
-                if ([string]::IsNullOrWhiteSpace($chosenMachineNorm) -or $chosenMachine -eq '$(ChosenMachine)') {
-                  Write-Host "ChosenMachine not set in pipeline output."
-                  if ($alwaysOnEnabled -ne "true") {
-                    if (-not [string]::IsNullOrWhiteSpace($selectedDbServers)) {
-                      $chosenMachineNorm = Normalize-Host (($selectedDbServers -split ',')[0])
-                      Write-Host "AlwaysOn disabled. Defaulting ChosenMachine to first server: $chosenMachineNorm"
-                    }
-                  } else {
-                    Write-Host "AlwaysOn enabled. Attempting to discover primary replica."
-                    try {
-                      $serverName = "$(Server_DB_Local_Instance)"
-                      $sqlLogin = "$(Server_DB_Admin_User)"
-                      $sqlPassword = "$(Server_DB_Admin_Password)"
-                      $dbInstanceName = "$(Server_DB_Instance_Name)"
-                      
-                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
-                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
-                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
-                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
-                      
-                      $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
-                      if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
-                        if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
-                          throw "SQL Password must be specified when using SQL authentication."
-                        }
-                        $server.ConnectionContext.LoginSecure = $false
-                        $server.ConnectionContext.Login = $sqlLogin
-                        $server.ConnectionContext.Password = $sqlPassword
-                        $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
-                      }
-                      $server.ConnectionContext.Connect()
-                      $masterDB = $server.Databases["master"]
-                      $alwaysOnQuery = "SELECT TOP 1 hags.primary_replica FROM sys.dm_hadr_availability_group_states hags INNER JOIN sys.availability_groups ag ON ag.group_id = hags.group_id WHERE ag.name = '$dbInstanceName';"
-                      $ds = $masterDB.ExecuteWithResults($alwaysOnQuery)
-                      $primaryNode = ""
-                      foreach ($t in $ds.Tables) {
-                        foreach ($r in $t.Rows) {
-                          foreach ($c in $t.Columns) {
-                            $primaryNode = $r.Item($c)
-                          }
-                        }
-                      }
-                      $chosenMachineNorm = Normalize-Host $primaryNode
-                      Write-Host "Discovered primary replica: $chosenMachineNorm"
-                    } catch {
-                      Write-Host "Failed to discover primary replica: $($_.Exception.Message)"
-                    }
-                  }
-                }
-                
-                Write-Host "SelectedDbServers: $selectedDbServers"
-                Write-Host "AlwaysOnEnabled: $alwaysOnEnabled"
-                Write-Host "ChosenMachine: $chosenMachineNorm"
-                Write-Host "CurrentMachine: $currentMachineNorm"
-                
-                if ($chosenMachineNorm -ne $currentMachineNorm -and $chosenMachineNorm -ne "") {
-                  Write-Host "Not selected host - exiting..."
-                  exit 0
-                }
-                
                 $serverName = "$(Server_DB_Local_Instance)"
                 $sqlLogin = "$(Server_DB_Admin_User)"
                 $sqlPassword = "$(Server_DB_Admin_Password)"
@@ -743,6 +668,10 @@ stages:
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - name: PrimaryServer
+        value: $[ stageDependencies.ChoosePrimaryNode.ResolveTargetLists.outputs['SetTargets.PrimaryServer'] ]
+      - name: SecondaryServers
+        value: $[ stageDependencies.ChoosePrimaryNode.ResolveTargetLists.outputs['SetTargets.SecondaryServers'] ]
       - ${{ if eq(parameters.dbSlot, 'Dev') }}:
           - group: Development_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'FT1') }}:
@@ -771,19 +700,10 @@ stages:
           - task: PowerShellOnTargetMachines@3
             displayName: 'Restore InitialStaging database'
             inputs:
-              Machines: "$(selectedDbServers)"
+              Machines: "$(PrimaryServer)"
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $chosenMachine = '$(ChosenMachine)'
-                
-                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
-                $currentMachine = $env:COMPUTERNAME
-                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
-                  Write-Host "Not selected host - exiting..."
-                  exit 0
-                }
-                
                 $serverName = "$(Server_DB_Instance)"
                 $sqlLogin = "$(Server_DB_Admin_User)"
                 $sqlPassword = "$(Server_DB_Admin_Password)"
@@ -905,19 +825,10 @@ stages:
           - task: PowerShellOnTargetMachines@3
             displayName: 'Restore MasterData database'
             inputs:
-              Machines: "$(selectedDbServers)"
+              Machines: "$(PrimaryServer)"
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $chosenMachine = '$(ChosenMachine)'
-                
-                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
-                $currentMachine = $env:COMPUTERNAME
-                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
-                  Write-Host "Not selected host - exiting..."
-                  exit 0
-                }
-                
                 $serverName = "$(Server_DB_Instance)"
                 $sqlLogin = "$(Server_DB_Admin_User)"
                 $sqlPassword = "$(Server_DB_Admin_Password)"
@@ -1048,6 +959,10 @@ stages:
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - name: PrimaryServer
+        value: $[ stageDependencies.ChoosePrimaryNode.ResolveTargetLists.outputs['SetTargets.PrimaryServer'] ]
+      - name: SecondaryServers
+        value: $[ stageDependencies.ChoosePrimaryNode.ResolveTargetLists.outputs['SetTargets.SecondaryServers'] ]
       - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
           - group: Pre-Prod_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'Production') }}:
@@ -1060,84 +975,10 @@ stages:
           - task: PowerShellOnTargetMachines@3
             displayName: 'Remove databases from secondary nodes'
             inputs:
-              Machines: "$(selectedDbServers)"
+              Machines: "$(SecondaryServers)"
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $chosenMachine = '$(ChosenMachine)'
-                $currentMachine = $env:COMPUTERNAME
-                $selectedDbServers = "$(selectedDbServers)"
-                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
-                
-                function Normalize-Host {
-                  param([string]$name)
-                  if ([string]::IsNullOrWhiteSpace($name)) { return "" }
-                  return ($name.Split('.')[0]).ToUpperInvariant()
-                }
-                
-                $currentMachineNorm = Normalize-Host $currentMachine
-                $chosenMachineNorm = Normalize-Host $chosenMachine
-                
-                if ([string]::IsNullOrWhiteSpace($chosenMachineNorm) -or $chosenMachine -eq '$(ChosenMachine)') {
-                  Write-Host "ChosenMachine not set in pipeline output."
-                  if ($alwaysOnEnabled -ne "true") {
-                    if (-not [string]::IsNullOrWhiteSpace($selectedDbServers)) {
-                      $chosenMachineNorm = Normalize-Host (($selectedDbServers -split ',')[0])
-                      Write-Host "AlwaysOn disabled. Defaulting ChosenMachine to first server: $chosenMachineNorm"
-                    }
-                  } else {
-                    Write-Host "AlwaysOn enabled. Attempting to discover primary replica."
-                    try {
-                      $serverName = "$(Server_DB_Local_Instance)"
-                      $sqlLogin = "$(Server_DB_Admin_User)"
-                      $sqlPassword = "$(Server_DB_Admin_Password)"
-                      $dbInstanceName = "$(Server_DB_Instance_Name)"
-                      
-                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
-                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
-                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
-                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
-                      
-                      $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
-                      if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
-                        if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
-                          throw "SQL Password must be specified when using SQL authentication."
-                        }
-                        $server.ConnectionContext.LoginSecure = $false
-                        $server.ConnectionContext.Login = $sqlLogin
-                        $server.ConnectionContext.Password = $sqlPassword
-                        $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
-                      }
-                      $server.ConnectionContext.Connect()
-                      $masterDB = $server.Databases["master"]
-                      $alwaysOnQuery = "SELECT TOP 1 hags.primary_replica FROM sys.dm_hadr_availability_group_states hags INNER JOIN sys.availability_groups ag ON ag.group_id = hags.group_id WHERE ag.name = '$dbInstanceName';"
-                      $ds = $masterDB.ExecuteWithResults($alwaysOnQuery)
-                      $primaryNode = ""
-                      foreach ($t in $ds.Tables) {
-                        foreach ($r in $t.Rows) {
-                          foreach ($c in $t.Columns) {
-                            $primaryNode = $r.Item($c)
-                          }
-                        }
-                      }
-                      $chosenMachineNorm = Normalize-Host $primaryNode
-                      Write-Host "Discovered primary replica: $chosenMachineNorm"
-                    } catch {
-                      Write-Host "Failed to discover primary replica: $($_.Exception.Message)"
-                    }
-                  }
-                }
-                
-                Write-Host "SelectedDbServers: $selectedDbServers"
-                Write-Host "AlwaysOnEnabled: $alwaysOnEnabled"
-                Write-Host "ChosenMachine: $chosenMachineNorm"
-                Write-Host "CurrentMachine: $currentMachineNorm"
-                
-                if ($chosenMachineNorm -eq $currentMachineNorm -and $chosenMachineNorm -ne "") {
-                  Write-Host "Should not run on primary host - exiting..."
-                  exit 0
-                }
-                
                 $serverName = "$(Server_DB_Local_Instance)"
                 $sqlLogin = "$(Server_DB_Admin_User)"
                 $sqlPassword = "$(Server_DB_Admin_Password)"
@@ -1203,6 +1044,10 @@ stages:
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - name: PrimaryServer
+        value: $[ stageDependencies.ChoosePrimaryNode.ResolveTargetLists.outputs['SetTargets.PrimaryServer'] ]
+      - name: SecondaryServers
+        value: $[ stageDependencies.ChoosePrimaryNode.ResolveTargetLists.outputs['SetTargets.SecondaryServers'] ]
       - ${{ if eq(parameters.dbSlot, 'Dev') }}:
           - group: Development_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'FT1') }}:
@@ -1231,19 +1076,11 @@ stages:
           - task: PowerShellOnTargetMachines@3
             displayName: 'Deploy ManualUpgrade DACPAC'
             inputs:
-              Machines: "$(selectedDbServers)"
+              Machines: "$(PrimaryServer)"
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
                 $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
-                $chosenMachine = '$(ChosenMachine)'
-                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
-                $currentMachine = $env:COMPUTERNAME
-                
-                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
-                  Write-Host "Not selected host - exiting..."
-                  exit 0
-                }
                 
                 $installLocation = "C:\Temp\MasterDataDBDeploy\ManualUpgrade"
                 $serverName = "$(Server_DB_Instance)"
@@ -1320,19 +1157,11 @@ stages:
           - task: PowerShellOnTargetMachines@3
             displayName: 'Deploy InitialStagingDB DACPAC'
             inputs:
-              Machines: "$(selectedDbServers)"
+              Machines: "$(PrimaryServer)"
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
                 $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
-                $chosenMachine = '$(ChosenMachine)'
-                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
-                $currentMachine = $env:COMPUTERNAME
-                
-                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
-                  Write-Host "Not selected host - exiting..."
-                  exit 0
-                }
                 
                 $installLocation = "C:\Temp\MasterDataDBDeploy\InitialStagingDB"
                 $serverName = "$(Server_DB_Instance)"
@@ -1393,19 +1222,11 @@ stages:
           - task: PowerShellOnTargetMachines@3
             displayName: 'Deploy MasterDataDB DACPAC'
             inputs:
-              Machines: "$(selectedDbServers)"
+              Machines: "$(PrimaryServer)"
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
                 $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
-                $chosenMachine = '$(ChosenMachine)'
-                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
-                $currentMachine = $env:COMPUTERNAME
-                
-                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
-                  Write-Host "Not selected host - exiting..."
-                  exit 0
-                }
                 
                 $installLocation = "C:\Temp\MasterDataDBDeploy\MasterDataDB"
                 $serverName = "$(Server_DB_Instance)"
@@ -1496,6 +1317,10 @@ stages:
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - name: PrimaryServer
+        value: $[ stageDependencies.ChoosePrimaryNode.ResolveTargetLists.outputs['SetTargets.PrimaryServer'] ]
+      - name: SecondaryServers
+        value: $[ stageDependencies.ChoosePrimaryNode.ResolveTargetLists.outputs['SetTargets.SecondaryServers'] ]
       - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
           - group: Pre-Prod_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'Production') }}:
@@ -1508,19 +1333,10 @@ stages:
           - task: PowerShellOnTargetMachines@3
             displayName: 'Delete transaction log backups'
             inputs:
-              Machines: "$(selectedDbServers)"
+              Machines: "$(PrimaryServer)"
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $chosenMachine = '$(ChosenMachine)'
-                
-                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
-                $currentMachine = $env:COMPUTERNAME
-                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
-                  Write-Host "Not selected host - exiting..."
-                  exit 0
-                }
-                
                 $isDbName = "$(Database_InitialStaging_DBName)"
                 $mdDbName = "$(Database_MasterData_DBName)"
                 $alwaysOnFS = "$(Server_AlwaysOn_Share)"
@@ -1553,6 +1369,10 @@ stages:
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - name: PrimaryServer
+        value: $[ stageDependencies.ChoosePrimaryNode.ResolveTargetLists.outputs['SetTargets.PrimaryServer'] ]
+      - name: SecondaryServers
+        value: $[ stageDependencies.ChoosePrimaryNode.ResolveTargetLists.outputs['SetTargets.SecondaryServers'] ]
       - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
           - group: Pre-Prod_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'Production') }}:
@@ -1565,19 +1385,10 @@ stages:
           - task: PowerShellOnTargetMachines@3
             displayName: 'Enable AlwaysOn on primary node'
             inputs:
-              Machines: "$(selectedDbServers)"
+              Machines: "$(PrimaryServer)"
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $chosenMachine = '$(ChosenMachine)'
-                
-                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
-                $currentMachine = $env:COMPUTERNAME
-                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
-                  Write-Host "Not selected host - exiting..."
-                  exit 0
-                }
-                
                 $serverName = "$(Server_DB_Local_Instance)"
                 $sqlLogin = "$(Server_DB_Admin_User)"
                 $sqlPassword = "$(Server_DB_Admin_Password)"
@@ -1649,6 +1460,10 @@ stages:
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - name: PrimaryServer
+        value: $[ stageDependencies.ChoosePrimaryNode.ResolveTargetLists.outputs['SetTargets.PrimaryServer'] ]
+      - name: SecondaryServers
+        value: $[ stageDependencies.ChoosePrimaryNode.ResolveTargetLists.outputs['SetTargets.SecondaryServers'] ]
       - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
           - group: Pre-Prod_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'Production') }}:
@@ -1661,19 +1476,10 @@ stages:
           - task: PowerShellOnTargetMachines@3
             displayName: 'Backup upgraded databases'
             inputs:
-              Machines: "$(selectedDbServers)"
+              Machines: "$(PrimaryServer)"
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $chosenMachine = '$(ChosenMachine)'
-                
-                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
-                $currentMachine = $env:COMPUTERNAME
-                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
-                  Write-Host "Not selected host - exiting..."
-                  exit 0
-                }
-                
                 $serverName = "$(Server_DB_Local_Instance)"
                 $sqlLogin = "$(Server_DB_Admin_User)"
                 $sqlPassword = "$(Server_DB_Admin_Password)"
@@ -1748,6 +1554,10 @@ stages:
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - name: PrimaryServer
+        value: $[ stageDependencies.ChoosePrimaryNode.ResolveTargetLists.outputs['SetTargets.PrimaryServer'] ]
+      - name: SecondaryServers
+        value: $[ stageDependencies.ChoosePrimaryNode.ResolveTargetLists.outputs['SetTargets.SecondaryServers'] ]
       - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
           - group: Pre-Prod_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'Production') }}:
@@ -1760,84 +1570,10 @@ stages:
           - task: PowerShellOnTargetMachines@3
             displayName: 'Restore databases on secondary nodes'
             inputs:
-              Machines: "$(selectedDbServers)"
+              Machines: "$(SecondaryServers)"
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $chosenMachine = '$(ChosenMachine)'
-                $currentMachine = $env:COMPUTERNAME
-                $selectedDbServers = "$(selectedDbServers)"
-                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
-                
-                function Normalize-Host {
-                  param([string]$name)
-                  if ([string]::IsNullOrWhiteSpace($name)) { return "" }
-                  return ($name.Split('.')[0]).ToUpperInvariant()
-                }
-                
-                $currentMachineNorm = Normalize-Host $currentMachine
-                $chosenMachineNorm = Normalize-Host $chosenMachine
-                
-                if ([string]::IsNullOrWhiteSpace($chosenMachineNorm) -or $chosenMachine -eq '$(ChosenMachine)') {
-                  Write-Host "ChosenMachine not set in pipeline output."
-                  if ($alwaysOnEnabled -ne "true") {
-                    if (-not [string]::IsNullOrWhiteSpace($selectedDbServers)) {
-                      $chosenMachineNorm = Normalize-Host (($selectedDbServers -split ',')[0])
-                      Write-Host "AlwaysOn disabled. Defaulting ChosenMachine to first server: $chosenMachineNorm"
-                    }
-                  } else {
-                    Write-Host "AlwaysOn enabled. Attempting to discover primary replica."
-                    try {
-                      $serverName = "$(Server_DB_Local_Instance)"
-                      $sqlLogin = "$(Server_DB_Admin_User)"
-                      $sqlPassword = "$(Server_DB_Admin_Password)"
-                      $dbInstanceName = "$(Server_DB_Instance_Name)"
-                      
-                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
-                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
-                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
-                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
-                      
-                      $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
-                      if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
-                        if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
-                          throw "SQL Password must be specified when using SQL authentication."
-                        }
-                        $server.ConnectionContext.LoginSecure = $false
-                        $server.ConnectionContext.Login = $sqlLogin
-                        $server.ConnectionContext.Password = $sqlPassword
-                        $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
-                      }
-                      $server.ConnectionContext.Connect()
-                      $masterDB = $server.Databases["master"]
-                      $alwaysOnQuery = "SELECT TOP 1 hags.primary_replica FROM sys.dm_hadr_availability_group_states hags INNER JOIN sys.availability_groups ag ON ag.group_id = hags.group_id WHERE ag.name = '$dbInstanceName';"
-                      $ds = $masterDB.ExecuteWithResults($alwaysOnQuery)
-                      $primaryNode = ""
-                      foreach ($t in $ds.Tables) {
-                        foreach ($r in $t.Rows) {
-                          foreach ($c in $t.Columns) {
-                            $primaryNode = $r.Item($c)
-                          }
-                        }
-                      }
-                      $chosenMachineNorm = Normalize-Host $primaryNode
-                      Write-Host "Discovered primary replica: $chosenMachineNorm"
-                    } catch {
-                      Write-Host "Failed to discover primary replica: $($_.Exception.Message)"
-                    }
-                  }
-                }
-                
-                Write-Host "SelectedDbServers: $selectedDbServers"
-                Write-Host "AlwaysOnEnabled: $alwaysOnEnabled"
-                Write-Host "ChosenMachine: $chosenMachineNorm"
-                Write-Host "CurrentMachine: $currentMachineNorm"
-                
-                if ($chosenMachineNorm -eq $currentMachineNorm -and $chosenMachineNorm -ne "") {
-                  Write-Host "Should not run on primary host - exiting..."
-                  exit 0
-                }
-                
                 $serverName = "$(Server_DB_Local_Instance)"
                 $sqlLogin = "$(Server_DB_Admin_User)"
                 $sqlPassword = "$(Server_DB_Admin_Password)"
@@ -1911,6 +1647,10 @@ stages:
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - name: PrimaryServer
+        value: $[ stageDependencies.ChoosePrimaryNode.ResolveTargetLists.outputs['SetTargets.PrimaryServer'] ]
+      - name: SecondaryServers
+        value: $[ stageDependencies.ChoosePrimaryNode.ResolveTargetLists.outputs['SetTargets.SecondaryServers'] ]
       - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
           - group: Pre-Prod_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'Production') }}:
@@ -1923,19 +1663,10 @@ stages:
           - task: PowerShellOnTargetMachines@3
             displayName: 'Backup transaction logs'
             inputs:
-              Machines: "$(selectedDbServers)"
+              Machines: "$(PrimaryServer)"
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $chosenMachine = '$(ChosenMachine)'
-                
-                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
-                $currentMachine = $env:COMPUTERNAME
-                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
-                  Write-Host "Not selected host - exiting..."
-                  exit 0
-                }
-                
                 $serverName = "$(Server_DB_Local_Instance)"
                 $sqlLogin = "$(Server_DB_Admin_User)"
                 $sqlPassword = "$(Server_DB_Admin_Password)"
@@ -2009,6 +1740,10 @@ stages:
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - name: PrimaryServer
+        value: $[ stageDependencies.ChoosePrimaryNode.ResolveTargetLists.outputs['SetTargets.PrimaryServer'] ]
+      - name: SecondaryServers
+        value: $[ stageDependencies.ChoosePrimaryNode.ResolveTargetLists.outputs['SetTargets.SecondaryServers'] ]
       - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
           - group: Pre-Prod_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'Production') }}:
@@ -2021,19 +1756,10 @@ stages:
           - task: PowerShellOnTargetMachines@3
             displayName: 'Restore transaction logs'
             inputs:
-              Machines: "$(selectedDbServers)"
+              Machines: "$(SecondaryServers)"
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $chosenMachine = '$(ChosenMachine)'
-                
-                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
-                $currentMachine = $env:COMPUTERNAME
-                if ($chosenMachine -eq $currentMachine -and $chosenMachine -ne "") {
-                  Write-Host "Should not run on primary host - exiting..."
-                  exit 0
-                }
-                
                 $serverName = "$(Server_DB_Local_Instance)"
                 $sqlLogin = "$(Server_DB_Admin_User)"
                 $sqlPassword = "$(Server_DB_Admin_Password)"
@@ -2119,19 +1845,10 @@ stages:
           - task: PowerShellOnTargetMachines@3
             displayName: 'Enable HADR replication'
             inputs:
-              Machines: "$(selectedDbServers)"
+              Machines: "$(SecondaryServers)"
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $chosenMachine = '$(ChosenMachine)'
-                
-                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
-                $currentMachine = $env:COMPUTERNAME
-                if ($chosenMachine -eq $currentMachine -and $chosenMachine -ne "") {
-                  Write-Host "Should not run on primary host - exiting..."
-                  exit 0
-                }
-                
                 $serverName = "$(Server_DB_Local_Instance)"
                 $sqlLogin = "$(Server_DB_Admin_User)"
                 $sqlPassword = "$(Server_DB_Admin_Password)"
@@ -2225,6 +1942,10 @@ stages:
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - name: PrimaryServer
+        value: $[ stageDependencies.ChoosePrimaryNode.ResolveTargetLists.outputs['SetTargets.PrimaryServer'] ]
+      - name: SecondaryServers
+        value: $[ stageDependencies.ChoosePrimaryNode.ResolveTargetLists.outputs['SetTargets.SecondaryServers'] ]
       - ${{ if eq(parameters.dbSlot, 'Dev') }}:
           - group: Development_DBDeploy
       - ${{ if eq(parameters.dbSlot, 'FT1') }}:
@@ -2253,19 +1974,10 @@ stages:
           - task: PowerShellOnTargetMachines@3
             displayName: 'Set database owner to SA'
             inputs:
-              Machines: "$(selectedDbServers)"
+              Machines: "$(PrimaryServer)"
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $chosenMachine = '$(ChosenMachine)'
-                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
-                $currentMachine = $env:COMPUTERNAME
-                
-                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
-                  Write-Host "Not selected host - exiting..."
-                  exit 0
-                }
-                
                 $serverName = "$(Server_DB_Local_Instance)"
                 $sqlLogin = "$(Server_DB_Admin_User)"
                 $sqlPassword = "$(Server_DB_Admin_Password)"
@@ -2334,19 +2046,10 @@ stages:
           - task: PowerShellOnTargetMachines@3
             displayName: 'Grant SmartScript user readonly access'
             inputs:
-              Machines: "$(selectedDbServers)"
+              Machines: "$(PrimaryServer)"
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $chosenMachine = '$(ChosenMachine)'
-                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
-                $currentMachine = $env:COMPUTERNAME
-                
-                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
-                  Write-Host "Not selected host - exiting..."
-                  exit 0
-                }
-                
                 $serverName = "$(Server_DB_Local_Instance)"
                 $sqlLogin = "$(Server_DB_Admin_User)"
                 $sqlPassword = "$(Server_DB_Admin_Password)"
@@ -2405,19 +2108,10 @@ stages:
           - task: PowerShellOnTargetMachines@3
             displayName: 'Update report status data'
             inputs:
-              Machines: "$(selectedDbServers)"
+              Machines: "$(PrimaryServer)"
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $chosenMachine = '$(ChosenMachine)'
-                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
-                $currentMachine = $env:COMPUTERNAME
-                
-                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
-                  Write-Host "Not selected host - exiting..."
-                  exit 0
-                }
-                
                 $serverName = "$(Server_DB_Local_Instance)"
                 $sqlLogin = "$(Server_DB_Admin_User)"
                 $sqlPassword = "$(Server_DB_Admin_Password)"
@@ -2473,19 +2167,11 @@ stages:
           - task: PowerShellOnTargetMachines@3
             displayName: 'Grant super user access'
             inputs:
-              Machines: "$(selectedDbServers)"
+              Machines: "$(PrimaryServer)"
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
-                $chosenMachine = '$(ChosenMachine)'
-                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
-                $currentMachine = $env:COMPUTERNAME
                 $dbSlot = "$(dbSlot)"
-                
-                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
-                  Write-Host "Not selected host - exiting..."
-                  exit 0
-                }
                 
                 $serverName = "$(Server_DB_Local_Instance)"
                 $sqlLogin = "$(Server_DB_Admin_User)"
