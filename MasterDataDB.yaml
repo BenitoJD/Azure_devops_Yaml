@@ -381,6 +381,11 @@ stages:
                   $copyOnly = [boolean]::Parse($copyOnlyRaw)
                 }
                 
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
+                
                 $compressionOption = [Microsoft.SqlServer.Management.Smo.BackupCompressionOptions]::On
                 if ($compressionRaw -ne '$(Compression)' -and -not [string]::IsNullOrWhiteSpace($compressionRaw)) {
                   try {
@@ -389,11 +394,6 @@ stages:
                     $compressionOption = [Microsoft.SqlServer.Management.Smo.BackupCompressionOptions]::On
                   }
                 }
-                
-                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
-                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
-                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
-                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
                 
                 $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
                 
