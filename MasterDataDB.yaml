@@ -340,10 +340,75 @@ stages:
                 $mdDbName = "$(Database_MasterData_DBName)"
                 $backupDirectory = "$(Server_DB_BackupLocation)"
                 $chosenMachine = '$(ChosenMachine)'
-                
-                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
-                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                $selectedDbServers = "$(selectedDbServers)"
+                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
+                
+                function Normalize-Host {
+                  param([string]$name)
+                  if ([string]::IsNullOrWhiteSpace($name)) { return "" }
+                  return ($name.Split('.')[0]).ToUpperInvariant()
+                }
+                
+                $currentMachineNorm = Normalize-Host $currentMachine
+                $chosenMachineNorm = Normalize-Host $chosenMachine
+                
+                if ([string]::IsNullOrWhiteSpace($chosenMachineNorm) -or $chosenMachine -eq '$(ChosenMachine)') {
+                  Write-Host "ChosenMachine not set in pipeline output."
+                  if ($alwaysOnEnabled -ne "true") {
+                    if (-not [string]::IsNullOrWhiteSpace($selectedDbServers)) {
+                      $chosenMachineNorm = Normalize-Host (($selectedDbServers -split ',')[0])
+                      Write-Host "AlwaysOn disabled. Defaulting ChosenMachine to first server: $chosenMachineNorm"
+                    }
+                  } else {
+                    Write-Host "AlwaysOn enabled. Attempting to discover primary replica."
+                    try {
+                      $serverName = "$(Server_DB_Local_Instance)"
+                      $sqlLogin = "$(Server_DB_Admin_User)"
+                      $sqlPassword = "$(Server_DB_Admin_Password)"
+                      $dbInstanceName = "$(Server_DB_Instance_Name)"
+                      
+                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
+                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
+                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
+                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
+                      
+                      $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
+                      if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
+                        if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
+                          throw "SQL Password must be specified when using SQL authentication."
+                        }
+                        $server.ConnectionContext.LoginSecure = $false
+                        $server.ConnectionContext.Login = $sqlLogin
+                        $server.ConnectionContext.Password = $sqlPassword
+                        $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
+                      }
+                      $server.ConnectionContext.Connect()
+                      $masterDB = $server.Databases["master"]
+                      $alwaysOnQuery = "SELECT TOP 1 hags.primary_replica FROM sys.dm_hadr_availability_group_states hags INNER JOIN sys.availability_groups ag ON ag.group_id = hags.group_id WHERE ag.name = '$dbInstanceName';"
+                      $ds = $masterDB.ExecuteWithResults($alwaysOnQuery)
+                      $primaryNode = ""
+                      foreach ($t in $ds.Tables) {
+                        foreach ($r in $t.Rows) {
+                          foreach ($c in $t.Columns) {
+                            $primaryNode = $r.Item($c)
+                          }
+                        }
+                      }
+                      $chosenMachineNorm = Normalize-Host $primaryNode
+                      Write-Host "Discovered primary replica: $chosenMachineNorm"
+                    } catch {
+                      Write-Host "Failed to discover primary replica: $($_.Exception.Message)"
+                    }
+                  }
+                }
+                
+                Write-Host "SelectedDbServers: $selectedDbServers"
+                Write-Host "AlwaysOnEnabled: $alwaysOnEnabled"
+                Write-Host "ChosenMachine: $chosenMachineNorm"
+                Write-Host "CurrentMachine: $currentMachineNorm"
+                
+                if ($chosenMachineNorm -ne $currentMachineNorm -and $chosenMachineNorm -ne "") {
                   Write-Host "Not selected host - exiting..."
                   exit 0
                 }
@@ -536,10 +601,75 @@ stages:
               UserPassword: "$(winrmPassword)"
               InlineScript: |
                 $chosenMachine = '$(ChosenMachine)'
-                
-                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
-                if ($chosenMachine -ne $currentMachine -and $chosenMachine -ne "") {
+                $selectedDbServers = "$(selectedDbServers)"
+                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
+                
+                function Normalize-Host {
+                  param([string]$name)
+                  if ([string]::IsNullOrWhiteSpace($name)) { return "" }
+                  return ($name.Split('.')[0]).ToUpperInvariant()
+                }
+                
+                $currentMachineNorm = Normalize-Host $currentMachine
+                $chosenMachineNorm = Normalize-Host $chosenMachine
+                
+                if ([string]::IsNullOrWhiteSpace($chosenMachineNorm) -or $chosenMachine -eq '$(ChosenMachine)') {
+                  Write-Host "ChosenMachine not set in pipeline output."
+                  if ($alwaysOnEnabled -ne "true") {
+                    if (-not [string]::IsNullOrWhiteSpace($selectedDbServers)) {
+                      $chosenMachineNorm = Normalize-Host (($selectedDbServers -split ',')[0])
+                      Write-Host "AlwaysOn disabled. Defaulting ChosenMachine to first server: $chosenMachineNorm"
+                    }
+                  } else {
+                    Write-Host "AlwaysOn enabled. Attempting to discover primary replica."
+                    try {
+                      $serverName = "$(Server_DB_Local_Instance)"
+                      $sqlLogin = "$(Server_DB_Admin_User)"
+                      $sqlPassword = "$(Server_DB_Admin_Password)"
+                      $dbInstanceName = "$(Server_DB_Instance_Name)"
+                      
+                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
+                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
+                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
+                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
+                      
+                      $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
+                      if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
+                        if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
+                          throw "SQL Password must be specified when using SQL authentication."
+                        }
+                        $server.ConnectionContext.LoginSecure = $false
+                        $server.ConnectionContext.Login = $sqlLogin
+                        $server.ConnectionContext.Password = $sqlPassword
+                        $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
+                      }
+                      $server.ConnectionContext.Connect()
+                      $masterDB = $server.Databases["master"]
+                      $alwaysOnQuery = "SELECT TOP 1 hags.primary_replica FROM sys.dm_hadr_availability_group_states hags INNER JOIN sys.availability_groups ag ON ag.group_id = hags.group_id WHERE ag.name = '$dbInstanceName';"
+                      $ds = $masterDB.ExecuteWithResults($alwaysOnQuery)
+                      $primaryNode = ""
+                      foreach ($t in $ds.Tables) {
+                        foreach ($r in $t.Rows) {
+                          foreach ($c in $t.Columns) {
+                            $primaryNode = $r.Item($c)
+                          }
+                        }
+                      }
+                      $chosenMachineNorm = Normalize-Host $primaryNode
+                      Write-Host "Discovered primary replica: $chosenMachineNorm"
+                    } catch {
+                      Write-Host "Failed to discover primary replica: $($_.Exception.Message)"
+                    }
+                  }
+                }
+                
+                Write-Host "SelectedDbServers: $selectedDbServers"
+                Write-Host "AlwaysOnEnabled: $alwaysOnEnabled"
+                Write-Host "ChosenMachine: $chosenMachineNorm"
+                Write-Host "CurrentMachine: $currentMachineNorm"
+                
+                if ($chosenMachineNorm -ne $currentMachineNorm -and $chosenMachineNorm -ne "") {
                   Write-Host "Not selected host - exiting..."
                   exit 0
                 }
@@ -935,10 +1065,75 @@ stages:
               UserPassword: "$(winrmPassword)"
               InlineScript: |
                 $chosenMachine = '$(ChosenMachine)'
-                
-                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
-                if ($chosenMachine -eq $currentMachine -and $chosenMachine -ne "") {
+                $selectedDbServers = "$(selectedDbServers)"
+                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
+                
+                function Normalize-Host {
+                  param([string]$name)
+                  if ([string]::IsNullOrWhiteSpace($name)) { return "" }
+                  return ($name.Split('.')[0]).ToUpperInvariant()
+                }
+                
+                $currentMachineNorm = Normalize-Host $currentMachine
+                $chosenMachineNorm = Normalize-Host $chosenMachine
+                
+                if ([string]::IsNullOrWhiteSpace($chosenMachineNorm) -or $chosenMachine -eq '$(ChosenMachine)') {
+                  Write-Host "ChosenMachine not set in pipeline output."
+                  if ($alwaysOnEnabled -ne "true") {
+                    if (-not [string]::IsNullOrWhiteSpace($selectedDbServers)) {
+                      $chosenMachineNorm = Normalize-Host (($selectedDbServers -split ',')[0])
+                      Write-Host "AlwaysOn disabled. Defaulting ChosenMachine to first server: $chosenMachineNorm"
+                    }
+                  } else {
+                    Write-Host "AlwaysOn enabled. Attempting to discover primary replica."
+                    try {
+                      $serverName = "$(Server_DB_Local_Instance)"
+                      $sqlLogin = "$(Server_DB_Admin_User)"
+                      $sqlPassword = "$(Server_DB_Admin_Password)"
+                      $dbInstanceName = "$(Server_DB_Instance_Name)"
+                      
+                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
+                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
+                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
+                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
+                      
+                      $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
+                      if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
+                        if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
+                          throw "SQL Password must be specified when using SQL authentication."
+                        }
+                        $server.ConnectionContext.LoginSecure = $false
+                        $server.ConnectionContext.Login = $sqlLogin
+                        $server.ConnectionContext.Password = $sqlPassword
+                        $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
+                      }
+                      $server.ConnectionContext.Connect()
+                      $masterDB = $server.Databases["master"]
+                      $alwaysOnQuery = "SELECT TOP 1 hags.primary_replica FROM sys.dm_hadr_availability_group_states hags INNER JOIN sys.availability_groups ag ON ag.group_id = hags.group_id WHERE ag.name = '$dbInstanceName';"
+                      $ds = $masterDB.ExecuteWithResults($alwaysOnQuery)
+                      $primaryNode = ""
+                      foreach ($t in $ds.Tables) {
+                        foreach ($r in $t.Rows) {
+                          foreach ($c in $t.Columns) {
+                            $primaryNode = $r.Item($c)
+                          }
+                        }
+                      }
+                      $chosenMachineNorm = Normalize-Host $primaryNode
+                      Write-Host "Discovered primary replica: $chosenMachineNorm"
+                    } catch {
+                      Write-Host "Failed to discover primary replica: $($_.Exception.Message)"
+                    }
+                  }
+                }
+                
+                Write-Host "SelectedDbServers: $selectedDbServers"
+                Write-Host "AlwaysOnEnabled: $alwaysOnEnabled"
+                Write-Host "ChosenMachine: $chosenMachineNorm"
+                Write-Host "CurrentMachine: $currentMachineNorm"
+                
+                if ($chosenMachineNorm -eq $currentMachineNorm -and $chosenMachineNorm -ne "") {
                   Write-Host "Should not run on primary host - exiting..."
                   exit 0
                 }
@@ -1570,10 +1765,75 @@ stages:
               UserPassword: "$(winrmPassword)"
               InlineScript: |
                 $chosenMachine = '$(ChosenMachine)'
-                
-                if ($chosenMachine -eq '$(ChosenMachine)') { $chosenMachine = "" }
                 $currentMachine = $env:COMPUTERNAME
-                if ($chosenMachine -eq $currentMachine -and $chosenMachine -ne "") {
+                $selectedDbServers = "$(selectedDbServers)"
+                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
+                
+                function Normalize-Host {
+                  param([string]$name)
+                  if ([string]::IsNullOrWhiteSpace($name)) { return "" }
+                  return ($name.Split('.')[0]).ToUpperInvariant()
+                }
+                
+                $currentMachineNorm = Normalize-Host $currentMachine
+                $chosenMachineNorm = Normalize-Host $chosenMachine
+                
+                if ([string]::IsNullOrWhiteSpace($chosenMachineNorm) -or $chosenMachine -eq '$(ChosenMachine)') {
+                  Write-Host "ChosenMachine not set in pipeline output."
+                  if ($alwaysOnEnabled -ne "true") {
+                    if (-not [string]::IsNullOrWhiteSpace($selectedDbServers)) {
+                      $chosenMachineNorm = Normalize-Host (($selectedDbServers -split ',')[0])
+                      Write-Host "AlwaysOn disabled. Defaulting ChosenMachine to first server: $chosenMachineNorm"
+                    }
+                  } else {
+                    Write-Host "AlwaysOn enabled. Attempting to discover primary replica."
+                    try {
+                      $serverName = "$(Server_DB_Local_Instance)"
+                      $sqlLogin = "$(Server_DB_Admin_User)"
+                      $sqlPassword = "$(Server_DB_Admin_Password)"
+                      $dbInstanceName = "$(Server_DB_Instance_Name)"
+                      
+                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
+                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
+                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
+                      [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
+                      
+                      $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
+                      if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
+                        if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
+                          throw "SQL Password must be specified when using SQL authentication."
+                        }
+                        $server.ConnectionContext.LoginSecure = $false
+                        $server.ConnectionContext.Login = $sqlLogin
+                        $server.ConnectionContext.Password = $sqlPassword
+                        $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
+                      }
+                      $server.ConnectionContext.Connect()
+                      $masterDB = $server.Databases["master"]
+                      $alwaysOnQuery = "SELECT TOP 1 hags.primary_replica FROM sys.dm_hadr_availability_group_states hags INNER JOIN sys.availability_groups ag ON ag.group_id = hags.group_id WHERE ag.name = '$dbInstanceName';"
+                      $ds = $masterDB.ExecuteWithResults($alwaysOnQuery)
+                      $primaryNode = ""
+                      foreach ($t in $ds.Tables) {
+                        foreach ($r in $t.Rows) {
+                          foreach ($c in $t.Columns) {
+                            $primaryNode = $r.Item($c)
+                          }
+                        }
+                      }
+                      $chosenMachineNorm = Normalize-Host $primaryNode
+                      Write-Host "Discovered primary replica: $chosenMachineNorm"
+                    } catch {
+                      Write-Host "Failed to discover primary replica: $($_.Exception.Message)"
+                    }
+                  }
+                }
+                
+                Write-Host "SelectedDbServers: $selectedDbServers"
+                Write-Host "AlwaysOnEnabled: $alwaysOnEnabled"
+                Write-Host "ChosenMachine: $chosenMachineNorm"
+                Write-Host "CurrentMachine: $currentMachineNorm"
+                
+                if ($chosenMachineNorm -eq $currentMachineNorm -and $chosenMachineNorm -ne "") {
                   Write-Host "Should not run on primary host - exiting..."
                   exit 0
                 }
