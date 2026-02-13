@@ -107,14 +107,14 @@ resources:
       source: 'MasterData.DB'
       branch: 'MDVersionUpgrade/Lonestar'
 
-
 stages:
-  - stage: Deploy
-    displayName: 'Deploy MasterDataDB'
+  - stage: Initialize
+    displayName: 'Initialize and Select Targets'
     jobs:
-      - job: Deploy_All
-        displayName: 'Deploy All'
+      - job: Initialize_Env
+        displayName: 'Initialize'
         steps:
+          - checkout: none
           - task: PowerShell@2
             displayName: 'Build Information'
             inputs:
@@ -127,40 +127,64 @@ stages:
                 Write-Host "Target Servers: $(selectedDbServers)"
                 Write-Host "Database configuration will be loaded from variable group in deployment stages"
 
-
+  - stage: AcquireArtifacts
+    displayName: 'Acquire and Extract Artifacts'
+    dependsOn: Initialize
+    condition: succeeded()
+    variables:
+      # Load variable groups at stage level
+      - ${{ if eq(parameters.dbSlot, 'Dev') }}:
+          - group: Development_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'FT1') }}:
+          - group: FT1_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'FT2') }}:
+          - group: FT2_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'FT3') }}:
+          - group: FT3_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'QA') }}:
+          - group: QA_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'R1') }}:
+          - group: R1_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Demo') }}:
+          - group: Demo_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'SIT') }}:
+          - group: SIT_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: PrepareArtifacts
+        displayName: 'Download and Extract DACPAC Artifacts'
+        steps:
+          - checkout: none
           - download: 'MasterData.DB'
             displayName: 'Download artifacts'
             artifact: 'MasterData.DB.InitialStagingDB'
-
           - download: 'MasterData.DB'
             displayName: 'Download ManualUpgrade artifact'
             artifact: 'MasterData.DB.ManualUpgrade'
-
           - download: 'MasterData.DB'
             displayName: 'Download MasterDataDB artifact'
             artifact: 'MasterData.DB.MasterDataDB'
-
           - task: ExtractFiles@1
             displayName: 'Extract InitialStagingDB artifact'
             inputs:
               archiveFilePatterns: '$(Pipeline.Workspace)/MasterData.DB/MasterData.DB.InitialStagingDB/*.zip'
               destinationFolder: '$(Pipeline.Workspace)/temp_managed/InitialStagingDB'
               cleanDestinationFolder: true
-
           - task: ExtractFiles@1
             displayName: 'Extract ManualUpgrade artifact'
             inputs:
               archiveFilePatterns: '$(Pipeline.Workspace)/MasterData.DB/MasterData.DB.ManualUpgrade/*.zip'
               destinationFolder: '$(Pipeline.Workspace)/temp_managed/ManualUpgrade'
               cleanDestinationFolder: true
-
           - task: ExtractFiles@1
             displayName: 'Extract MasterDataDB artifact'
             inputs:
               archiveFilePatterns: '$(Pipeline.Workspace)/MasterData.DB/MasterData.DB.MasterDataDB/*.zip'
               destinationFolder: '$(Pipeline.Workspace)/temp_managed/MasterDataDB'
               cleanDestinationFolder: true
-
           - task: WindowsMachineFileCopy@2
             displayName: 'Copy artifacts to target servers'
             inputs:
@@ -171,90 +195,109 @@ stages:
               TargetPath: 'C:\Temp\MasterDataDBDeploy'
               Protocol: "WinRM"
 
-
+  - stage: ChoosePrimaryNode
+    displayName: 'Choose Primary Node (AlwaysOn Only)'
+    dependsOn: AcquireArtifacts
+    condition: succeeded()
+    variables:
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: SelectPrimaryNode
+        displayName: 'Determine Primary Node'
+        steps:
+          - checkout: none
           - task: PowerShellOnTargetMachines@3
-            displayName: 'Determine Primary Node (Target Machines)'
-            condition: and(or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')), eq(variables['Server_AlwaysOn_Enabled'], 'true'))
+            name: SetPrimaryNode
+            displayName: 'Find primary node in AlwaysOn cluster'
             inputs:
               Machines: "$(selectedDbServers)"
               UserName: "$(winrmUserName)"
               UserPassword: "$(winrmPassword)"
               InlineScript: |
+                $alwaysOnEnabled = "$(Server_AlwaysOn_Enabled)"
                 $chosenMachine = '$(ChosenMachine)'
-                if ($chosenMachine -ne $null -and $chosenMachine -ne '' -and $chosenMachine -ne '$(ChosenMachine)') {
+                $currentMachineName = $env:COMPUTERNAME
+                
+                if ($chosenMachine -ne '$(ChosenMachine)' -and -not [string]::IsNullOrWhiteSpace($chosenMachine)) {
                   Write-Host "Machine already chosen - skipping"
+                  Write-Host "##vso[task.setvariable variable=ChosenMachine;isOutput=true]$chosenMachine"
                   exit 0
                 }
-
-                $alwaysOn = "$(Server_AlwaysOn_Enabled)"
-                $currentMachine = $env:COMPUTERNAME
-                if ($alwaysOn -ne "true") {
-                  Write-Host "AlwaysOn disabled. Choosing current machine: $currentMachine"
-                  Write-Host "##vso[task.setvariable variable=ChosenMachine]$currentMachine"
+                
+                if ($alwaysOnEnabled -ne "true") {
+                  Write-Host "AlwaysOn is not enabled. Choosing current machine: $currentMachineName"
+                  Write-Host "##vso[task.setvariable variable=ChosenMachine;isOutput=true]$currentMachineName"
                   exit 0
                 }
-
-                $localInstance = "$(Server_DB_Local_Instance)"
-                $dbInstanceName = "$(Server_DB_Instance_Name)"
+                
+                $serverName = "$(Server_DB_Local_Instance)"
                 $sqlLogin = "$(Server_DB_Admin_User)"
                 $sqlPassword = "$(Server_DB_Admin_Password)"
-
-                if ([string]::IsNullOrWhiteSpace($dbInstanceName) -or $dbInstanceName -eq '$(Server_DB_Instance_Name)') {
-                  throw "Server_DB_Instance_Name is required to detect primary node."
-                }
-
-                if ($localInstance -match '^[^,]+,\\s*\\d+$') {
-                  # Host,Port format - keep as-is
-                } elseif ($localInstance -like "*,*") {
-                  $parts = $localInstance -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }
-                  if ($parts.Count -gt 1) {
-                    $match = $parts | Where-Object { $_ -like "$currentMachine*" -or $_ -like "$currentMachine.*" -or $_ -like "$currentMachine\\*" }
-                    if ($match) {
-                      $localInstance = $match[0]
-                    } else {
-                      $localInstance = $parts[0]
-                    }
-                  }
-                }
-
+                $dbInstanceName = "$(Server_DB_Instance_Name)"
+                
                 [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
                 [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
                 [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
                 [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
-
-                $server = New-Object Microsoft.SqlServer.Management.Smo.Server $localInstance
+                
+                $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
+                
                 if ($sqlLogin -ne $null -and $sqlLogin -ne "" -and $sqlLogin -notlike "*`$(*") {
                   if ($sqlPassword -eq $null -or $sqlPassword -eq "" -or $sqlPassword -like "*`$(*") {
                     throw "SQL Password must be specified when using SQL authentication."
                   }
+                  Write-Host "Connecting to server using SQL authentication as $sqlLogin."
                   $server.ConnectionContext.LoginSecure = $false
                   $server.ConnectionContext.Login = $sqlLogin
                   $server.ConnectionContext.Password = $sqlPassword
                   $server = New-Object Microsoft.SqlServer.Management.Smo.Server $server.ConnectionContext
+                } else {
+                  Write-Host "Connecting to server using Windows authentication."
                 }
-
+                
                 try {
                   $server.ConnectionContext.Connect()
                 } catch {
                   Write-Error "An error occurred connecting to the database server!`r`n$($_.Exception.ToString())"
-                  throw
+                  exit -1
                 }
-
+                Write-Host "Connected to server."
+                
                 $masterDB = $server.Databases["master"]
-                $alwaysOnQuery = "SELECT TOP 1 hags.primary_replica FROM sys.dm_hadr_availability_group_states hags INNER JOIN sys.availability_groups ag ON ag.group_id = hags.group_id WHERE ag.name = '$dbInstanceName';"
-                $ds = $masterDB.ExecuteWithResults($alwaysOnQuery)
-                $primaryNode = ""
-                foreach ($t in $ds.Tables) { foreach ($r in $t.Rows) { foreach ($c in $t.Columns) { $primaryNode = $r.Item($c) } } }
-
-                if ([string]::IsNullOrWhiteSpace($primaryNode)) {
-                  throw "Primary node not found for AG '$dbInstanceName'"
+                
+                try {
+                  Write-Host "Attempting to discover primary node from AlwaysOn cluster"
+                  $alwaysOnQuery = "SELECT TOP 1 hags.primary_replica FROM sys.dm_hadr_availability_group_states hags INNER JOIN sys.availability_groups ag ON ag.group_id = hags.group_id WHERE ag.name = '$dbInstanceName';"
+                  $ds = $masterDB.ExecuteWithResults($alwaysOnQuery)
+                  $primaryNode = ""
+                  Foreach ($t in $ds.Tables) {
+                    Foreach ($r in $t.Rows) {
+                      Foreach ($c in $t.Columns) {
+                        $primaryNode = $r.Item($c)
+                      }
+                    }
+                  }
+                  if ([string]::IsNullOrWhiteSpace($primaryNode)) {
+                    Write-Host "ERROR: Could not determine primary replica for availability group '$dbInstanceName'."
+                    throw "Primary node detection failed for availability group '$dbInstanceName'. Aborting AlwaysOn deployment."
+                  }
+                  Write-Host "Primary host is: $primaryNode"
+                  Write-Host "Current Machine is: $currentMachineName"
+                  
+                  if ($currentMachineName -like "*$primaryNode*" -or $primaryNode -like "*$currentMachineName*") {
+                    Write-Host "##vso[task.setvariable variable=ChosenMachine;isOutput=true]$currentMachineName"
+                    Write-Host "Choosing machine: $currentMachineName"
+                  } else {
+                    Write-Host "Not choosing current machine. Primary is: $primaryNode"
+                  }
+                } catch {
+                  Write-Host "Error discovering primary node:"
+                  Write-Host $_.Exception | Format-List -Force
+                  throw "Failed to discover primary node"
                 }
-
-                $primaryShort = $primaryNode.Split('.')[0]
-                Write-Host "Primary host is: $primaryNode"
-                Write-Host "Current Machine is: $currentMachine"
-                Write-Host "##vso[task.setvariable variable=ChosenMachine]$primaryShort"
-                Write-Host "ChosenMachine set to $primaryShort"
               NewPsSessionOptionArguments: >
                 -SkipCACheck
                 -SkipCNCheck
@@ -263,9 +306,26 @@ stages:
                 -OperationTimeout 0
                 -OutputBufferingMode Block
 
+  - stage: BackupDatabases
+    displayName: 'Backup Databases (AlwaysOn Only)'
+    dependsOn:
+      - AcquireArtifacts
+      - ChoosePrimaryNode
+    condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
+    variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Backup_Databases
+        displayName: 'Backup InitialStaging and MasterData Databases'
+        steps:
+          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Backup databases using SMO'
-            condition: and(succeeded(), eq(variables['Server_AlwaysOn_Enabled'], 'true'), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
             inputs:
               Machines: "$(selectedDbServers)"
               UserName: "$(winrmUserName)"
@@ -320,11 +380,6 @@ stages:
                 if ($copyOnlyRaw -ne '$(CopyOnly)' -and -not [string]::IsNullOrWhiteSpace($copyOnlyRaw)) {
                   $copyOnly = [boolean]::Parse($copyOnlyRaw)
                 }
-
-                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
-                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
-                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
-                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
                 
                 $compressionOption = [Microsoft.SqlServer.Management.Smo.BackupCompressionOptions]::On
                 if ($compressionRaw -ne '$(Compression)' -and -not [string]::IsNullOrWhiteSpace($compressionRaw)) {
@@ -334,6 +389,11 @@ stages:
                     $compressionOption = [Microsoft.SqlServer.Management.Smo.BackupCompressionOptions]::On
                   }
                 }
+                
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SMO") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoExtended") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.ConnectionInfo") | Out-Null
+                [System.Reflection.Assembly]::LoadWithPartialName("Microsoft.SqlServer.SmoEnum") | Out-Null
                 
                 $server = New-Object Microsoft.SqlServer.Management.Smo.Server $serverName
                 
@@ -450,10 +510,26 @@ stages:
                 -OperationTimeout 0
                 -OutputBufferingMode Block
 
-
+  - stage: DisableAlwaysOn
+    displayName: 'Disable AlwaysOn (AlwaysOn Only)'
+    dependsOn:
+      - BackupDatabases
+      - ChoosePrimaryNode
+    condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
+    variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Disable_AlwaysOn
+        displayName: 'Remove Databases from AlwaysOn Availability Group'
+        steps:
+          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Disable AlwaysOn on primary node'
-            condition: and(succeeded(), eq(variables['Server_AlwaysOn_Enabled'], 'true'), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
             inputs:
               Machines: "$(selectedDbServers)"
               UserName: "$(winrmUserName)"
@@ -528,11 +604,42 @@ stages:
                 -OperationTimeout 0
                 -OutputBufferingMode Block
 
-
-
+  - stage: RestoreProductionBackups
+    displayName: 'Restore Production Backups (AlwaysOn Only)'
+    dependsOn:
+      - DisableAlwaysOn
+      - ChoosePrimaryNode
+    condition: and(ne('${{ parameters.dbSlot }}', 'Production'), in(dependencies.DisableAlwaysOn.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.ChoosePrimaryNode.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
+    variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - ${{ if eq(parameters.dbSlot, 'Dev') }}:
+          - group: Development_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'FT1') }}:
+          - group: FT1_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'FT2') }}:
+          - group: FT2_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'FT3') }}:
+          - group: FT3_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'QA') }}:
+          - group: QA_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'R1') }}:
+          - group: R1_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Demo') }}:
+          - group: Demo_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'SIT') }}:
+          - group: SIT_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Restore_Backups
+        displayName: 'Restore from Production Backups'
+        steps:
+          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Restore InitialStaging database'
-            condition: and(succeeded(), eq(variables['Server_AlwaysOn_Enabled'], 'true'), ne('${{ parameters.dbSlot }}', 'Production'))
             inputs:
               Machines: "$(selectedDbServers)"
               UserName: "$(winrmUserName)"
@@ -665,10 +772,8 @@ stages:
                 -IdleTimeout 7200000
                 -OperationTimeout 0
                 -OutputBufferingMode Block
-
           - task: PowerShellOnTargetMachines@3
             displayName: 'Restore MasterData database'
-            condition: and(succeeded(), eq(variables['Server_AlwaysOn_Enabled'], 'true'), ne('${{ parameters.dbSlot }}', 'Production'))
             inputs:
               Machines: "$(selectedDbServers)"
               UserName: "$(winrmUserName)"
@@ -804,11 +909,26 @@ stages:
                 -OperationTimeout 0
                 -OutputBufferingMode Block
 
-
-
+  - stage: RemoveFromSecondaryNodes
+    displayName: 'Remove Databases from Secondary Nodes (AlwaysOn Only)'
+    dependsOn:
+      - RestoreProductionBackups
+      - ChoosePrimaryNode
+    condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
+    variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Remove_Secondary_Databases
+        displayName: 'Drop Databases on Secondary Nodes'
+        steps:
+          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Remove databases from secondary nodes'
-            condition: and(succeeded(), eq(variables['Server_AlwaysOn_Enabled'], 'true'), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
             inputs:
               Machines: "$(selectedDbServers)"
               UserName: "$(winrmUserName)"
@@ -878,8 +998,41 @@ stages:
                 -OperationTimeout 0
                 -OutputBufferingMode Block
 
-
-
+  - stage: DeployDACPACs
+    displayName: 'Deploy DACPACs'
+    dependsOn: 
+      - BackupDatabases
+      - RemoveFromSecondaryNodes
+      - ChoosePrimaryNode
+    condition: and(in(dependencies.BackupDatabases.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.RemoveFromSecondaryNodes.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.ChoosePrimaryNode.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
+    variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - ${{ if eq(parameters.dbSlot, 'Dev') }}:
+          - group: Development_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'FT1') }}:
+          - group: FT1_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'FT2') }}:
+          - group: FT2_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'FT3') }}:
+          - group: FT3_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'QA') }}:
+          - group: QA_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'R1') }}:
+          - group: R1_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Demo') }}:
+          - group: Demo_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'SIT') }}:
+          - group: SIT_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Deploy_ManualUpgrade
+        displayName: 'Deploy ManualUpgrade DACPAC'
+        steps:
+          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Deploy ManualUpgrade DACPAC'
             inputs:
@@ -964,8 +1117,11 @@ stages:
                 -IdleTimeout 7200000
                 -OperationTimeout 0
                 -OutputBufferingMode Block
-
-
+      - job: Deploy_InitialStagingDB
+        displayName: 'Deploy InitialStagingDB DACPAC'
+        dependsOn: Deploy_ManualUpgrade
+        steps:
+          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Deploy InitialStagingDB DACPAC'
             inputs:
@@ -1034,8 +1190,11 @@ stages:
                 -IdleTimeout 7200000
                 -OperationTimeout 0
                 -OutputBufferingMode Block
-
-
+      - job: Deploy_MasterDataDB
+        displayName: 'Deploy MasterDataDB DACPAC'
+        dependsOn: Deploy_InitialStagingDB
+        steps:
+          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Deploy MasterDataDB DACPAC'
             inputs:
@@ -1133,11 +1292,26 @@ stages:
                 -IdleTimeout 7200000
                 -OperationTimeout 0
                 -OutputBufferingMode Block
-
-
+  - stage: CleanupAlwaysOnBackups
+    displayName: 'Cleanup AlwaysOn Backups (AlwaysOn Only)'
+    dependsOn:
+      - DeployDACPACs
+      - ChoosePrimaryNode
+    condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
+    variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Cleanup_Backups
+        displayName: 'Delete Existing AlwaysOn Transaction Log Backups'
+        steps:
+          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Delete transaction log backups'
-            condition: and(succeeded(), eq(variables['Server_AlwaysOn_Enabled'], 'true'), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
             inputs:
               Machines: "$(selectedDbServers)"
               UserName: "$(winrmUserName)"
@@ -1175,11 +1349,26 @@ stages:
                 -OperationTimeout 0
                 -OutputBufferingMode Block
 
-
-
+  - stage: EnableAlwaysOn
+    displayName: 'Enable AlwaysOn (AlwaysOn Only)'
+    dependsOn:
+      - CleanupAlwaysOnBackups
+      - ChoosePrimaryNode
+    condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
+    variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Enable_AlwaysOn
+        displayName: 'Add Databases to AlwaysOn Availability Group'
+        steps:
+          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Enable AlwaysOn on primary node'
-            condition: and(succeeded(), eq(variables['Server_AlwaysOn_Enabled'], 'true'), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
             inputs:
               Machines: "$(selectedDbServers)"
               UserName: "$(winrmUserName)"
@@ -1256,11 +1445,26 @@ stages:
                 -OperationTimeout 0
                 -OutputBufferingMode Block
 
-
-
+  - stage: BackupUpgradedDatabases
+    displayName: 'Backup Upgraded Databases (AlwaysOn Only)'
+    dependsOn:
+      - EnableAlwaysOn
+      - ChoosePrimaryNode
+    condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
+    variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Backup_Upgraded_Databases
+        displayName: 'Backup Upgraded Databases to AlwaysOn Share'
+        steps:
+          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Backup upgraded databases'
-            condition: and(succeeded(), eq(variables['Server_AlwaysOn_Enabled'], 'true'), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
             inputs:
               Machines: "$(selectedDbServers)"
               UserName: "$(winrmUserName)"
@@ -1340,11 +1544,26 @@ stages:
                 -OperationTimeout 0
                 -OutputBufferingMode Block
 
-
-
+  - stage: RestoreOnSecondaryNodes
+    displayName: 'Restore on Secondary Nodes (AlwaysOn Only)'
+    dependsOn:
+      - BackupUpgradedDatabases
+      - ChoosePrimaryNode
+    condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
+    variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Restore_Secondary_Databases
+        displayName: 'Restore Databases on Secondary Nodes'
+        steps:
+          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Restore databases on secondary nodes'
-            condition: and(succeeded(), eq(variables['Server_AlwaysOn_Enabled'], 'true'), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
             inputs:
               Machines: "$(selectedDbServers)"
               UserName: "$(winrmUserName)"
@@ -1423,11 +1642,26 @@ stages:
                 -OperationTimeout 0
                 -OutputBufferingMode Block
 
-
-
+  - stage: BackupTransactionLogs
+    displayName: 'Backup Transaction Logs (AlwaysOn Only)'
+    dependsOn:
+      - RestoreOnSecondaryNodes
+      - ChoosePrimaryNode
+    condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
+    variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Backup_Transaction_Logs
+        displayName: 'Backup Transaction Logs to AlwaysOn Share'
+        steps:
+          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Backup transaction logs'
-            condition: and(succeeded(), eq(variables['Server_AlwaysOn_Enabled'], 'true'), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
             inputs:
               Machines: "$(selectedDbServers)"
               UserName: "$(winrmUserName)"
@@ -1506,11 +1740,26 @@ stages:
                 -OperationTimeout 0
                 -OutputBufferingMode Block
 
-
-
+  - stage: RestoreTransactionLogs
+    displayName: 'Restore Transaction Logs (AlwaysOn Only)'
+    dependsOn:
+      - BackupTransactionLogs
+      - ChoosePrimaryNode
+    condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
+    variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Restore_Transaction_Logs
+        displayName: 'Restore Transaction Logs on Secondary Nodes'
+        steps:
+          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Restore transaction logs'
-            condition: and(succeeded(), eq(variables['Server_AlwaysOn_Enabled'], 'true'), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
             inputs:
               Machines: "$(selectedDbServers)"
               UserName: "$(winrmUserName)"
@@ -1589,11 +1838,26 @@ stages:
                 -OperationTimeout 0
                 -OutputBufferingMode Block
 
-
-
+  - stage: EnableHADRReplication
+    displayName: 'Enable HADR Replication (AlwaysOn Only)'
+    dependsOn:
+      - RestoreTransactionLogs
+      - ChoosePrimaryNode
+    condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
+    variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Enable_HADR
+        displayName: 'Enable HADR Replication on Secondary Nodes'
+        steps:
+          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Enable HADR replication'
-            condition: and(succeeded(), eq(variables['Server_AlwaysOn_Enabled'], 'true'), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
             inputs:
               Machines: "$(selectedDbServers)"
               UserName: "$(winrmUserName)"
@@ -1691,8 +1955,41 @@ stages:
                 -OperationTimeout 0
                 -OutputBufferingMode Block
 
-
-
+  - stage: PostDeploymentConfiguration
+    displayName: 'Post-Deployment Configuration'
+    dependsOn: 
+      - DeployDACPACs
+      - EnableHADRReplication
+      - ChoosePrimaryNode
+    condition: and(in(dependencies.DeployDACPACs.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.EnableHADRReplication.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.ChoosePrimaryNode.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
+    variables:
+      - name: ChosenMachine
+        value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
+      - ${{ if eq(parameters.dbSlot, 'Dev') }}:
+          - group: Development_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'FT1') }}:
+          - group: FT1_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'FT2') }}:
+          - group: FT2_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'FT3') }}:
+          - group: FT3_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'QA') }}:
+          - group: QA_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'R1') }}:
+          - group: R1_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Demo') }}:
+          - group: Demo_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'SIT') }}:
+          - group: SIT_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+          - group: Pre-Prod_DBDeploy
+      - ${{ if eq(parameters.dbSlot, 'Production') }}:
+          - group: Production_DBDeploy
+    jobs:
+      - job: Update_DB_Owner
+        displayName: 'Update DB Owner to SA'
+        steps:
+          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Set database owner to SA'
             inputs:
@@ -1769,8 +2066,11 @@ stages:
                 -IdleTimeout 7200000
                 -OperationTimeout 0
                 -OutputBufferingMode Block
-
-
+      - job: Grant_SmartScript_Access
+        displayName: 'Grant SmartScript User Readonly Access'
+        dependsOn: Update_DB_Owner
+        steps:
+          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Grant SmartScript user readonly access'
             inputs:
@@ -1837,8 +2137,11 @@ stages:
                 -IdleTimeout 7200000
                 -OperationTimeout 0
                 -OutputBufferingMode Block
-
-
+      - job: Update_Report_Status
+        displayName: 'Update Report Status Data'
+        dependsOn: Grant_SmartScript_Access
+        steps:
+          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Update report status data'
             inputs:
@@ -1902,8 +2205,11 @@ stages:
                 -IdleTimeout 7200000
                 -OperationTimeout 0
                 -OutputBufferingMode Block
-
-
+      - job: Grant_Super_Access
+        displayName: 'Grant Super User Access (Conditional)'
+        dependsOn: Update_Report_Status
+        steps:
+          - checkout: none
           - task: PowerShellOnTargetMachines@3
             displayName: 'Grant super user access'
             inputs:
