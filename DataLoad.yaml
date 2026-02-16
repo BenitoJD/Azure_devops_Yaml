@@ -100,8 +100,7 @@ resources:
   pipelines:
     - pipeline: 'MasterData.DB.DataLoad'
       project: 'MasterData'
-      source: 'MasterData.DB.DataLoad'
-      branch: 'MDVersionUpgrade/Lonestar'
+      source: 'MasterData.DB.DataLoad-CI'
 
 stages:
   - stage: Initialize
