@@ -22,8 +22,7 @@ trigger: none
 resources:
   pipelines:
     - pipeline: buildPipeline
-      source: MasterData.SiteEditor
-      branch: MDVersionUpgrade/Lonestar
+      source: MasterData.SiteEditor-CI
 
 # Site Editor slot mapping overview (siteEditorSlot -> servers)
 #   Development -> $(Development-web-server)
