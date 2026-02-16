@@ -2048,6 +2048,7 @@ stages:
       - job: Grant_SmartScript_Access
         displayName: 'Grant SmartScript User Readonly Access'
         dependsOn: Update_DB_Owner
+        condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
         steps:
           - checkout: none
           - task: PowerShellOnTargetMachines@3
