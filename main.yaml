@@ -261,7 +261,7 @@ stages:
                   "Demo" = "$(Demo_Server_AppPool_Name)"
                   "SIT" = "$(SIT_Server_AppPool_Name)"
                   "Pre-Prod" = "$(Pre-Prod_Server_AppPool_Name)"
-                  "Prod" = "$(Prodcuction_Server_AppPool_Name)"
+                  "Prod" = "$(Prod_Server_AppPool_Name)"
                   "R1" = "$(R1_Server_AppPool_Name)"
                 }
                 
@@ -450,7 +450,7 @@ stages:
                   "Demo" = "$(Demo_Server_AppPool_Name)"
                   "SIT" = "$(SIT_Server_AppPool_Name)"
                   "Pre-Prod" = "$(Pre-Prod_Server_AppPool_Name)"
-                  "Prod" = "$(Prodcuction_Server_AppPool_Name)"
+                  "Prod" = "$(Prod_Server_AppPool_Name)"
                   "R1" = "$(R1_Server_AppPool_Name)"
                 }
                 
@@ -506,7 +506,7 @@ stages:
                   "Demo" = "$(Demo_Server_AppPool_Name)"
                   "SIT" = "$(SIT_Server_AppPool_Name)"
                   "Pre-Prod" = "$(Pre-Prod_Server_AppPool_Name)"
-                  "Prod" = "$(Prodcuction_Server_AppPool_Name)"
+                  "Prod" = "$(Prod_Server_AppPool_Name)"
                   "R1" = "$(R1_Server_AppPool_Name)"
                 }
                 
