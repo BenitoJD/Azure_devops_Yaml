@@ -104,8 +104,7 @@ resources:
   pipelines:
     - pipeline: 'MasterData.DB'
       project: 'MasterData'
-      source: 'MasterData.DB'
-      branch: 'MDVersionUpgrade/Lonestar'
+      source: 'MasterData.DB-CI'
 
 stages:
   - stage: Initialize
