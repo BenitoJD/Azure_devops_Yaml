@@ -32,6 +32,14 @@ variables:
   - name: apiSlot
     value: ${{ parameters.apiSlot }}
 
+  # Target environment for approval gate
+  - ${{ if eq(parameters.apiSlot, 'Pre-Prod_API') }}:
+      - name: targetEnvironment
+        value: 'PRE-PROD'
+  - ${{ if eq(parameters.apiSlot, 'Production_API') }}:
+      - name: targetEnvironment
+        value: 'PROD'
+
   # Server catalog and paths
   - group: vg-shared-servers
   - group: vg-shared-paths
@@ -104,8 +112,29 @@ resources:
      source: 'MasterData.ServiceLayer-CI'
 
 stages:
+  - stage: ApprovalGate
+    displayName: 'Approval Gate'
+    condition: or(eq('${{ parameters.apiSlot }}', 'Pre-Prod_API'), eq('${{ parameters.apiSlot }}', 'Production_API'))
+    jobs:
+      - deployment: AwaitApproval
+        displayName: 'Await Environment Approval'
+        environment: $(targetEnvironment)
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: none
+                - task: PowerShell@2
+                  displayName: 'Approval received'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      Write-Host "Approval received for environment: $(targetEnvironment)"
+
   - stage: Initialize
     displayName: 'Initialize and Select Targets'
+    dependsOn: ApprovalGate
+    condition: and(in(dependencies.ApprovalGate.result, 'Succeeded', 'Skipped'), not(canceled()))
     jobs:
       - job: Initialize_Env
         displayName: 'Initialize'
@@ -123,8 +152,10 @@ stages:
 
   - stage: AcquireAndTransform
     displayName: 'Acquire and Transform Artifacts'
-    dependsOn: Initialize
-    condition: succeeded()
+    dependsOn:
+      - ApprovalGate
+      - Initialize
+    condition: and(in(dependencies.ApprovalGate.result, 'Succeeded', 'Skipped'), not(canceled()), in(dependencies.Initialize.result, 'Succeeded', 'SucceededWithIssues'))
     variables:
       # Load variable groups at stage level so FileTransform can access them
       - ${{ if eq(parameters.apiSlot, 'Demo_API') }}:
@@ -358,8 +389,10 @@ stages:
 
   - stage: ConfigureIIS
     displayName: 'Configure IIS'
-    dependsOn: AcquireAndTransform
-    condition: succeeded()
+    dependsOn:
+      - ApprovalGate
+      - AcquireAndTransform
+    condition: and(in(dependencies.ApprovalGate.result, 'Succeeded', 'Skipped'), not(canceled()), in(dependencies.AcquireAndTransform.result, 'Succeeded', 'SucceededWithIssues'))
     jobs:
       - job: Configure_IIS
         displayName: 'Ensure site and app pool'
@@ -514,8 +547,10 @@ stages:
 
   - stage: Permissions
     displayName: 'Set Permissions'
-    dependsOn: ConfigureIIS
-    condition: succeeded()
+    dependsOn:
+      - ApprovalGate
+      - ConfigureIIS
+    condition: and(in(dependencies.ApprovalGate.result, 'Succeeded', 'Skipped'), not(canceled()), in(dependencies.ConfigureIIS.result, 'Succeeded', 'SucceededWithIssues'))
     jobs:
       - job: Set_ACLs
         displayName: 'Grant IIS permissions'
@@ -591,8 +626,10 @@ stages:
 
   - stage: RestartServices
     displayName: 'Restart Websites'
-    dependsOn: Permissions
-    condition: succeeded()
+    dependsOn:
+      - ApprovalGate
+      - Permissions
+    condition: and(in(dependencies.ApprovalGate.result, 'Succeeded', 'Skipped'), not(canceled()), in(dependencies.Permissions.result, 'Succeeded', 'SucceededWithIssues'))
     jobs:
       - job: Stop_Sites
         displayName: 'Stop site and app pool'
