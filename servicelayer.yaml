@@ -1,0 +1,736 @@
+pool:
+  name: ccoe-nprod-windows-mdp-01
+
+trigger: none
+
+name: API_${{ parameters.apiSlot }}_$(Date:yyyyMMdd)$(Rev:.r)
+
+parameters:
+  - name: apiSlot
+    displayName: 'API Environment / Slot'
+    type: string
+    default: R1_API
+    values:
+      - Demo_API
+      - Development_API
+      - FT1_API
+      - FT2_API
+      - FT3_API
+      - Pre-Prod_API
+      - Production_API
+      - QA_API
+      - R1_API
+      - SIT_API
+
+variables:
+  - name: BuildNumber
+    value: '$(Build.BuildNumber)'
+  - name: BranchName
+    value: '$(Build.SourceBranchName)'
+  - name: BuildVersion
+    value: '$(Build.BuildId)'
+  - name: apiSlot
+    value: ${{ parameters.apiSlot }}
+
+  # Server catalog and paths
+  - group: vg-shared-servers
+  - group: vg-shared-paths
+  - group: vg-shared-API-IIS-Config
+
+  # WinRM service account (non-prod vs prod) based on apiSlot
+  - ${{ if ne(parameters.apiSlot, 'Production_API') }}:
+      - group: NonProd-WinRM-ServiceAccount
+  - ${{ if eq(parameters.apiSlot, 'Production_API') }}:
+      - group: Prod-WinRM-ServiceAccount
+
+  # Variable groups per API slot
+  - ${{ if eq(parameters.apiSlot, 'Demo_API') }}:
+      - group: Demo_API
+  - ${{ if eq(parameters.apiSlot, 'Development_API') }}:
+      - group: Development_API
+  - ${{ if eq(parameters.apiSlot, 'FT1_API') }}:
+      - group: FT1_API
+  - ${{ if eq(parameters.apiSlot, 'FT2_API') }}:
+      - group: FT2_API
+  - ${{ if eq(parameters.apiSlot, 'FT3_API') }}:
+      - group: FT3_API
+  - ${{ if eq(parameters.apiSlot, 'Pre-Prod_API') }}:
+      - group: Pre-Prod_API
+  - ${{ if eq(parameters.apiSlot, 'Production_API') }}:
+      - group: Production_API
+  - ${{ if eq(parameters.apiSlot, 'QA_API') }}:
+      - group: QA_API
+  - ${{ if eq(parameters.apiSlot, 'R1_API') }}:
+      - group: R1_API
+  - ${{ if eq(parameters.apiSlot, 'SIT_API') }}:
+      - group: SIT_API
+
+  # Server selection per apiSlot
+  - ${{ if eq(parameters.apiSlot, 'Development_API') }}:
+      - name: selectedApiServers
+        value: '$(Development-app-server)'
+  - ${{ if eq(parameters.apiSlot, 'FT1_API') }}:
+      - name: selectedApiServers
+        value: '$(Development-app-server)'
+  - ${{ if eq(parameters.apiSlot, 'FT2_API') }}:
+      - name: selectedApiServers
+        value: '$(Development-app-server)'
+  - ${{ if eq(parameters.apiSlot, 'FT3_API') }}:
+      - name: selectedApiServers
+        value: '$(Development-app-server)'
+  - ${{ if eq(parameters.apiSlot, 'QA_API') }}:
+      - name: selectedApiServers
+        value: '$(Development-app-server)'
+  - ${{ if eq(parameters.apiSlot, 'Demo_API') }}:
+      - name: selectedApiServers
+        value: '$(Development-app-server)'
+  - ${{ if eq(parameters.apiSlot, 'R1_API') }}:
+      - name: selectedApiServers
+        value: '$(Development-app-server)'
+  - ${{ if eq(parameters.apiSlot, 'SIT_API') }}:
+      - name: selectedApiServers
+        value: '$(SIT-app-server)'
+  - ${{ if eq(parameters.apiSlot, 'Pre-Prod_API') }}:
+      - name: selectedApiServers
+        value: '$(Pre-prod-app1-server),$(Pre-prod-app2-server)'
+  - ${{ if eq(parameters.apiSlot, 'Production_API') }}:
+      - name: selectedApiServers
+        value: '$(Production-app1-Server),$(Production-app2-Server)'
+
+resources:
+  pipelines:
+   - pipeline: 'MasterData.ServiceLayer'
+     project: 'MasterData'
+     source: 'MasterData.ServiceLayer-CI'
+
+stages:
+  - stage: Initialize
+    displayName: 'Initialize and Select Targets'
+    jobs:
+      - job: Initialize_Env
+        displayName: 'Initialize'
+        steps:
+          - task: PowerShell@2
+            displayName: 'Build Information'
+            inputs:
+              targetType: 'inline'
+              script: |
+                Write-Host "Branch: $(BranchName)"
+                Write-Host "Build: $(BuildNumber)"
+                Write-Host "Version: $(BuildVersion)"
+                Write-Host "API Slot: $(apiSlot)"
+                Write-Host "Target Servers: $(selectedApiServers)"
+
+  - stage: AcquireAndTransform
+    displayName: 'Acquire and Transform Artifacts'
+    dependsOn: Initialize
+    condition: succeeded()
+    variables:
+      # Load variable groups at stage level so FileTransform can access them
+      - ${{ if eq(parameters.apiSlot, 'Demo_API') }}:
+          - group: Demo_API
+      - ${{ if eq(parameters.apiSlot, 'Development_API') }}:
+          - group: Development_API
+      - ${{ if eq(parameters.apiSlot, 'FT1_API') }}:
+          - group: FT1_API
+      - ${{ if eq(parameters.apiSlot, 'FT2_API') }}:
+          - group: FT2_API
+      - ${{ if eq(parameters.apiSlot, 'FT3_API') }}:
+          - group: FT3_API
+      - ${{ if eq(parameters.apiSlot, 'Pre-Prod_API') }}:
+          - group: Pre-Prod_API
+      - ${{ if eq(parameters.apiSlot, 'Production_API') }}:
+          - group: Production_API
+      - ${{ if eq(parameters.apiSlot, 'QA_API') }}:
+          - group: QA_API
+      - ${{ if eq(parameters.apiSlot, 'R1_API') }}:
+          - group: R1_API
+      - ${{ if eq(parameters.apiSlot, 'SIT_API') }}:
+          - group: SIT_API
+    jobs:
+      - job: PrepareArtifacts
+        displayName: 'Download, Extract and Transform Artifacts'
+        variables:
+          # Ensure variable groups are available at job level for FileTransform
+          - ${{ if eq(parameters.apiSlot, 'Demo_API') }}:
+              - group: Demo_API
+          - ${{ if eq(parameters.apiSlot, 'Development_API') }}:
+              - group: Development_API
+          - ${{ if eq(parameters.apiSlot, 'FT1_API') }}:
+              - group: FT1_API
+          - ${{ if eq(parameters.apiSlot, 'FT2_API') }}:
+              - group: FT2_API
+          - ${{ if eq(parameters.apiSlot, 'FT3_API') }}:
+              - group: FT3_API
+          - ${{ if eq(parameters.apiSlot, 'Pre-Prod_API') }}:
+              - group: Pre-Prod_API
+          - ${{ if eq(parameters.apiSlot, 'Production_API') }}:
+              - group: Production_API
+          - ${{ if eq(parameters.apiSlot, 'QA_API') }}:
+              - group: QA_API
+          - ${{ if eq(parameters.apiSlot, 'R1_API') }}:
+              - group: R1_API
+          - ${{ if eq(parameters.apiSlot, 'SIT_API') }}:
+              - group: SIT_API
+        steps:
+          - download: 'MasterData.ServiceLayer'
+            displayName: 'Download artifacts'
+            artifact: 'webapi-drop'
+          - task: ExtractFiles@1
+            displayName: 'Extract artifacts'
+            inputs:
+              archiveFilePatterns: '$(Pipeline.Workspace)/MasterData.ServiceLayer/webapi-drop/*.zip'
+              destinationFolder: '$(Pipeline.Workspace)/temp_managed'
+              cleanDestinationFolder: true
+          - task: PowerShell@2
+            displayName: 'Verify variables for FileTransform'
+            inputs:
+              targetType: 'inline'
+              script: |
+                Write-Host "=== Available Variables for FileTransform ==="
+                Write-Host "API Slot: $(apiSlot)"
+                $envVars = Get-ChildItem Env: | Where-Object { 
+                  $_.Name -like '*MasterData*' -or 
+                  $_.Name -like '*Mongo*' -or
+                  $_.Name -like '*API*'
+                } | Sort-Object Name
+                Write-Host "Found $($envVars.Count) relevant variables:"
+                foreach ($var in $envVars) {
+                  $val = $var.Value
+                  if ($val.Length -gt 100) { $val = $val.Substring(0, 100) + "..." }
+                  Write-Host "  $($var.Name) = $val"
+                }
+                Write-Host ""
+                Write-Host "=== Checking for appsettings.json files ==="
+                $jsonFiles = Get-ChildItem -Path "$(Pipeline.Workspace)/temp_managed" -Filter "appsettings.json" -Recurse -ErrorAction SilentlyContinue
+                if ($jsonFiles) {
+                  Write-Host "Found $($jsonFiles.Count) appsettings.json file(s):"
+                  foreach ($file in $jsonFiles) {
+                    Write-Host "  - $($file.FullName)"
+                  }
+                } else {
+                  Write-Host "No appsettings.json files found in $(Pipeline.Workspace)/temp_managed"
+                }
+          - task: FileTransform@1
+            displayName: 'Transform appsettings.json for $(apiSlot)'
+            inputs:
+              folderPath: '$(Pipeline.Workspace)/temp_managed'
+              fileType: "json"
+              targetFiles: "**/appsettings.json"
+              xmlTransformationRules: ""
+              xmlTargetFiles: ""
+              enableXmlTransform: false
+          - task: ArchiveFiles@2
+            displayName: 'Re-zip transformed artifact'
+            inputs:
+              rootFolderOrFile: '$(Pipeline.Workspace)/temp_managed'
+              includeRootFolder: false
+              archiveType: "zip"
+              archiveFile: '$(Pipeline.Workspace)/MasterData.ServiceLayer/webapi-drop/transformed.zip'
+              replaceExistingArchive: true
+          - task: WindowsMachineFileCopy@2
+            displayName: 'Copy artifact zip to $(selectedApiServers)'
+            inputs:
+              SourcePath: '$(Pipeline.Workspace)/MasterData.ServiceLayer/webapi-drop/transformed.zip'
+              MachineNames: "$(selectedApiServers)"
+              AdminUserName: "$(winrmUserName)"
+              AdminPassword: "$(winrmPassword)"
+              TargetPath: 'C:\Temp\ApiDeploy'
+              Protocol: "WinRM"
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Extract files on target servers'
+            inputs:
+              Machines: "$(selectedApiServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $apiSlot = "$(apiSlot)"
+                
+                # Get physical path based on apiSlot
+                # Azure DevOps variables are expanded before script execution
+                $destinationPath = $null
+                
+                switch ($apiSlot) {
+                  "Development_API" {
+                    $iisPath = "$(Dev_Server_Website_Path)"
+                    if ($iisPath -and $iisPath.Trim() -ne "" -and $iisPath -notlike "*`$(*") {
+                      $destinationPath = $iisPath
+                    }
+                  }
+                  "Production_API" {
+                    $iisPath = "$(Prod_Server_Website_Path)"
+                    if ($iisPath -and $iisPath.Trim() -ne "" -and $iisPath -notlike "*`$(*") {
+                      $destinationPath = $iisPath
+                    }
+                  }
+                  "Pre-Prod_API" {
+                    $iisPath = "$(Pre-Prod_Server_Website_Path)"
+                    if ($iisPath -and $iisPath.Trim() -ne "" -and $iisPath -notlike "*`$(*") {
+                      $destinationPath = $iisPath
+                    }
+                  }
+                  "Demo_API" {
+                    $iisPath = "$(Demo_Server_Website_Path)"
+                    if ($iisPath -and $iisPath.Trim() -ne "" -and $iisPath -notlike "*`$(*") {
+                      $destinationPath = $iisPath
+                    }
+                  }
+                  "FT1_API" {
+                    $iisPath = "$(FT1_Server_Website_Path)"
+                    if ($iisPath -and $iisPath.Trim() -ne "" -and $iisPath -notlike "*`$(*") {
+                      $destinationPath = $iisPath
+                    }
+                  }
+                  "FT2_API" {
+                    $iisPath = "$(FT2_Server_Website_Path)"
+                    if ($iisPath -and $iisPath.Trim() -ne "" -and $iisPath -notlike "*`$(*") {
+                      $destinationPath = $iisPath
+                    }
+                  }
+                  "FT3_API" {
+                    $iisPath = "$(FT3_Server_Website_Path)"
+                    if ($iisPath -and $iisPath.Trim() -ne "" -and $iisPath -notlike "*`$(*") {
+                      $destinationPath = $iisPath
+                    }
+                  }
+                  "QA_API" {
+                    $iisPath = "$(QA_Server_Website_Path)"
+                    if ($iisPath -and $iisPath.Trim() -ne "" -and $iisPath -notlike "*`$(*") {
+                      $destinationPath = $iisPath
+                    }
+                  }
+                  "R1_API" {
+                    $iisPath = "$(R1_Server_Website_Path)"
+                    if ($iisPath -and $iisPath.Trim() -ne "" -and $iisPath -notlike "*`$(*") {
+                      $destinationPath = $iisPath
+                    }
+                  }
+                  "SIT_API" {
+                    $iisPath = "$(SIT_Server_Website_Path)"
+                    if ($iisPath -and $iisPath.Trim() -ne "" -and $iisPath -notlike "*`$(*") {
+                      $destinationPath = $iisPath
+                    }
+                  }
+                }
+                
+                # Fallback to API_Deployment_Path if IIS path not available
+                if (-not $destinationPath -or $destinationPath.Trim() -eq "") {
+                  $apiDeploymentPath = "$(API_Deployment_Path)"
+                  if ($apiDeploymentPath -and $apiDeploymentPath.Trim() -ne "" -and $apiDeploymentPath -notlike "*`$(*") {
+                    $destinationPath = $apiDeploymentPath
+                  } else {
+                    throw "Neither IIS path nor API_Deployment_Path is available for slot '$apiSlot'"
+                  }
+                }
+                
+                $tempFolder = 'C:\Temp\ApiDeploy'
+                $zipPath = Join-Path $tempFolder 'transformed.zip'
+                
+                Write-Host "Checking for zip file at: $zipPath"
+                if (-not (Test-Path $zipPath)) {
+                  Write-Host "ERROR: Zip file not found at $zipPath"
+                  if (Test-Path $tempFolder) {
+                    Write-Host "Temp folder contents:"
+                    Get-ChildItem -Path $tempFolder -Recurse | ForEach-Object { Write-Host "  - $($_.FullName)" }
+                  }
+                  throw "Artifact zip not found at $zipPath"
+                }
+                Write-Host "Zip file found successfully at $zipPath"
+                
+                if (-not (Test-Path $destinationPath)) {
+                  Write-Host "Creating destination folder $destinationPath"
+                  New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
+                } else {
+                  Write-Host "Clearing existing contents in $destinationPath"
+                  Get-ChildItem -Path $destinationPath -Exclude "App_Data" -Recurse -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+                }
+                
+                Write-Host "Extracting $zipPath to $destinationPath"
+                Expand-Archive -LiteralPath $zipPath -DestinationPath $destinationPath -Force
+                Write-Host "Extraction completed successfully"
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
+
+  - stage: ConfigureIIS
+    displayName: 'Configure IIS'
+    dependsOn: AcquireAndTransform
+    condition: succeeded()
+    jobs:
+      - job: Configure_IIS
+        displayName: 'Ensure site and app pool'
+        steps:
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Ensure IIS configuration'
+            inputs:
+              Machines: "$(selectedApiServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $apiSlot = "$(apiSlot)"
+                
+                # Get IIS config values based on apiSlot using Azure DevOps variable expansion
+                $appPoolName = $null
+                $port = $null
+                $physicalPath = $null
+                
+                switch ($apiSlot) {
+                  "Development_API" {
+                    $appPoolName = "$(Dev_Server_AppPool_Name)"
+                    $port = "$(Dev_Server_IIS_Port)"
+                    $physicalPath = "$(Dev_Server_Website_Path)"
+                  }
+                  "Production_API" {
+                    $appPoolName = "$(Prod_Server_AppPool_Name)"
+                    $port = "$(Prod_Server_IIS_Port)"
+                    $physicalPath = "$(Prod_Server_Website_Path)"
+                  }
+                  "Pre-Prod_API" {
+                    $appPoolName = "$(Pre-Prod_Server_AppPool_Name)"
+                    $port = "$(Pre-Prod_Server_IIS_Port)"
+                    $physicalPath = "$(Pre-Prod_Server_Website_Path)"
+                  }
+                  "Demo_API" {
+                    $appPoolName = "$(Demo_Server_AppPool_Name)"
+                    $port = "$(Demo_Server_IIS_Port)"
+                    $physicalPath = "$(Demo_Server_Website_Path)"
+                  }
+                  "FT1_API" {
+                    $appPoolName = "$(FT1_Server_AppPool_Name)"
+                    $port = "$(FT1_Server_IIS_Port)"
+                    $physicalPath = "$(FT1_Server_Website_Path)"
+                  }
+                  "FT2_API" {
+                    $appPoolName = "$(FT2_Server_AppPool_Name)"
+                    $port = "$(FT2_Server_IIS_Port)"
+                    $physicalPath = "$(FT2_Server_Website_Path)"
+                  }
+                  "FT3_API" {
+                    $appPoolName = "$(FT3_Server_AppPool_Name)"
+                    $port = "$(FT3_Server_IIS_Port)"
+                    $physicalPath = "$(FT3_Server_Website_Path)"
+                  }
+                  "QA_API" {
+                    $appPoolName = "$(QA_Server_AppPool_Name)"
+                    $port = "$(QA_Server_IIS_Port)"
+                    $physicalPath = "$(QA_Server_Website_Path)"
+                  }
+                  "R1_API" {
+                    $appPoolName = "$(R1_Server_AppPool_Name)"
+                    $port = "$(R1_Server_IIS_Port)"
+                    $physicalPath = "$(R1_Server_Website_Path)"
+                  }
+                  "SIT_API" {
+                    $appPoolName = "$(SIT_Server_AppPool_Name)"
+                    $port = "$(SIT_Server_IIS_Port)"
+                    $physicalPath = "$(SIT_Server_Website_Path)"
+                  }
+                }
+                
+                # Check if variables were expanded (not still containing $(...))
+                if ($appPoolName -like "*`$(*" -or $appPoolName.Trim() -eq "") {
+                  throw "AppPool name not found for slot '$apiSlot'"
+                }
+                if ($port -like "*`$(*" -or $port.Trim() -eq "") {
+                  throw "Port not found for slot '$apiSlot'"
+                }
+                
+                # Fallback to API_Deployment_Path if IIS path not available
+                if ($physicalPath -like "*`$(*" -or $physicalPath.Trim() -eq "") {
+                  $apiDeploymentPath = "$(API_Deployment_Path)"
+                  if ($apiDeploymentPath -and $apiDeploymentPath.Trim() -ne "" -and $apiDeploymentPath -notlike "*`$(*") {
+                    $physicalPath = $apiDeploymentPath
+                  } else {
+                    throw "Neither IIS path nor API_Deployment_Path is available for slot '$apiSlot'"
+                  }
+                }
+                
+                Write-Host "IIS Configuration for ${apiSlot}:"
+                Write-Host "  AppPool: $appPoolName"
+                Write-Host "  Port: $port"
+                Write-Host "  Path: $physicalPath"
+                
+                # Site name convention: MasterData-API-{Environment}
+                $envName = $apiSlot -replace '_API$', ''
+                $siteName = "MasterData-API-$envName"
+                
+                $useAppCmd = $false
+                try { 
+                  Import-Module WebAdministration -ErrorAction Stop 
+                } catch { 
+                  $useAppCmd = $true 
+                }
+                
+                if ($useAppCmd) {
+                  # Use appcmd.exe
+                  try { 
+                    & "C:\Windows\System32\inetsrv\appcmd.exe" add apppool /name:$appPoolName /managedRuntimeVersion:"" /managedPipelineMode:Integrated 
+                  } catch {}
+                  
+                  try {
+                    $bindingString = "http/*:${port}:"
+                    & "C:\Windows\System32\inetsrv\appcmd.exe" add site /name:$siteName /physicalPath:$physicalPath /bindings:$bindingString
+                    & "C:\Windows\System32\inetsrv\appcmd.exe" set app "$siteName/" /applicationPool:$appPoolName
+                  } catch {}
+                } else {
+                  # Use WebAdministration module
+                  if (-not (Test-Path "IIS:\AppPools\$appPoolName")) { 
+                    New-WebAppPool -Name $appPoolName | Out-Null 
+                  }
+                  # Kestrel-hosted ASP.NET Core does not require .NET CLR in app pool
+                  Set-ItemProperty "IIS:\AppPools\$appPoolName" -Name managedRuntimeVersion -Value ""
+                  Set-ItemProperty "IIS:\AppPools\$appPoolName" -Name managedPipelineMode -Value "Integrated"
+                  
+                  $site = Get-Website -Name $siteName -ErrorAction SilentlyContinue
+                  if ($site) {
+                    Set-ItemProperty "IIS:\Sites\$siteName" -Name applicationPool -Value $appPoolName
+                    Set-ItemProperty "IIS:\Sites\$siteName" -Name physicalPath -Value $physicalPath
+                    $desired = "*:${port}:"
+                    $httpBindings = Get-WebBinding -Name $siteName -Protocol "http" -ErrorAction SilentlyContinue
+                    $matching = @()
+                    if ($httpBindings) { 
+                      $matching = $httpBindings | Where-Object { $_.bindingInformation -eq $desired } 
+                    }
+                    if (-not $matching -or $matching.Count -eq 0) { 
+                      New-WebBinding -Name $siteName -Protocol "http" -Port $port -IPAddress "*" -HostHeader "" 
+                    }
+                  } else {
+                    New-Website -Name $siteName -PhysicalPath $physicalPath -ApplicationPool $appPoolName -Port $port | Out-Null
+                  }
+                }
+                
+                Write-Host "IIS configuration completed successfully"
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
+
+  - stage: Permissions
+    displayName: 'Set Permissions'
+    dependsOn: ConfigureIIS
+    condition: succeeded()
+    jobs:
+      - job: Set_ACLs
+        displayName: 'Grant IIS permissions'
+        steps:
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Set folder ACLs'
+            inputs:
+              Machines: "$(selectedApiServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $apiSlot = "$(apiSlot)"
+                
+                # Get physical path based on apiSlot
+                $physicalPath = $null
+                
+                switch ($apiSlot) {
+                  "Development_API" {
+                    $physicalPath = "$(Dev_Server_Website_Path)"
+                  }
+                  "Production_API" {
+                    $physicalPath = "$(Prod_Server_Website_Path)"
+                  }
+                  "Pre-Prod_API" {
+                    $physicalPath = "$(Pre-Prod_Server_Website_Path)"
+                  }
+                  "Demo_API" {
+                    $physicalPath = "$(Demo_Server_Website_Path)"
+                  }
+                  "FT1_API" {
+                    $physicalPath = "$(FT1_Server_Website_Path)"
+                  }
+                  "FT2_API" {
+                    $physicalPath = "$(FT2_Server_Website_Path)"
+                  }
+                  "FT3_API" {
+                    $physicalPath = "$(FT3_Server_Website_Path)"
+                  }
+                  "QA_API" {
+                    $physicalPath = "$(QA_Server_Website_Path)"
+                  }
+                  "R1_API" {
+                    $physicalPath = "$(R1_Server_Website_Path)"
+                  }
+                  "SIT_API" {
+                    $physicalPath = "$(SIT_Server_Website_Path)"
+                  }
+                }
+                
+                # Fallback to API_Deployment_Path if IIS path not available
+                if ($physicalPath -like "*`$(*" -or $physicalPath.Trim() -eq "") {
+                  $apiDeploymentPath = "$(API_Deployment_Path)"
+                  if ($apiDeploymentPath -and $apiDeploymentPath.Trim() -ne "" -and $apiDeploymentPath -notlike "*`$(*") {
+                    $physicalPath = $apiDeploymentPath
+                  } else {
+                    throw "Neither IIS path nor API_Deployment_Path is available for slot '$apiSlot'"
+                  }
+                }
+                
+                Write-Host "Setting permissions on $physicalPath"
+                $acl = Get-Acl $physicalPath
+                $rule = New-Object System.Security.AccessControl.FileSystemAccessRule("IIS_IUSRS","FullControl","ContainerInherit,ObjectInherit","None","Allow")
+                $acl.SetAccessRule($rule)
+                Set-Acl $physicalPath $acl
+                Write-Host "Permissions set successfully"
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
+
+  - stage: RestartServices
+    displayName: 'Restart Websites'
+    dependsOn: Permissions
+    condition: succeeded()
+    jobs:
+      - job: Stop_Sites
+        displayName: 'Stop site and app pool'
+        steps:
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Stop website'
+            inputs:
+              Machines: "$(selectedApiServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $apiSlot = "$(apiSlot)"
+                
+                # Get AppPool name based on apiSlot
+                $appPoolName = $null
+                
+                switch ($apiSlot) {
+                  "Development_API" { $appPoolName = "$(Dev_Server_AppPool_Name)" }
+                  "Production_API" { $appPoolName = "$(Prod_Server_AppPool_Name)" }
+                  "Pre-Prod_API" { $appPoolName = "$(Pre-Prod_Server_AppPool_Name)" }
+                  "Demo_API" { $appPoolName = "$(Demo_Server_AppPool_Name)" }
+                  "FT1_API" { $appPoolName = "$(FT1_Server_AppPool_Name)" }
+                  "FT2_API" { $appPoolName = "$(FT2_Server_AppPool_Name)" }
+                  "FT3_API" { $appPoolName = "$(FT3_Server_AppPool_Name)" }
+                  "QA_API" { $appPoolName = "$(QA_Server_AppPool_Name)" }
+                  "R1_API" { $appPoolName = "$(R1_Server_AppPool_Name)" }
+                  "SIT_API" { $appPoolName = "$(SIT_Server_AppPool_Name)" }
+                }
+                
+                if ($appPoolName -like "*`$(*" -or $appPoolName.Trim() -eq "") {
+                  throw "AppPool name not found for slot '$apiSlot'"
+                }
+                
+                # Site name convention: MasterData-API-{Environment}
+                $envName = $apiSlot -replace '_API$', ''
+                $siteName = "MasterData-API-$envName"
+                
+                Write-Host "Stopping website: $siteName, AppPool: $appPoolName"
+                
+                $usePowerShell = $true
+                try { 
+                  Import-Module WebAdministration -ErrorAction Stop 
+                } catch { 
+                  $usePowerShell = $false 
+                }
+                
+                if ($usePowerShell) {
+                  try { Stop-Website -Name $siteName -ErrorAction Stop } catch {}
+                  try { Stop-WebAppPool -Name $appPoolName -ErrorAction Stop } catch {}
+                } else {
+                  try { & "C:\Windows\System32\inetsrv\appcmd.exe" stop site /site.name:$siteName 2>$null } catch {}
+                  try { & "C:\Windows\System32\inetsrv\appcmd.exe" stop apppool /apppool.name:$appPoolName 2>$null } catch {}
+                }
+                
+                Write-Host "Stop completed"
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
+      - job: Start_Sites
+        displayName: 'Start site and app pool'
+        dependsOn: Stop_Sites
+        steps:
+          - task: PowerShellOnTargetMachines@3
+            displayName: 'Start website'
+            inputs:
+              Machines: "$(selectedApiServers)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $apiSlot = "$(apiSlot)"
+                
+                # Get AppPool name based on apiSlot
+                $appPoolName = $null
+                
+                switch ($apiSlot) {
+                  "Development_API" { $appPoolName = "$(Dev_Server_AppPool_Name)" }
+                  "Production_API" { $appPoolName = "$(Prod_Server_AppPool_Name)" }
+                  "Pre-Prod_API" { $appPoolName = "$(Pre-Prod_Server_AppPool_Name)" }
+                  "Demo_API" { $appPoolName = "$(Demo_Server_AppPool_Name)" }
+                  "FT1_API" { $appPoolName = "$(FT1_Server_AppPool_Name)" }
+                  "FT2_API" { $appPoolName = "$(FT2_Server_AppPool_Name)" }
+                  "FT3_API" { $appPoolName = "$(FT3_Server_AppPool_Name)" }
+                  "QA_API" { $appPoolName = "$(QA_Server_AppPool_Name)" }
+                  "R1_API" { $appPoolName = "$(R1_Server_AppPool_Name)" }
+                  "SIT_API" { $appPoolName = "$(SIT_Server_AppPool_Name)" }
+                }
+                
+                if ($appPoolName -like "*`$(*" -or $appPoolName.Trim() -eq "") {
+                  throw "AppPool name not found for slot '$apiSlot'"
+                }
+                
+                # Site name convention: MasterData-API-{Environment}
+                $envName = $apiSlot -replace '_API$', ''
+                $siteName = "MasterData-API-$envName"
+                
+                Write-Host "Starting website: $siteName, AppPool: $appPoolName"
+                
+                $usePowerShell = $true
+                try { 
+                  Import-Module WebAdministration -ErrorAction Stop 
+                } catch { 
+                  $usePowerShell = $false 
+                }
+                
+                if ($usePowerShell) {
+                  try { 
+                    if ((Get-WebAppPoolState -Name $appPoolName -ErrorAction SilentlyContinue).Value -ne 'Started') { 
+                      Start-WebAppPool -Name $appPoolName -ErrorAction Stop 
+                    } 
+                  } catch {}
+                  $site = Get-Website -Name $siteName -ErrorAction SilentlyContinue
+                  if ($site) { 
+                    if ($site.state -ne 'Started') { 
+                      try { Start-Website -Name $siteName -ErrorAction Stop } catch {} 
+                    } 
+                  }
+                } else {
+                  try { 
+                    if ((& "C:\Windows\System32\inetsrv\appcmd.exe" list apppool "$appPoolName" /text:state 2>$null) -ne "Started") { 
+                      & "C:\Windows\System32\inetsrv\appcmd.exe" start apppool /apppool.name:$appPoolName 2>$null 
+                    } 
+                  } catch {}
+                  try { 
+                    if ((& "C:\Windows\System32\inetsrv\appcmd.exe" list site "$siteName" /text:state 2>$null) -ne "Started") { 
+                      & "C:\Windows\System32\inetsrv\appcmd.exe" start site /site.name:$siteName 2>$null 
+                    } 
+                  } catch {}
+                }
+                
+                Write-Host "Start completed"
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
