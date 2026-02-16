@@ -32,6 +32,14 @@ variables:
   - name: dbSlot
     value: ${{ parameters.dbSlot }}
 
+  # Target environment for approval gate
+  - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+      - name: targetEnvironment
+        value: 'PRE-PROD'
+  - ${{ if eq(parameters.dbSlot, 'Production') }}:
+      - name: targetEnvironment
+        value: 'PROD'
+
   # Server catalog and paths
   - group: vg-shared-servers
   - group: vg-shared-paths
@@ -103,8 +111,29 @@ resources:
       source: 'MasterData.DB.DataLoad-CI'
 
 stages:
+  - stage: ApprovalGate
+    displayName: 'Approval Gate'
+    condition: or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production'))
+    jobs:
+      - deployment: AwaitApproval
+        displayName: 'Await Environment Approval'
+        environment: $(targetEnvironment)
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: none
+                - task: PowerShell@2
+                  displayName: 'Approval received'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      Write-Host "Approval received for environment: $(targetEnvironment)"
+
   - stage: Initialize
     displayName: 'Initialize and Select Targets'
+    dependsOn: ApprovalGate
+    condition: and(in(dependencies.ApprovalGate.result, 'Succeeded', 'Skipped'), not(canceled()))
     jobs:
       - job: Initialize_Env
         displayName: 'Initialize'
@@ -123,8 +152,10 @@ stages:
 
   - stage: AcquireAndCopy
     displayName: 'Acquire, Extract and Copy Artifacts'
-    dependsOn: Initialize
-    condition: succeeded()
+    dependsOn:
+      - ApprovalGate
+      - Initialize
+    condition: and(in(dependencies.ApprovalGate.result, 'Succeeded', 'Skipped'), not(canceled()), in(dependencies.Initialize.result, 'Succeeded', 'SucceededWithIssues'))
     variables:
       # Load variable groups at stage level for copy task
       - ${{ if eq(parameters.dbSlot, 'Dev') }}:
@@ -247,8 +278,10 @@ stages:
 
   - stage: DeployDatabase
     displayName: 'Deploy Database'
-    dependsOn: AcquireAndCopy
-    condition: succeeded()
+    dependsOn:
+      - ApprovalGate
+      - AcquireAndCopy
+    condition: and(in(dependencies.ApprovalGate.result, 'Succeeded', 'Skipped'), not(canceled()), in(dependencies.AcquireAndCopy.result, 'Succeeded', 'SucceededWithIssues'))
     variables:
       # Load variable groups at stage level for PowerShell script access
       - ${{ if eq(parameters.dbSlot, 'Dev') }}:
