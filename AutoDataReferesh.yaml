@@ -43,6 +43,14 @@ variables:
   - group: vg-shared-servers
   - group: vg-shared-paths
 
+  # Target environment for approval gate
+  - ${{ if eq(parameters.adrSlot, 'Pre-Prod') }}:
+      - name: targetEnvironment
+        value: 'PRE-PROD'
+  - ${{ if eq(parameters.adrSlot, 'Production') }}:
+      - name: targetEnvironment
+        value: 'PROD'
+
   # WinRM service account (non-prod vs prod) based on ADR slot
   - ${{ if ne(parameters.adrSlot, 'Production') }}:
       - group: NonProd-WinRM-ServiceAccount
@@ -141,8 +149,29 @@ pool:
   name: ccoe-nprod-windows-mdp-01
 
 stages:
+  - stage: ApprovalGate
+    displayName: 'Approval Gate'
+    condition: or(eq('${{ parameters.adrSlot }}', 'Pre-Prod'), eq('${{ parameters.adrSlot }}', 'Production'))
+    jobs:
+      - deployment: AwaitApproval
+        displayName: 'Await Environment Approval'
+        environment: $(targetEnvironment)
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: none
+                - task: PowerShell@2
+                  displayName: 'Approval received'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      Write-Host "Approval received for environment: $(targetEnvironment)"
+
   - stage: Deploy_ADR
     displayName: "ADR - Deploy to $(adrSlot)"
+    dependsOn: ApprovalGate
+    condition: and(in(dependencies.ApprovalGate.result, 'Succeeded', 'Skipped'), not(canceled()))
     jobs:
       - job: DeployAutoDataRefresh
         displayName: "ADR - Deploy to target servers for $(adrSlot)"
