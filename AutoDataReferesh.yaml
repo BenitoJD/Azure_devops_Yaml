@@ -1,0 +1,237 @@
+name: ADR_${{ parameters.adrSlot }}_$(Date:yyyyMMdd)$(Rev:.r)
+
+parameters:
+  # Controls which ADR environment/slot this pipeline deploys to
+  - name: adrSlot
+    displayName: ADR Environment / Slot
+    type: string
+    default: Dev
+    values:
+      - Dev
+      - FT1
+      - FT2
+      - FT3
+      - R1
+      - QA
+      - Demo
+      - SIT
+      - Pre-Prod
+      - Production
+
+trigger: none
+
+resources:
+  pipelines:
+    - pipeline: buildPipeline
+      source: MasterData.AutoDataRefresh-CI
+
+# ADR slot mapping overview (adrSlot -> variable group / servers / folder suffix)
+#   Dev        -> Development_ADR / $(Development-app-server)                 / Dev_ADR
+#   FT1        -> FT1_ADR         / $(Development-app-server)                 / FT1_ADR
+#   FT2        -> FT2_ADR         / $(Development-app-server)                 / FT2_ADR
+#   FT3        -> FT3_ADR         / $(Development-app-server)                 / FT3_ADR
+#   R1         -> R1_ADR          / $(Development-app-server)                 / R1_ADR
+#   QA         -> (no QA_ADR VG)  / $(Development-app-server)                 / QA_ADR
+#   Demo       -> Demo_ADR        / $(Development-app-server)                 / Demo_ADR
+#   SIT        -> SIT_ADR         / $(SIT-app-server)                         / (no suffix - base path)
+#   Pre-Prod   -> Pre-Prod_ADR    / $(Pre-prod-app1-server,app2-server)       / (no suffix - base path)
+#   Production -> Production_ADR  / $(Production-app1-Server,app2-Server)     / (no suffix - base path)
+# Base path comes from vg-shared-paths variable group: ADR_Deployment_Path
+
+variables:
+  # Server catalog and credentials
+  - group: vg-shared-servers
+  - group: vg-shared-paths
+
+  # WinRM service account (non-prod vs prod) based on ADR slot
+  - ${{ if ne(parameters.adrSlot, 'Production') }}:
+      - group: NonProd-WinRM-ServiceAccount
+  - ${{ if eq(parameters.adrSlot, 'Production') }}:
+      - group: Prod-WinRM-ServiceAccount
+
+  # ADR configuration variable groups (per slot)
+  - ${{ if eq(parameters.adrSlot, 'Dev') }}:
+      - group: Development_ADR
+  - ${{ if eq(parameters.adrSlot, 'FT1') }}:
+      - group: FT1_ADR
+  - ${{ if eq(parameters.adrSlot, 'FT2') }}:
+      - group: FT2_ADR
+  - ${{ if eq(parameters.adrSlot, 'FT3') }}:
+      - group: FT3_ADR
+  - ${{ if eq(parameters.adrSlot, 'R1') }}:
+      - group: R1_ADR
+  - ${{ if eq(parameters.adrSlot, 'QA') }}:
+      - group: QA_ADR
+  - ${{ if eq(parameters.adrSlot, 'Demo') }}:
+      - group: Demo_ADR
+  - ${{ if eq(parameters.adrSlot, 'SIT') }}:
+      - group: SIT_ADR
+  - ${{ if eq(parameters.adrSlot, 'Pre-Prod') }}:
+      - group: Pre-Prod_ADR
+  - ${{ if eq(parameters.adrSlot, 'Production') }}:
+      - group: Production_ADR
+
+  # Server selection per adrSlot (from vg-shared-servers)
+  # Dev / FT* / R1 / QA / Demo all use the Development app server (RT01)
+  - ${{ if eq(parameters.adrSlot, 'Dev') }}:
+      - name: selectedServerName
+        value: '$(Development-app-server)'
+  - ${{ if eq(parameters.adrSlot, 'FT1') }}:
+      - name: selectedServerName
+        value: '$(Development-app-server)'
+  - ${{ if eq(parameters.adrSlot, 'FT2') }}:
+      - name: selectedServerName
+        value: '$(Development-app-server)'
+  - ${{ if eq(parameters.adrSlot, 'FT3') }}:
+      - name: selectedServerName
+        value: '$(Development-app-server)'
+  - ${{ if eq(parameters.adrSlot, 'R1') }}:
+      - name: selectedServerName
+        value: '$(Development-app-server)'
+  - ${{ if eq(parameters.adrSlot, 'QA') }}:
+      - name: selectedServerName
+        value: '$(Development-app-server)'
+  - ${{ if eq(parameters.adrSlot, 'Demo') }}:
+      - name: selectedServerName
+        value: '$(Development-app-server)'
+  - ${{ if eq(parameters.adrSlot, 'SIT') }}:
+      - name: selectedServerName
+        value: '$(SIT-app-server)'
+  - ${{ if eq(parameters.adrSlot, 'Pre-Prod') }}:
+      - name: selectedServerName
+        value: '$(Pre-prod-app1-server),$(Pre-prod-app2-server)'
+  - ${{ if eq(parameters.adrSlot, 'Production') }}:
+      - name: selectedServerName
+        value: '$(Production-app1-Server),$(Production-app2-Server)'
+
+  # Folder suffix per adrSlot (joined with ADR_Deployment_Path in script)
+  - ${{ if eq(parameters.adrSlot, 'Dev') }}:
+      - name: AdrFolderSuffix
+        value: 'Dev'
+  - ${{ if eq(parameters.adrSlot, 'FT1') }}:
+      - name: AdrFolderSuffix
+        value: 'FT1'
+  - ${{ if eq(parameters.adrSlot, 'FT2') }}:
+      - name: AdrFolderSuffix
+        value: 'FT2'
+  - ${{ if eq(parameters.adrSlot, 'FT3') }}:
+      - name: AdrFolderSuffix
+        value: 'FT3'
+  - ${{ if eq(parameters.adrSlot, 'R1') }}:
+      - name: AdrFolderSuffix
+        value: 'R1'
+  - ${{ if eq(parameters.adrSlot, 'QA') }}:
+      - name: AdrFolderSuffix
+        value: 'QA'
+  - ${{ if eq(parameters.adrSlot, 'Demo') }}:
+      - name: AdrFolderSuffix
+        value: 'Demo'
+  # For SIT, Pre-Prod and Production we deploy directly to the base path (no suffix)
+  - ${{ if eq(parameters.adrSlot, 'SIT') }}:
+      - name: AdrFolderSuffix
+        value: 'SIT'
+  - ${{ if eq(parameters.adrSlot, 'Pre-Prod') }}:
+      - name: AdrFolderSuffix
+        value: ''
+  - ${{ if eq(parameters.adrSlot, 'Production') }}:
+      - name: AdrFolderSuffix
+        value: ''
+
+pool:
+  name: ccoe-nprod-windows-mdp-01
+
+stages:
+  - stage: Deploy_ADR
+    displayName: "ADR - Deploy to $(adrSlot)"
+    jobs:
+      - job: DeployAutoDataRefresh
+        displayName: "ADR - Deploy to target servers for $(adrSlot)"
+        pool:
+          name: ccoe-nprod-windows-mdp-01
+        steps:
+          - download: buildPipeline
+            displayName: "ADR - Download artifact for $(adrSlot)"
+            artifact: AutoDataRefresh
+
+          - task: ExtractFiles@1
+            displayName: "ADR - Extract ADR artifact"
+            inputs:
+              archiveFilePatterns: '$(Pipeline.Workspace)\buildPipeline\AutoDataRefresh\Boots.MasterData.Application.AutoDataRefresh.zip'
+              destinationFolder: '$(Pipeline.Workspace)\temp_managed'
+              cleanDestinationFolder: true
+
+          - task: FileTransform@1
+            displayName: "ADR - Transform configuration files for $(adrSlot)"
+            inputs:
+              folderPath: '$(Pipeline.Workspace)\temp_managed'
+              fileType: "xml"
+              targetFiles: "**/Boots.MasterData.Application.AutoDataRefresh.exe.config"
+
+          - task: ArchiveFiles@2
+            displayName: "ADR - Re-zip transformed ADR artifact"
+            inputs:
+              rootFolderOrFile: '$(Pipeline.Workspace)\temp_managed'
+              includeRootFolder: false
+              archiveType: "zip"
+              archiveFile: '$(Pipeline.Workspace)\buildPipeline\AutoDataRefresh\Boots.MasterData.Application.AutoDataRefresh.zip'
+              replaceExistingArchive: true
+
+          - task: WindowsMachineFileCopy@2
+            displayName: "ADR - Copy ADR zip to $(selectedServerName)"
+            inputs:
+              SourcePath: '$(Pipeline.Workspace)\buildPipeline\AutoDataRefresh\Boots.MasterData.Application.AutoDataRefresh.zip'
+              MachineNames: "$(selectedServerName)"
+              AdminUserName: "$(winrmUserName)"
+              AdminPassword: "$(winrmPassword)"
+              TargetPath: 'C:\Temp\AutoDataRefresh'
+              Protocol: "WinRM"
+
+          - task: PowerShellOnTargetMachines@3
+            displayName: "ADR - Extract ADR on $(adrSlot) servers"
+            inputs:
+              Machines: "$(selectedServerName)"
+              UserName: "$(winrmUserName)"
+              UserPassword: "$(winrmPassword)"
+              InlineScript: |
+                $basePath = "$(ADR_Deployment_Path)"
+                $suffix   = "$(AdrFolderSuffix)"
+
+                if ([string]::IsNullOrWhiteSpace($suffix)) {
+                  $destination = $basePath
+                }
+                else {
+                  $destination = Join-Path $basePath $suffix
+                }
+
+                $tempFolder = 'C:\Temp\AutoDataRefresh'
+                $zipPath = Join-Path $tempFolder 'Boots.MasterData.Application.AutoDataRefresh.zip'
+
+                Write-Host "Checking for zip file at: $zipPath"
+                if (-not (Test-Path $zipPath)) {
+                  Write-Host "ERROR: Zip file not found at $zipPath"
+                  if (Test-Path $tempFolder) {
+                    Write-Host "Temp folder contents:"
+                    Get-ChildItem -Path $tempFolder -Recurse | ForEach-Object { Write-Host "  - $($_.FullName)" }
+                  }
+                  throw "Artifact zip not found at $zipPath"
+                }
+                Write-Host "Zip file found successfully at $zipPath"
+
+                if (-not (Test-Path $destination)) {
+                  Write-Host "Creating destination folder $destination"
+                  New-Item -ItemType Directory -Path $destination -Force | Out-Null
+                } else {
+                  Write-Host "Clearing existing contents in $destination"
+                  Get-ChildItem -Path $destination -Recurse -Force | Remove-Item -Recurse -Force
+                }
+
+                Write-Host "Extracting $zipPath to $destination"
+                Expand-Archive -LiteralPath $zipPath -DestinationPath $destination -Force
+                Write-Host "Extraction completed successfully"
+              NewPsSessionOptionArguments: >
+                -SkipCACheck
+                -SkipCNCheck
+                -SkipRevocationCheck
+                -IdleTimeout 7200000
+                -OperationTimeout 0
+                -OutputBufferingMode Block
