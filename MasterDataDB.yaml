@@ -107,8 +107,24 @@ resources:
       source: 'MasterData.DB-CI'
 
 stages:
+  - stage: ApprovalGate
+    displayName: 'Approval Gate'
+    condition: or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production'))
+    jobs:
+      - job: AwaitApproval
+        displayName: 'Await Manual Approval'
+        pool: server
+        steps:
+          - task: ManualValidation@0
+            inputs:
+              instructions: 'Approve to continue deployment.'
+              onTimeout: 'reject'
+            timeoutInMinutes: 1440
+
   - stage: Initialize
     displayName: 'Initialize and Select Targets'
+    dependsOn: ApprovalGate
+    condition: and(in(dependencies.ApprovalGate.result, 'Succeeded', 'Skipped'), not(canceled()))
     jobs:
       - job: Initialize_Env
         displayName: 'Initialize'
@@ -128,8 +144,10 @@ stages:
 
   - stage: AcquireArtifacts
     displayName: 'Acquire and Extract Artifacts'
-    dependsOn: Initialize
-    condition: succeeded()
+    dependsOn:
+      - ApprovalGate
+      - Initialize
+    condition: and(in(dependencies.ApprovalGate.result, 'Succeeded', 'Skipped'), not(canceled()), in(dependencies.Initialize.result, 'Succeeded', 'SucceededWithIssues'))
     variables:
       # Load variable groups at stage level
       - ${{ if eq(parameters.dbSlot, 'Dev') }}:
@@ -196,8 +214,10 @@ stages:
 
   - stage: ChoosePrimaryNode
     displayName: 'Choose Primary Node (AlwaysOn Only)'
-    dependsOn: AcquireArtifacts
-    condition: succeeded()
+    dependsOn:
+      - ApprovalGate
+      - AcquireArtifacts
+    condition: and(in(dependencies.ApprovalGate.result, 'Succeeded', 'Skipped'), not(canceled()), in(dependencies.AcquireArtifacts.result, 'Succeeded', 'SucceededWithIssues'))
     variables:
       - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
           - group: Pre-Prod_DBDeploy
@@ -375,9 +395,10 @@ stages:
   - stage: BackupDatabases
     displayName: 'Backup Databases (AlwaysOn Only)'
     dependsOn:
+      - ApprovalGate
       - AcquireArtifacts
       - ChoosePrimaryNode
-    condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
+    condition: and(or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')), in(dependencies.ApprovalGate.result, 'Succeeded', 'Skipped'), not(canceled()), in(dependencies.AcquireArtifacts.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.ChoosePrimaryNode.result, 'Succeeded', 'SucceededWithIssues'))
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
@@ -575,9 +596,10 @@ stages:
   - stage: DisableAlwaysOn
     displayName: 'Disable AlwaysOn (AlwaysOn Only)'
     dependsOn:
+      - ApprovalGate
       - BackupDatabases
       - ChoosePrimaryNode
-    condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
+    condition: and(or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')), in(dependencies.ApprovalGate.result, 'Succeeded', 'Skipped'), not(canceled()), in(dependencies.BackupDatabases.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.ChoosePrimaryNode.result, 'Succeeded', 'SucceededWithIssues'))
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
@@ -664,9 +686,10 @@ stages:
   - stage: RestoreProductionBackups
     displayName: 'Restore Production Backups (AlwaysOn Only)'
     dependsOn:
+      - ApprovalGate
       - DisableAlwaysOn
       - ChoosePrimaryNode
-    condition: and(ne('${{ parameters.dbSlot }}', 'Production'), in(dependencies.DisableAlwaysOn.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.ChoosePrimaryNode.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
+    condition: and(ne('${{ parameters.dbSlot }}', 'Production'), in(dependencies.ApprovalGate.result, 'Succeeded', 'Skipped'), not(canceled()), in(dependencies.DisableAlwaysOn.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.ChoosePrimaryNode.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
@@ -955,9 +978,10 @@ stages:
   - stage: RemoveFromSecondaryNodes
     displayName: 'Remove Databases from Secondary Nodes (AlwaysOn Only)'
     dependsOn:
+      - ApprovalGate
       - RestoreProductionBackups
       - ChoosePrimaryNode
-    condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
+    condition: and(or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')), in(dependencies.ApprovalGate.result, 'Succeeded', 'Skipped'), not(canceled()), in(dependencies.RestoreProductionBackups.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.ChoosePrimaryNode.result, 'Succeeded', 'SucceededWithIssues'))
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
@@ -1039,10 +1063,11 @@ stages:
   - stage: DeployDACPACs
     displayName: 'Deploy DACPACs'
     dependsOn: 
+      - ApprovalGate
       - BackupDatabases
       - RemoveFromSecondaryNodes
       - ChoosePrimaryNode
-    condition: and(in(dependencies.BackupDatabases.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.RemoveFromSecondaryNodes.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.ChoosePrimaryNode.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
+    condition: and(in(dependencies.ApprovalGate.result, 'Succeeded', 'Skipped'), not(canceled()), in(dependencies.BackupDatabases.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.RemoveFromSecondaryNodes.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.ChoosePrimaryNode.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
@@ -1313,9 +1338,10 @@ stages:
   - stage: CleanupAlwaysOnBackups
     displayName: 'Cleanup AlwaysOn Backups (AlwaysOn Only)'
     dependsOn:
+      - ApprovalGate
       - DeployDACPACs
       - ChoosePrimaryNode
-    condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
+    condition: and(or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')), in(dependencies.ApprovalGate.result, 'Succeeded', 'Skipped'), not(canceled()), in(dependencies.DeployDACPACs.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.ChoosePrimaryNode.result, 'Succeeded', 'SucceededWithIssues'))
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
@@ -1365,9 +1391,10 @@ stages:
   - stage: EnableAlwaysOn
     displayName: 'Enable AlwaysOn (AlwaysOn Only)'
     dependsOn:
+      - ApprovalGate
       - CleanupAlwaysOnBackups
       - ChoosePrimaryNode
-    condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
+    condition: and(or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')), in(dependencies.ApprovalGate.result, 'Succeeded', 'Skipped'), not(canceled()), in(dependencies.CleanupAlwaysOnBackups.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.ChoosePrimaryNode.result, 'Succeeded', 'SucceededWithIssues'))
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
@@ -1456,9 +1483,10 @@ stages:
   - stage: BackupUpgradedDatabases
     displayName: 'Backup Upgraded Databases (AlwaysOn Only)'
     dependsOn:
+      - ApprovalGate
       - EnableAlwaysOn
       - ChoosePrimaryNode
-    condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
+    condition: and(or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')), in(dependencies.ApprovalGate.result, 'Succeeded', 'Skipped'), not(canceled()), in(dependencies.EnableAlwaysOn.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.ChoosePrimaryNode.result, 'Succeeded', 'SucceededWithIssues'))
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
@@ -1550,9 +1578,10 @@ stages:
   - stage: RestoreOnSecondaryNodes
     displayName: 'Restore on Secondary Nodes (AlwaysOn Only)'
     dependsOn:
+      - ApprovalGate
       - BackupUpgradedDatabases
       - ChoosePrimaryNode
-    condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
+    condition: and(or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')), in(dependencies.ApprovalGate.result, 'Succeeded', 'Skipped'), not(canceled()), in(dependencies.BackupUpgradedDatabases.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.ChoosePrimaryNode.result, 'Succeeded', 'SucceededWithIssues'))
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
@@ -1643,9 +1672,10 @@ stages:
   - stage: BackupTransactionLogs
     displayName: 'Backup Transaction Logs (AlwaysOn Only)'
     dependsOn:
+      - ApprovalGate
       - RestoreOnSecondaryNodes
       - ChoosePrimaryNode
-    condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
+    condition: and(or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')), in(dependencies.ApprovalGate.result, 'Succeeded', 'Skipped'), not(canceled()), in(dependencies.RestoreOnSecondaryNodes.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.ChoosePrimaryNode.result, 'Succeeded', 'SucceededWithIssues'))
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
@@ -1736,9 +1766,10 @@ stages:
   - stage: RestoreTransactionLogs
     displayName: 'Restore Transaction Logs (AlwaysOn Only)'
     dependsOn:
+      - ApprovalGate
       - BackupTransactionLogs
       - ChoosePrimaryNode
-    condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
+    condition: and(or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')), in(dependencies.ApprovalGate.result, 'Succeeded', 'Skipped'), not(canceled()), in(dependencies.BackupTransactionLogs.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.ChoosePrimaryNode.result, 'Succeeded', 'SucceededWithIssues'))
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
@@ -1829,9 +1860,10 @@ stages:
   - stage: EnableHADRReplication
     displayName: 'Enable HADR Replication (AlwaysOn Only)'
     dependsOn:
+      - ApprovalGate
       - RestoreTransactionLogs
       - ChoosePrimaryNode
-    condition: and(succeeded(), or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')))
+    condition: and(or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production')), in(dependencies.ApprovalGate.result, 'Succeeded', 'Skipped'), not(canceled()), in(dependencies.RestoreTransactionLogs.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.ChoosePrimaryNode.result, 'Succeeded', 'SucceededWithIssues'))
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
@@ -1941,10 +1973,11 @@ stages:
   - stage: PostDeploymentConfiguration
     displayName: 'Post-Deployment Configuration'
     dependsOn: 
+      - ApprovalGate
       - DeployDACPACs
       - EnableHADRReplication
       - ChoosePrimaryNode
-    condition: and(in(dependencies.DeployDACPACs.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.EnableHADRReplication.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.ChoosePrimaryNode.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
+    condition: and(in(dependencies.ApprovalGate.result, 'Succeeded', 'Skipped'), not(canceled()), in(dependencies.DeployDACPACs.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.EnableHADRReplication.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.ChoosePrimaryNode.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
     variables:
       - name: ChosenMachine
         value: $[ stageDependencies.ChoosePrimaryNode.SelectPrimaryNode.outputs['SetPrimaryNode.ChosenMachine'] ]
