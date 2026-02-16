@@ -36,6 +36,14 @@ variables:
   - name: Database_MasterData_PublishArchive_DBName
     value: ''
 
+  # Target environment for approval gate
+  - ${{ if eq(parameters.dbSlot, 'Pre-Prod') }}:
+      - name: targetEnvironment
+        value: 'PRE-PROD'
+  - ${{ if eq(parameters.dbSlot, 'Production') }}:
+      - name: targetEnvironment
+        value: 'PROD'
+
   # Server catalog and paths
   - group: vg-shared-servers
   - group: vg-shared-paths
@@ -111,15 +119,20 @@ stages:
     displayName: 'Approval Gate'
     condition: or(eq('${{ parameters.dbSlot }}', 'Pre-Prod'), eq('${{ parameters.dbSlot }}', 'Production'))
     jobs:
-      - job: AwaitApproval
-        displayName: 'Await Manual Approval'
-        pool: server
-        steps:
-          - task: ManualValidation@0
-            inputs:
-              instructions: 'Approve to continue deployment.'
-              onTimeout: 'reject'
-            timeoutInMinutes: 1440
+      - deployment: AwaitApproval
+        displayName: 'Await Environment Approval'
+        environment: $(targetEnvironment)
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: none
+                - task: PowerShell@2
+                  displayName: 'Approval received'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      Write-Host "Approval received for environment: $(targetEnvironment)"
 
   - stage: Initialize
     displayName: 'Initialize and Select Targets'
