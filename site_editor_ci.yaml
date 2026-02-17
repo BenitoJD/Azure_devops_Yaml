@@ -1,0 +1,58 @@
+trigger:
+- MDVersionUpgrade/Lonestar
+ 
+pool:
+  name: ccoe-nprod-windows-mdp-01
+ 
+variables:
+  solution: '**/*.sln'
+  buildPlatform: 'Any CPU'
+  buildConfiguration: 'Release'
+ 
+steps:
+- task: NuGetToolInstaller@1
+ 
+ 
+- task: NuGetCommand@2
+  inputs:
+    restoreSolution: '$(solution)'
+ 
+- task: VSBuild@1
+  inputs:
+    solution: '$(solution)'
+    msbuildArgs: '/t:Rebuild /p:DeployOnBuild=True;DeployDefaultTarget=WebPublish;WebPublishMethod=FileSystem;DeleteExistingFiles=True;publishUrl=$(Build.ArtifactStagingDirectory)\Masterdata.SiteEditor'
+    platform: '$(buildPlatform)'
+    configuration: '$(buildConfiguration)'
+ 
+- task: VisualStudioTestPlatformInstaller@1
+  inputs:
+    packageFeedSelector: 'nugetOrg'
+ 
+ 
+- task: ArchiveFiles@2
+  displayName: 'Archive MasterData.SiteEditor'
+  inputs:
+    rootFolderOrFile: '$(Build.SourcesDirectory)/bin/Release'
+    includeRootFolder: false
+    archiveType: 'zip'
+    archiveFile: '$(Build.ArtifactStagingDirectory)/MasterData.SiteEditor.zip'
+    replaceExistingArchive: true
+ 
+- publish: '$(Build.ArtifactStagingDirectory)/MasterData.SiteEditor.zip'
+  displayName: 'Publish MasterData.SiteEditor.zip'
+  artifact: SiteEditor
+
+- task: ArchiveFiles@2
+  displayName: 'Archive MasterData.SiteEditor.UpdateTool'
+  inputs:
+    rootFolderOrFile: '$(Build.SourcesDirectory)/MDSiteEditorUpdateTool/bin/Release'
+    includeRootFolder: false
+    archiveType: 'zip'
+    archiveFile: '$(Build.ArtifactStagingDirectory)/MasterData.SiteEditor.UpdateTool.zip'
+    replaceExistingArchive: true
+ 
+- publish: '$(Build.ArtifactStagingDirectory)/MasterData.SiteEditor.UpdateTool.zip'
+  displayName: 'Publish MasterData.SiteEditor.UpdateTool.zip'
+  artifact: SiteEditorUpdateTool
+
+
