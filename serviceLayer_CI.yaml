@@ -1,17 +1,44 @@
 trigger: none
 
+# Runtime parameters for version numbers (same pattern as main_CI)
+parameters:
+  - name: AssemblyVersionNumber
+    displayName: 'Assembly Version Number (for breaking changes)'
+    type: string
+    default: '1'
+  - name: BuildVersionNumber
+    displayName: 'Build Version Number (for new features)'
+    type: string
+    default: '0'
+
 # Specify the build environment
 pool:
   name: ccoe-nprod-windows-mdp-01
 
 # Define pipeline variables
 variables:
+  - group: Assembly_Build_Version
   solution: 'MasterData.ServiceLayer/MasterData.ServiceLayer.sln'
   buildPlatform: 'Any CPU'
   buildConfiguration: 'Release'
+  versionNumber: '${{ parameters.AssemblyVersionNumber }}.${{ parameters.BuildVersionNumber }}.$(Build.BuildId)'
+
+# Set build number format
+name: '${{ parameters.AssemblyVersionNumber }}.${{ parameters.BuildVersionNumber }}-$(Build.BuildId)'
 
 # Pipeline steps
 steps:
+  # Step -1: Display version information
+  - task: PowerShell@2
+    displayName: 'Display Build Version'
+    inputs:
+      targetType: 'inline'
+      script: |
+        Write-Host "Building version: $(versionNumber)"
+        Write-Host "Build Number: $(Build.BuildNumber)"
+        Write-Host "Assembly Version: ${{ parameters.AssemblyVersionNumber }}"
+        Write-Host "Build Version: ${{ parameters.BuildVersionNumber }}"
+
   # Step 0: Checkout the repository
   - checkout: self
     displayName: 'Checkout Repository'
@@ -71,6 +98,7 @@ steps:
     displayName: 'Build MasterData.ServiceLayer Solution'
     inputs:
       solution: '$(solution)'
+      msbuildArgs: '/p:Version=$(versionNumber) /p:AssemblyVersion=$(versionNumber) /p:FileVersion=$(versionNumber)'
       platform: '$(buildPlatform)'
       configuration: '$(buildConfiguration)'
 
