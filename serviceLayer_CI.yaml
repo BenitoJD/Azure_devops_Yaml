@@ -24,7 +24,7 @@ variables:
     value: 'Any CPU'
   - name: buildConfiguration
     value: 'Release'
-  - name: versionNumber
+  - name: packageVersion
     value: '${{ parameters.AssemblyVersionNumber }}.${{ parameters.BuildVersionNumber }}.$(Build.BuildId)'
 
 # Set build number format
@@ -34,14 +34,20 @@ name: '${{ parameters.AssemblyVersionNumber }}.${{ parameters.BuildVersionNumber
 steps:
   # Step -1: Display version information
   - task: PowerShell@2
-    displayName: 'Display Build Version'
+    displayName: 'Compute Build Version'
     inputs:
       targetType: 'inline'
       script: |
-        Write-Host "Building version: $(versionNumber)"
+        $major = "${{ parameters.AssemblyVersionNumber }}"
+        $minor = "${{ parameters.BuildVersionNumber }}"
+        $buildId = [int]$(Build.BuildId)
+        $assemblyBuild = $buildId % 65535
+        $assemblyVersion = "$major.$minor.$assemblyBuild.0"
+
+        Write-Host "##vso[task.setvariable variable=assemblyVersion]$assemblyVersion"
+        Write-Host "Package Version: $(packageVersion)"
+        Write-Host "Assembly Version: $assemblyVersion"
         Write-Host "Build Number: $(Build.BuildNumber)"
-        Write-Host "Assembly Version: ${{ parameters.AssemblyVersionNumber }}"
-        Write-Host "Build Version: ${{ parameters.BuildVersionNumber }}"
 
   # Step 0: Checkout the repository
   - checkout: self
@@ -102,7 +108,7 @@ steps:
     displayName: 'Build MasterData.ServiceLayer Solution'
     inputs:
       solution: '$(solution)'
-      msbuildArgs: '/p:Version=$(versionNumber) /p:AssemblyVersion=$(versionNumber) /p:FileVersion=$(versionNumber)'
+      msbuildArgs: '/p:Version=$(packageVersion) /p:AssemblyVersion=$(assemblyVersion) /p:FileVersion=$(assemblyVersion)'
       platform: '$(buildPlatform)'
       configuration: '$(buildConfiguration)'
 
