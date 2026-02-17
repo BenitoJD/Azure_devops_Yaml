@@ -1,0 +1,84 @@
+trigger:
+- none
+ 
+pool:
+  name: ccoe-nprod-windows-mdp-01
+ 
+variables:
+  solution: '**/*.sln'
+  buildPlatform: 'Any CPU'
+  buildConfiguration: 'Release'
+ 
+steps:
+- task: NuGetToolInstaller@1
+
+- task: NuGetCommand@2
+  inputs:
+    restoreSolution: '$(solution)'
+ 
+- task: VSBuild@1
+  inputs:
+    solution: '$(solution)'
+    msbuildArgs: '/p:DeployOnBuild=false'
+    platform: '$(buildPlatform)'
+    configuration: '$(buildConfiguration)'
+ 
+- task: VisualStudioTestPlatformInstaller@1
+  inputs:
+    packageFeedSelector: 'nugetOrg'
+
+
+
+- task: ArchiveFiles@2
+  displayName: 'Archive MasterData.DB.InitialStagingDB'
+  inputs:
+    rootFolderOrFile: '$(Build.SourcesDirectory)/Boots.MasterData.DB.InitialStagingDB/bin/Release'
+    includeRootFolder: false
+    archiveType: 'zip'
+    archiveFile: '$(Build.ArtifactStagingDirectory)/MasterData.DB.InitialStagingDB.zip'
+    replaceExistingArchive: true
+
+- task: ArchiveFiles@2
+  displayName: 'Archive MasterData.DB.ManualUpgrade'
+  inputs:
+    rootFolderOrFile: '$(Build.SourcesDirectory)/Boots.MasterData.DB.ManualUpgrade/bin/Release'
+    includeRootFolder: false
+    archiveType: 'zip'
+    archiveFile: '$(Build.ArtifactStagingDirectory)/MasterData.DB.ManualUpgrade.zip'
+    replaceExistingArchive: true
+
+- task: ArchiveFiles@2
+  displayName: 'Archive MasterData.DB.MasterDataCDC'
+  inputs:
+    rootFolderOrFile: '$(Build.SourcesDirectory)/Boots.MasterData.DB.MasterDataCDC/bin/Release'
+    includeRootFolder: false
+    archiveType: 'zip'
+    archiveFile: '$(Build.ArtifactStagingDirectory)/MasterData.DB.MasterDataCDC.zip'
+    replaceExistingArchive: true
+
+- task: ArchiveFiles@2
+  displayName: 'Archive MasterData.DB.MasterDataDB'
+  inputs:
+    rootFolderOrFile: '$(Build.SourcesDirectory)/Boots.MasterData.DB.MasterDataDB/bin/Release'
+    includeRootFolder: false
+    archiveType: 'zip'
+    archiveFile: '$(Build.ArtifactStagingDirectory)/MasterData.DB.MasterDataDB.zip'
+    replaceExistingArchive: true
+ 
+
+
+- publish: '$(Build.ArtifactStagingDirectory)/MasterData.DB.InitialStagingDB.zip'
+  displayName: 'Publish MasterData.DB.InitialStagingDB.zip'
+  artifact: MasterData.DB.InitialStagingDB
+
+- publish: '$(Build.ArtifactStagingDirectory)/MasterData.DB.ManualUpgrade.zip'
+  displayName: 'Publish MasterData.DB.ManualUpgrade.zip'
+  artifact: MasterData.DB.ManualUpgrade
+
+- publish: '$(Build.ArtifactStagingDirectory)/MasterData.DB.MasterDataCDC.zip'
+  displayName: 'Publish MasterData.DB.MasterDataCDC.zip'
+  artifact: MasterData.DB.MasterDataCDC
+
+- publish: '$(Build.ArtifactStagingDirectory)/MasterData.DB.MasterDataDB.zip'
+  displayName: 'Publish MasterData.DB.MasterDataDB.zip'
+  artifact: MasterData.DB.MasterDataDB
