@@ -31,14 +31,20 @@ name: '${{ parameters.AssemblyVersionNumber }}.${{ parameters.BuildVersionNumber
 
 steps:
 - task: PowerShell@2
-  displayName: 'Display Build Version'
+  displayName: 'Compute Build Version'
   inputs:
     targetType: 'inline'
     script: |
-      Write-Host "Building version: $(versionNumber)"
+      $major = "${{ parameters.AssemblyVersionNumber }}"
+      $minor = "${{ parameters.BuildVersionNumber }}"
+      $buildId = [int]$(Build.BuildId)
+      $assemblyBuild = $buildId % 65535
+      $assemblyVersion = "$major.$minor.$assemblyBuild.0"
+
+      Write-Host "##vso[task.setvariable variable=assemblyVersion]$assemblyVersion"
+      Write-Host "Package Version: $(versionNumber)"
+      Write-Host "Assembly Version: $assemblyVersion"
       Write-Host "Build Number: $(Build.BuildNumber)"
-      Write-Host "Assembly Version: ${{ parameters.AssemblyVersionNumber }}"
-      Write-Host "Build Version: ${{ parameters.BuildVersionNumber }}"
 
 - task: NuGetToolInstaller@1
 
@@ -49,7 +55,7 @@ steps:
 - task: VSBuild@1
   inputs:
     solution: '$(solution)'
-    msbuildArgs: '/p:DeployOnBuild=false /p:Version=$(versionNumber) /p:AssemblyVersion=$(versionNumber) /p:FileVersion=$(versionNumber)'
+    msbuildArgs: '/p:DeployOnBuild=false /p:Version=$(versionNumber) /p:AssemblyVersion=$(assemblyVersion) /p:FileVersion=$(assemblyVersion)'
     platform: '$(buildPlatform)'
     configuration: '$(buildConfiguration)'
  

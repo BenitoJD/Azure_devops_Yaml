@@ -31,14 +31,20 @@ name: '${{ parameters.AssemblyVersionNumber }}.${{ parameters.BuildVersionNumber
  
 steps:
 - task: PowerShell@2
-  displayName: 'Display Build Version'
+  displayName: 'Compute Build Version'
   inputs:
     targetType: 'inline'
     script: |
-      Write-Host "Building version: $(versionNumber)"
+      $major = "${{ parameters.AssemblyVersionNumber }}"
+      $minor = "${{ parameters.BuildVersionNumber }}"
+      $buildId = [int]$(Build.BuildId)
+      $assemblyBuild = $buildId % 65535
+      $assemblyVersion = "$major.$minor.$assemblyBuild.0"
+
+      Write-Host "##vso[task.setvariable variable=assemblyVersion]$assemblyVersion"
+      Write-Host "Package Version: $(versionNumber)"
+      Write-Host "Assembly Version: $assemblyVersion"
       Write-Host "Build Number: $(Build.BuildNumber)"
-      Write-Host "Assembly Version: ${{ parameters.AssemblyVersionNumber }}"
-      Write-Host "Build Version: ${{ parameters.BuildVersionNumber }}"
 
 - task: NuGetToolInstaller@1
  
@@ -50,7 +56,7 @@ steps:
 - task: VSBuild@1
   inputs:
     solution: '$(solution)'
-    msbuildArgs: '/t:Rebuild /p:DeployOnBuild=True;DeployDefaultTarget=WebPublish;WebPublishMethod=FileSystem;DeleteExistingFiles=True;publishUrl=$(Build.ArtifactStagingDirectory)\Masterdata.SiteEditor /p:Version=$(versionNumber) /p:AssemblyVersion=$(versionNumber) /p:FileVersion=$(versionNumber)'
+    msbuildArgs: '/t:Rebuild /p:DeployOnBuild=True;DeployDefaultTarget=WebPublish;WebPublishMethod=FileSystem;DeleteExistingFiles=True;publishUrl=$(Build.ArtifactStagingDirectory)\Masterdata.SiteEditor /p:Version=$(versionNumber) /p:AssemblyVersion=$(assemblyVersion) /p:FileVersion=$(assemblyVersion)'
     platform: '$(buildPlatform)'
     configuration: '$(buildConfiguration)'
  
@@ -84,4 +90,3 @@ steps:
 - publish: '$(Build.ArtifactStagingDirectory)/MasterData.SiteEditor.UpdateTool.zip'
   displayName: 'Publish MasterData.SiteEditor.UpdateTool.zip'
   artifact: SiteEditorUpdateTool
-
