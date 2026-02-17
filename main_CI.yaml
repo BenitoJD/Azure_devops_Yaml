@@ -1,0 +1,136 @@
+# Manual trigger only - no automatic branch triggers
+trigger: none
+
+# Runtime parameters for version numbers
+parameters:
+  - name: AssemblyVersionNumber
+    displayName: 'Assembly Version Number (for breaking changes)'
+    type: string
+    default: '1'
+  - name: BuildVersionNumber
+    displayName: 'Build Version Number (for new features)'
+    type: string
+    default: '0'
+
+# Specify the build environment
+pool:
+  name: ccoe-nprod-windows-mdp-01
+
+# Define pipeline variables
+variables:
+  - group: Assembly_Build_Version
+  - name: solution
+    value: '**/*.sln'              # Path to the solution file(s)
+  - name: buildPlatform
+    value: 'Any CPU'          # Build platform configuration
+  - name: buildConfiguration
+    value: 'Release'     # Build configuration (e.g., Debug/Release)
+  - name: webProjectPath
+    value: 'Presentation Layer\Boots.MasterData.Web\Boots.MasterData.Web.csproj'
+  - name: webProjectFolder
+    value: 'Presentation Layer\Boots.MasterData.Web'
+  - name: versionNumber
+    value: '${{ parameters.AssemblyVersionNumber }}.${{ parameters.BuildVersionNumber }}.$(Build.BuildId)'
+
+# Set build number format
+name: '${{ parameters.AssemblyVersionNumber }}.${{ parameters.BuildVersionNumber }}-$(Build.BuildId)'
+
+# Pipeline steps
+steps:
+  # Step 1: Display version information
+  - task: PowerShell@2
+    displayName: 'Display Build Version'
+    inputs:
+      targetType: 'inline'
+      script: |
+        Write-Host "Building version: $(versionNumber)"
+        Write-Host "Build Number: $(Build.BuildNumber)"
+        Write-Host "Assembly Version: ${{ parameters.AssemblyVersionNumber }}"
+        Write-Host "Build Version: ${{ parameters.BuildVersionNumber }}"
+
+  # Step 2: Install NuGet tool
+  - task: NuGetToolInstaller@1
+    displayName: 'Install NuGet Tool'
+
+  # Step 3: Authenticate to NuGet feeds
+  - task: NuGetAuthenticate@1
+    displayName: 'Authenticate NuGet Feeds'
+
+  # Step 4: Create nuget.config for private and public feeds
+  - task: PowerShell@2
+    displayName: 'Configure NuGet Feeds'
+    inputs:
+      targetType: 'inline'
+      script: |
+        $nugetConfig = @"
+        <?xml version="1.0" encoding="utf-8"?>
+        <configuration>
+          <packageSources>
+            <clear />
+            <add key="Boots.Common" value="https://pkgs.dev.azure.com/BootsCCoE/Masterdata/_packaging/Boots.Common/nuget/v3/index.json" />
+            <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+          </packageSources>
+          <packageSourceCredentials>
+            <Boots.Common>
+              <add key="Username" value="PAT" />
+              <add key="ClearTextPassword" value="$(System.AccessToken)" />
+            </Boots.Common>
+          </packageSourceCredentials>
+        </configuration>
+        "@
+        Set-Content -Path "$(Build.SourcesDirectory)\nuget.config" -Value $nugetConfig
+        Write-Host "nuget.config created successfully"
+        Get-Content -Path "$(Build.SourcesDirectory)\nuget.config"
+
+  # Step 5: Restore NuGet packages
+  - task: NuGetCommand@2
+    displayName: 'Restore NuGet Packages'
+    inputs:
+      command: 'restore'
+      restoreSolution: '$(solution)'
+      feedsToUse: 'config'
+      nugetConfigPath: '$(Build.SourcesDirectory)\nuget.config'
+
+  # Step 6: Build the entire solution first
+  - task: VSBuild@1
+    displayName: 'Build Solution'
+    inputs:
+      solution: '$(solution)'
+      platform: '$(buildPlatform)'
+      configuration: '$(buildConfiguration)'
+      msbuildArgs: '/p:Version=$(versionNumber) /p:AssemblyVersion=$(versionNumber) /p:FileVersion=$(versionNumber)'
+
+  # Step 7: Publish web application using built binaries
+  - task: VSBuild@1
+    displayName: 'Publish Web Application'
+    inputs:
+      solution: '$(webProjectPath)'
+      msbuildArgs: '/t:WebPublish /p:WebPublishMethod=FileSystem /p:publishUrl=$(Build.ArtifactStagingDirectory)\WebApp /p:DeleteExistingFiles=True /p:SkipInvalidConfigurations=true /p:Version=$(versionNumber)'
+      platform: '$(buildPlatform)'
+      configuration: '$(buildConfiguration)'
+
+  # Step 8: Create deployment package
+  - task: ArchiveFiles@2
+    displayName: 'Create Deployment Package'
+    inputs:
+      rootFolderOrFile: '$(Build.ArtifactStagingDirectory)\WebApp'
+      includeRootFolder: false
+      archiveType: 'zip'
+      archiveFile: '$(Build.ArtifactStagingDirectory)\Boots.MasterData.Web.$(versionNumber).zip'
+      replaceExistingArchive: true
+
+  # Step 9: Clean up temporary folder
+  - task: PowerShell@2
+    displayName: 'Clean Up Temporary Files'
+    inputs:
+      targetType: 'inline'
+      script: |
+        Remove-Item -Path "$(Build.ArtifactStagingDirectory)\WebApp" -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Host "Cleaned up temporary publish folder"
+
+  # Step 10: Publish build artifacts
+  - task: PublishBuildArtifacts@1
+    displayName: 'Publish Build Artifacts'
+    inputs:
+      pathToPublish: '$(Build.ArtifactStagingDirectory)'
+      artifactName: 'drop'

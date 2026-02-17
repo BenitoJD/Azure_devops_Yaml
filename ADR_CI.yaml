@@ -1,0 +1,114 @@
+trigger: none
+
+# Runtime parameters for version numbers
+parameters:
+  - name: AssemblyVersionNumber
+    displayName: 'Assembly Version Number (for breaking changes)'
+    type: string
+    default: '1'
+  - name: BuildVersionNumber
+    displayName: 'Build Version Number (for new features)'
+    type: string
+    default: '0'
+
+pool:
+  name: ccoe-nprod-windows-mdp-01
+
+variables:
+  - group: Assembly_Build_Version
+  - name: solution
+    value: '**/*.sln'
+  - name: buildPlatform
+    value: 'Any CPU'
+  - name: buildConfiguration
+    value: 'Release'
+  - name: versionNumber
+    value: '${{ parameters.AssemblyVersionNumber }}.${{ parameters.BuildVersionNumber }}.$(Build.BuildId)'
+
+# Set build number format
+name: '${{ parameters.AssemblyVersionNumber }}.${{ parameters.BuildVersionNumber }}-$(Build.BuildId)'
+
+steps:
+  # Step 0: Display version information
+  - task: PowerShell@2
+    displayName: 'Display Build Version'
+    inputs:
+      targetType: 'inline'
+      script: |
+        Write-Host "Building version: $(versionNumber)"
+        Write-Host "Build Number: $(Build.BuildNumber)"
+        Write-Host "Assembly Version: ${{ parameters.AssemblyVersionNumber }}"
+        Write-Host "Build Version: ${{ parameters.BuildVersionNumber }}"
+
+  # Step 1: Install NuGet tool
+  - task: NuGetToolInstaller@1
+    displayName: 'Install NuGet Tool'
+
+  # Step 2: Authenticate to NuGet feeds
+  - task: NuGetAuthenticate@1
+    displayName: 'Authenticate NuGet Feeds'
+
+  # Step 3: Create nuget.config for private and public feeds
+  - task: PowerShell@2
+    displayName: 'Configure NuGet Feeds'
+    inputs:
+      targetType: 'inline'
+      script: |
+        $nugetConfig = @"
+        <?xml version="1.0" encoding="utf-8"?>
+        <configuration>
+          <packageSources>
+            <clear />
+            <add key="Boots.Common" value="https://pkgs.dev.azure.com/BootsCCoE/Masterdata/_packaging/Boots.Common/nuget/v3/index.json" />
+            <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+          </packageSources>
+          <packageSourceCredentials>
+            <Boots.Common>
+              <add key="Username" value="PAT" />
+              <add key="ClearTextPassword" value="$(System.AccessToken)" />
+            </Boots.Common>
+          </packageSourceCredentials>
+        </configuration>
+        "@
+        Set-Content -Path "$(Build.SourcesDirectory)\nuget.config" -Value $nugetConfig
+        Write-Host "nuget.config created successfully"
+        Get-Content -Path "$(Build.SourcesDirectory)\nuget.config"
+
+  # Step 4: Restore NuGet packages
+  - task: NuGetCommand@2
+    displayName: 'Restore NuGet Packages'
+    inputs:
+      command: 'restore'
+      restoreSolution: '$(solution)'
+      feedsToUse: 'config'
+      nugetConfigPath: '$(Build.SourcesDirectory)\nuget.config'
+
+  # Step 5: Build the solution
+  - task: VSBuild@1
+    displayName: 'Build Solution'
+    inputs:
+      solution: '$(solution)'
+      msbuildArgs: '/t:Rebuild /p:Version=$(versionNumber) /p:AssemblyVersion=$(versionNumber) /p:FileVersion=$(versionNumber)'
+      platform: '$(buildPlatform)'
+      configuration: '$(buildConfiguration)'
+ 
+  # Step 6: Install Visual Studio Test Platform
+  - task: VisualStudioTestPlatformInstaller@1
+    displayName: 'Install VS Test Platform'
+    inputs:
+      packageFeedSelector: 'nugetOrg'
+ 
+  # Step 7: Archive AutoDataRefresh
+  - task: ArchiveFiles@2
+    displayName: 'Archive AutoDataRefresh'
+    inputs:
+      rootFolderOrFile: '$(Build.SourcesDirectory)/Application Layer/Boots.MasterData.Application.AutoDataRefresh/bin/Release'
+      includeRootFolder: false
+      archiveType: 'zip'
+      archiveFile: '$(Build.ArtifactStagingDirectory)/Boots.MasterData.Application.AutoDataRefresh.zip'
+      replaceExistingArchive: true
+ 
+  # Step 8: Publish AutoDataRefresh artifact
+  - publish: '$(Build.ArtifactStagingDirectory)/Boots.MasterData.Application.AutoDataRefresh.zip'
+    displayName: 'Publish AutoDataRefresh.zip'
+    artifact: AutoDataRefresh
