@@ -1,15 +1,45 @@
 trigger:
 - MDVersionUpgrade/Lonestar
+
+# Runtime parameters for version numbers
+parameters:
+  - name: AssemblyVersionNumber
+    displayName: 'Assembly Version Number (for breaking changes)'
+    type: string
+    default: '1'
+  - name: BuildVersionNumber
+    displayName: 'Build Version Number (for new features)'
+    type: string
+    default: '0'
  
 pool:
   name: ccoe-nprod-windows-mdp-01
  
 variables:
-  solution: '**/*.sln'
-  buildPlatform: 'Any CPU'
-  buildConfiguration: 'Release'
+  - group: Assembly_Build_Version
+  - name: solution
+    value: '**/*.sln'
+  - name: buildPlatform
+    value: 'Any CPU'
+  - name: buildConfiguration
+    value: 'Release'
+  - name: versionNumber
+    value: '${{ parameters.AssemblyVersionNumber }}.${{ parameters.BuildVersionNumber }}.$(Build.BuildId)'
+
+# Set build number format
+name: '${{ parameters.AssemblyVersionNumber }}.${{ parameters.BuildVersionNumber }}-$(Build.BuildId)'
  
 steps:
+- task: PowerShell@2
+  displayName: 'Display Build Version'
+  inputs:
+    targetType: 'inline'
+    script: |
+      Write-Host "Building version: $(versionNumber)"
+      Write-Host "Build Number: $(Build.BuildNumber)"
+      Write-Host "Assembly Version: ${{ parameters.AssemblyVersionNumber }}"
+      Write-Host "Build Version: ${{ parameters.BuildVersionNumber }}"
+
 - task: NuGetToolInstaller@1
  
  
@@ -20,7 +50,7 @@ steps:
 - task: VSBuild@1
   inputs:
     solution: '$(solution)'
-    msbuildArgs: '/t:Rebuild /p:DeployOnBuild=True;DeployDefaultTarget=WebPublish;WebPublishMethod=FileSystem;DeleteExistingFiles=True;publishUrl=$(Build.ArtifactStagingDirectory)\Masterdata.SiteEditor'
+    msbuildArgs: '/t:Rebuild /p:DeployOnBuild=True;DeployDefaultTarget=WebPublish;WebPublishMethod=FileSystem;DeleteExistingFiles=True;publishUrl=$(Build.ArtifactStagingDirectory)\Masterdata.SiteEditor /p:Version=$(versionNumber) /p:AssemblyVersion=$(versionNumber) /p:FileVersion=$(versionNumber)'
     platform: '$(buildPlatform)'
     configuration: '$(buildConfiguration)'
  
@@ -54,5 +84,4 @@ steps:
 - publish: '$(Build.ArtifactStagingDirectory)/MasterData.SiteEditor.UpdateTool.zip'
   displayName: 'Publish MasterData.SiteEditor.UpdateTool.zip'
   artifact: SiteEditorUpdateTool
-
 
