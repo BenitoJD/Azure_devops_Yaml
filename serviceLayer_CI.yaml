@@ -1,0 +1,93 @@
+trigger: none
+
+# Specify the build environment
+pool:
+  name: ccoe-nprod-windows-mdp-01
+
+# Define pipeline variables
+variables:
+  solution: 'MasterData.ServiceLayer/MasterData.ServiceLayer.sln'
+  buildPlatform: 'Any CPU'
+  buildConfiguration: 'Release'
+
+# Pipeline steps
+steps:
+  # Step 0: Checkout the repository
+  - checkout: self
+    displayName: 'Checkout Repository'
+
+ # Step 1: Install.NET 10
+  - task: UseDotNet@2
+    displayName: Install .NET 10.0.x
+    inputs:
+      packageType: 'sdk'
+      version: '10.0.x'
+
+  # Step 2: Install NuGet tool
+  - task: NuGetToolInstaller@1
+    displayName: 'Install NuGet Tool'
+
+  # Step 3: Authenticate to NuGet feeds
+  - task: NuGetAuthenticate@1
+    displayName: 'Authenticate NuGet Feeds'
+
+  # Step 4: Create nuget.config for private and public feeds
+  - task: PowerShell@2
+    displayName: 'Configure NuGet Feeds'
+    inputs:
+      targetType: 'inline'
+      script: |
+        $nugetConfig = @"
+        <?xml version="1.0" encoding="utf-8"?>
+        <configuration>
+          <packageSources>
+            <clear />
+            <add key="Boots.Common" value="https://pkgs.dev.azure.com/BootsCCoE/Masterdata/_packaging/Boots.Common/nuget/v3/index.json" />
+            <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+          </packageSources>
+          <packageSourceCredentials>
+            <Boots.Common>
+              <add key="Username" value="PAT" />
+              <add key="ClearTextPassword" value="$(System.AccessToken)" />
+            </Boots.Common>
+          </packageSourceCredentials>
+        </configuration>
+        "@
+        Set-Content -Path "$(Build.SourcesDirectory)\nuget.config" -Value $nugetConfig
+        Write-Host "nuget.config created successfully"
+        Get-Content -Path "$(Build.SourcesDirectory)\nuget.config"
+
+  # Step 5: Restore NuGet packages for MasterData.ServiceLayer solution
+  - task: NuGetCommand@2
+    displayName: 'Restore NuGet Packages'
+    inputs:
+      command: 'restore'
+      restoreSolution: '$(solution)'
+      feedsToUse: 'config'
+      nugetConfigPath: '$(Build.SourcesDirectory)\nuget.config'
+
+  # Step 6: Build MasterData.ServiceLayer solution
+  - task: VSBuild@1
+    displayName: 'Build MasterData.ServiceLayer Solution'
+    inputs:
+      solution: '$(solution)'
+      platform: '$(buildPlatform)'
+      configuration: '$(buildConfiguration)'
+
+  # Step 7: Archive Web API build output from bin/Release/net10.0
+  - task: ArchiveFiles@2
+    displayName: 'Archive Web API Release Output'
+    inputs:
+      rootFolderOrFile: '$(Build.SourcesDirectory)/MasterData.ServiceLayer/MasterData.ServiceLayer.WebAPI/bin/Release/net10.0'
+      includeRootFolder: false
+      archiveType: 'zip'
+      archiveFile: '$(Build.ArtifactStagingDirectory)/WebAPI-$(Build.BuildId).zip'
+      replaceExistingArchive: true
+
+  # Step 8: Publish the Web API artifact
+  - task: PublishBuildArtifacts@1
+    displayName: 'Publish Web API Artifact'
+    inputs:
+      pathToPublish: '$(Build.ArtifactStagingDirectory)'
+      artifactName: 'webapi-drop'
+      publishLocation: 'Container'
