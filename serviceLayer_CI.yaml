@@ -18,10 +18,14 @@ pool:
 # Define pipeline variables
 variables:
   - group: Assembly_Build_Version
-  solution: 'MasterData.ServiceLayer/MasterData.ServiceLayer.sln'
-  buildPlatform: 'Any CPU'
-  buildConfiguration: 'Release'
-  versionNumber: '${{ parameters.AssemblyVersionNumber }}.${{ parameters.BuildVersionNumber }}.$(Build.BuildId)'
+  - name: solution
+    value: 'MasterData.ServiceLayer/MasterData.ServiceLayer.sln'
+  - name: buildPlatform
+    value: 'Any CPU'
+  - name: buildConfiguration
+    value: 'Release'
+  - name: versionNumber
+    value: '${{ parameters.AssemblyVersionNumber }}.${{ parameters.BuildVersionNumber }}.$(Build.BuildId)'
 
 # Set build number format
 name: '${{ parameters.AssemblyVersionNumber }}.${{ parameters.BuildVersionNumber }}-$(Build.BuildId)'
