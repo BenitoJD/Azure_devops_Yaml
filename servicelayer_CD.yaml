@@ -1,5 +1,5 @@
 pool:
-  name: ccoe-nprod-windows-mdp-01
+  name: $(selectedAgentPool)
 
 trigger: none
 
@@ -31,6 +31,12 @@ variables:
     value: '$(Build.BuildId)'
   - name: apiSlot
     value: ${{ parameters.apiSlot }}
+  - ${{ if eq(parameters.apiSlot, 'Production_API') }}:
+      - name: selectedAgentPool
+        value: 'ccoe-prod-windows-mdp-01'
+  - ${{ if ne(parameters.apiSlot, 'Production_API') }}:
+      - name: selectedAgentPool
+        value: 'ccoe-nprod-windows-mdp-01'
 
   # Target environment for approval gate
   - ${{ if eq(parameters.apiSlot, 'Pre-Prod_API') }}:

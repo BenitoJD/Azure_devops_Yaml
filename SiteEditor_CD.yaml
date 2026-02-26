@@ -40,6 +40,12 @@ variables:
   # Server catalog and paths
   - group: vg-shared-servers
   - group: vg-shared-paths
+  - ${{ if eq(parameters.siteEditorSlot, 'Production') }}:
+      - name: selectedAgentPool
+        value: 'ccoe-prod-windows-mdp-01'
+  - ${{ if ne(parameters.siteEditorSlot, 'Production') }}:
+      - name: selectedAgentPool
+        value: 'ccoe-nprod-windows-mdp-01'
   
   # Convert parameter to variable for use in inline scripts
   - name: siteEditorSlot
@@ -89,7 +95,7 @@ variables:
         value: '$(Production-web1-Server),$(Production-web2-Server)'
 
 pool:
-  name: ccoe-nprod-windows-mdp-01
+  name: $(selectedAgentPool)
 
 stages:
   - stage: ApprovalGate
@@ -119,7 +125,7 @@ stages:
       - job: DeploySiteEditor
         displayName: "Site Editor - Deploy to target servers for $(siteEditorSlot)"
         pool:
-          name: ccoe-nprod-windows-mdp-01
+          name: $(selectedAgentPool)
         steps:
           - download: buildPipeline
             displayName: "Site Editor - Download SiteEditor artifact"

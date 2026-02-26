@@ -42,6 +42,12 @@ variables:
   # Server catalog and credentials
   - group: vg-shared-servers
   - group: vg-shared-paths
+  - ${{ if eq(parameters.adrSlot, 'Production') }}:
+      - name: selectedAgentPool
+        value: 'ccoe-prod-windows-mdp-01'
+  - ${{ if ne(parameters.adrSlot, 'Production') }}:
+      - name: selectedAgentPool
+        value: 'ccoe-nprod-windows-mdp-01'
 
   # WinRM service account (non-prod vs prod) based on ADR slot
   - ${{ if ne(parameters.adrSlot, 'Production') }}:
@@ -136,7 +142,7 @@ variables:
         value: ''
 
 pool:
-  name: ccoe-nprod-windows-mdp-01
+  name: $(selectedAgentPool)
 
 stages:
   - stage: Deploy_ADR
@@ -145,7 +151,7 @@ stages:
       - job: DeployAutoDataRefresh
         displayName: "ADR - Deploy to target servers for $(adrSlot)"
         pool:
-          name: ccoe-nprod-windows-mdp-01
+          name: $(selectedAgentPool)
         steps:
           - download: buildPipeline
             displayName: "ADR - Download artifact for $(adrSlot)"
